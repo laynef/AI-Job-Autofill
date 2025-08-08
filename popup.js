@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const resumeFileNameEl = document.getElementById('resumeFileName');
     const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'company', 'currentJobTitle', 'additionalInfo'];
 
-    // Load saved data when the popup opens
+    // Load saved data
     chrome.storage.local.get([...textFields, 'resumeFileName'], function (result) {
         textFields.forEach(field => {
             const el = document.getElementById(field);
@@ -14,61 +14,50 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    // Save data when the save button is clicked
+    // Save data
     document.getElementById('save').addEventListener('click', function () {
-        // This function handles the actual saving to Chrome's storage.
         const finalSave = (data) => {
             chrome.storage.local.set(data, function () {
-                // Check for errors during the save operation.
                 if (chrome.runtime.lastError) {
                     statusEl.textContent = 'Error saving data.';
                     console.error(chrome.runtime.lastError.message);
                 } else {
                     statusEl.textContent = 'Information saved!';
-                    // Update the displayed file name if it was part of the save.
                     if (data.resumeFileName) {
                         resumeFileNameEl.textContent = `Saved file: ${data.resumeFileName}`;
                     }
                 }
-                // Clear the status message after a few seconds.
                 setTimeout(() => statusEl.textContent = '', 2500);
             });
         };
 
-        // Start building the object to save with all the text fields.
         let dataToSave = {};
         textFields.forEach(field => {
             const el = document.getElementById(field);
-            if (el) { // Check if the element exists before getting its value.
-                dataToSave[field] = el.value;
-            }
+            if (el) dataToSave[field] = el.value;
         });
 
         const resumeFile = document.getElementById('resumeFile').files[0];
 
-        // If a new resume file was selected, read it before saving.
         if (resumeFile) {
             const reader = new FileReader();
             reader.onload = function (e) {
-                // Add the new file content and name to our data object.
+                // Read the file as a Base64 string for PDF handling
                 dataToSave.resume = e.target.result;
                 dataToSave.resumeFileName = resumeFile.name;
-                // Now, save the complete data object.
                 finalSave(dataToSave);
             };
             reader.onerror = function () {
                 statusEl.textContent = 'Error reading file.';
-                setTimeout(() => statusEl.textContent = '', 3000);
             };
-            reader.readAsText(resumeFile);
+            // Use readAsDataURL for PDFs
+            reader.readAsDataURL(resumeFile);
         } else {
-            // If no new file was selected, just save the text fields.
-            // The existing resume data in storage will be preserved by Chrome's API.
             finalSave(dataToSave);
         }
     });
 
-    // Autofill button logic
+    // Autofill button
     document.getElementById('autofill').addEventListener('click', function () {
         statusEl.textContent = 'Autofilling...';
         chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
@@ -138,7 +127,7 @@ async function autofillPage() {
     const demographicKeywords = ['race', 'ethnicity', 'gender', 'disability', 'veteran', 'sexual orientation'];
 
     for (const el of elements) {
-        if (el.type === 'hidden' || el.disabled || el.readOnly || (el.value && el.type !== 'radio')) continue;
+        if (el.type === 'hidden' || el.disabled || el.readOnly || (el.value && el.type !== 'radio' && el.type !== 'checkbox')) continue;
 
         const question = findQuestionForInput(el);
         const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question}`.toLowerCase();
@@ -151,10 +140,22 @@ async function autofillPage() {
                         el.value = option.value; break;
                     }
                 }
-            } else if (el.type === 'radio') {
+            } else if (el.type === 'radio' || el.type === 'checkbox') {
                 const labelText = (document.querySelector(`label[for="${el.id}"]`)?.innerText || '').toLowerCase();
                 if (labelText.includes('decline') || labelText.includes('prefer not')) el.checked = true;
             }
+            continue;
+        }
+
+        // Handle file inputs - we can't set the file, so we notify the user
+        if (el.type === 'file') {
+            el.style.border = '2px solid #8B5CF6';
+            let notice = document.createElement('p');
+            notice.textContent = 'Please attach your resume PDF here.';
+            notice.style.color = '#8B5CF6';
+            notice.style.fontSize = '12px';
+            notice.style.marginTop = '4px';
+            el.parentElement.insertBefore(notice, el.nextSibling);
             continue;
         }
 
@@ -177,13 +178,17 @@ async function autofillPage() {
             else if (combinedText.includes('title')) el.value = userData.currentJobTitle || '';
         }
 
-        if (el.tagName.toLowerCase() === 'select' || (el.tagName.toLowerCase() === 'input' && el.type === 'radio')) {
+        if (el.tagName.toLowerCase() === 'select' || el.type === 'radio' || el.type === 'checkbox') {
             const cleanQuestion = question.replace(/[*:]$/, '').trim();
-            const options = el.tagName.toLowerCase() === 'select' ?
-                Array.from(el.options).map(opt => opt.text).filter(t => t.trim() !== '' && !t.toLowerCase().includes('select')) :
-                Array.from(document.querySelectorAll(`input[name="${el.name}"]`)).map(radio => document.querySelector(`label[for="${radio.id}"]`)?.innerText.trim()).filter(Boolean);
+            let options = [];
+            if (el.tagName.toLowerCase() === 'select') {
+                options = Array.from(el.options).map(opt => opt.text).filter(t => t.trim() !== '' && !t.toLowerCase().includes('select'));
+            } else {
+                const groupName = el.name;
+                options = Array.from(document.querySelectorAll(`input[name="${groupName}"]`)).map(radio => document.querySelector(`label[for="${radio.id}"]`)?.innerText.trim()).filter(Boolean);
+            }
 
-            if (cleanQuestion.length > 5 && options.length > 1) {
+            if (cleanQuestion.length > 5 && options.length > 0) {
                 try {
                     const prompt = `You are an expert career assistant. Your task is to select the best option from a list to answer an application question, based on my profile and the job description.
 ---
@@ -191,27 +196,37 @@ async function autofillPage() {
 ${jobDescription || 'Not found on page.'}
 ---
 **CONTEXT: MY PROFILE**
-- **Resume:** ${userData.resume || 'Not provided.'}
 - **Additional Info/Skills:** ${userData.additionalInfo || 'Not provided.'}
 - **Current/Last Company:** ${userData.company || 'Not provided'}
 - **Current/Last Job Title:** ${userData.currentJobTitle || 'Not provided'}
 ---
-**TASK: From the list below, choose the single most appropriate option to answer the question.**
+**TASK: From the list below, choose the single most appropriate option to answer the question. I will provide my resume separately.**
 **Question:** "${cleanQuestion}"
 **Options:**
 - ${options.join("\n- ")}
 ---
 **INSTRUCTIONS:**
 - Analyze my profile and the job description to make the most logical choice.
-- If the question is about experience (e.g., "experience with X"), choose the option that best reflects the skills mentioned in my resume.
-- If the question is about work style or approach, choose the option that sounds most proactive, collaborative, and positive.
+- If the question is about experience, choose the option that best reflects the skills in my profile.
+- If the question is about work style, choose the option that sounds most proactive, collaborative, and positive.
 - For "How did you hear about us?", prefer "LinkedIn" or "Company Website".
 - For authorization/sponsorship, choose "Yes" for authorization and "No" for sponsorship.
 - For opting out of texts, choose the option that opts out or says no.
 - Return ONLY the exact text of the best option from the list. Do not add any other words, explanation, or punctuation.
 ---
 **BEST OPTION:**`;
-                    const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+                    // Prepare payload with PDF resume
+                    const parts = [{ text: prompt }];
+                    if (userData.resume && userData.resume.startsWith('data:application/pdf;base64,')) {
+                        const base64Data = userData.resume.split(',')[1];
+                        parts.push({
+                            inlineData: {
+                                mimeType: "application/pdf",
+                                data: base64Data
+                            }
+                        });
+                    }
+                    const payload = { contents: [{ parts: parts }] };
                     const apiKey = "";
                     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
@@ -225,11 +240,12 @@ ${jobDescription || 'Not found on page.'}
                             for (let option of el.options) {
                                 if (option.text.trim() === aiChoice) { el.value = option.value; break; }
                             }
-                        } else if (el.type === 'radio') {
-                            const radios = document.querySelectorAll(`input[name="${el.name}"]`);
-                            for (const radio of radios) {
-                                const label = document.querySelector(`label[for="${radio.id}"]`);
-                                if (label && label.innerText.trim() === aiChoice) { radio.checked = true; break; }
+                        } else if (el.type === 'radio' || el.type === 'checkbox') {
+                            const groupName = el.name;
+                            const inputs = document.querySelectorAll(`input[name="${groupName}"]`);
+                            for (const input of inputs) {
+                                const label = document.querySelector(`label[for="${input.id}"]`);
+                                if (label && label.innerText.trim() === aiChoice) { input.checked = true; break; }
                             }
                         }
                     }
@@ -241,13 +257,12 @@ ${jobDescription || 'Not found on page.'}
             const cleanQuestion = question.replace(/[*:]$/, '').trim();
             if (cleanQuestion.length > 10 && !isDemographic) {
                 try {
-                    const prompt = `You are an expert career assistant. Your primary goal is to align my profile with the role by analyzing the provided Job Description.
+                    const prompt = `You are an expert career assistant. Your primary goal is to align my profile with the role by analyzing the provided Job Description. I will provide my resume separately.
 ---
 **CONTEXT: THE JOB DESCRIPTION**
 ${jobDescription || 'Not found on page.'}
 ---
 **CONTEXT: MY PROFILE**
-- **Resume:** ${userData.resume || 'Not provided.'}
 - **Additional Info/Skills:** ${userData.additionalInfo || 'Not provided.'}
 ---
 **TASK: Answer the following application question.**
@@ -259,7 +274,17 @@ ${jobDescription || 'Not found on page.'}
 3. Write only the answer itself, with no preamble.
 ---
 **ANSWER:**`;
-                    const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+                    const parts = [{ text: prompt }];
+                    if (userData.resume && userData.resume.startsWith('data:application/pdf;base64,')) {
+                        const base64Data = userData.resume.split(',')[1];
+                        parts.push({
+                            inlineData: {
+                                mimeType: "application/pdf",
+                                data: base64Data
+                            }
+                        });
+                    }
+                    const payload = { contents: [{ parts: parts }] };
                     const apiKey = "";
                     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
