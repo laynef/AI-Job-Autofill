@@ -3,61 +3,79 @@ document.addEventListener('DOMContentLoaded', function () {
     const resumeFileNameEl = document.getElementById('resumeFileName');
     const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'company', 'currentJobTitle', 'additionalInfo'];
 
-    // Load saved data
+    // Load saved data when the popup opens
     chrome.storage.local.get([...textFields, 'resumeFileName'], function (result) {
+        if (chrome.runtime.lastError) {
+            console.error("Error loading data:", chrome.runtime.lastError);
+            return;
+        }
         textFields.forEach(field => {
             const el = document.getElementById(field);
-            if (el && result[field]) el.value = result[field];
+            if (el && result[field]) {
+                el.value = result[field];
+            }
         });
         if (result.resumeFileName) {
             resumeFileNameEl.textContent = `Saved file: ${result.resumeFileName}`;
         }
     });
 
-    // Save data
+    // Save data when the save button is clicked
     document.getElementById('save').addEventListener('click', function () {
-        const finalSave = (data) => {
-            chrome.storage.local.set(data, function () {
-                if (chrome.runtime.lastError) {
-                    statusEl.textContent = 'Error saving data.';
-                    console.error(chrome.runtime.lastError.message);
+        try {
+            let dataToSave = {};
+            textFields.forEach(field => {
+                const el = document.getElementById(field);
+                if (el) {
+                    dataToSave[field] = el.value;
                 } else {
-                    statusEl.textContent = 'Information saved!';
-                    if (data.resumeFileName) {
-                        resumeFileNameEl.textContent = `Saved file: ${data.resumeFileName}`;
-                    }
+                    // This warning helps debug if the HTML is missing an element.
+                    console.warn(`Element with ID "${field}" not found in popup.html.`);
                 }
-                setTimeout(() => statusEl.textContent = '', 2500);
             });
-        };
 
-        let dataToSave = {};
-        textFields.forEach(field => {
-            const el = document.getElementById(field);
-            if (el) dataToSave[field] = el.value;
-        });
+            const resumeFile = document.getElementById('resumeFile')?.files[0];
 
-        const resumeFile = document.getElementById('resumeFile').files[0];
-
-        if (resumeFile) {
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                // Read the file as a Base64 string for PDF handling
-                dataToSave.resume = e.target.result;
-                dataToSave.resumeFileName = resumeFile.name;
-                finalSave(dataToSave);
+            // This function handles the final step of saving to storage.
+            const saveDataToStorage = (data) => {
+                chrome.storage.local.set(data, function () {
+                    if (chrome.runtime.lastError) {
+                        statusEl.textContent = `Error: ${chrome.runtime.lastError.message}`;
+                        console.error("Save error:", chrome.runtime.lastError);
+                    } else {
+                        statusEl.textContent = 'Information saved!';
+                        if (data.resumeFileName) {
+                            resumeFileNameEl.textContent = `Saved file: ${data.resumeFileName}`;
+                        }
+                    }
+                    setTimeout(() => { statusEl.textContent = ''; }, 2500);
+                });
             };
-            reader.onerror = function () {
-                statusEl.textContent = 'Error reading file.';
-            };
-            // Use readAsDataURL for PDFs
-            reader.readAsDataURL(resumeFile);
-        } else {
-            finalSave(dataToSave);
+
+            // If a new resume file is selected, read it as a Base64 string.
+            if (resumeFile) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    dataToSave.resume = e.target.result; // The Base64 string
+                    dataToSave.resumeFileName = resumeFile.name;
+                    saveDataToStorage(dataToSave);
+                };
+                reader.onerror = function (err) {
+                    statusEl.textContent = 'Error reading file.';
+                    console.error("File reading error:", err);
+                };
+                reader.readAsDataURL(resumeFile);
+            } else {
+                // If no new file, save the other fields.
+                saveDataToStorage(dataToSave);
+            }
+        } catch (error) {
+            statusEl.textContent = 'A critical error occurred during save.';
+            console.error("Critical error in save handler:", error);
         }
     });
 
-    // Autofill button
+    // Autofill button logic
     document.getElementById('autofill').addEventListener('click', function () {
         statusEl.textContent = 'Autofilling...';
         chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
