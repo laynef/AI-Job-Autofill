@@ -19,12 +19,24 @@
         <img src="images/icon48.png" class="w-8 h-8 rounded-lg">
     </div>
 
-
-    <div class="space-y-4 max-h-80 overflow-y-auto pr-2">
+    <div class="space-y-4 max-h-96 overflow-y-auto pr-2">
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <label for="firstName" class="block text-sm font-medium text-gray-700">First Name</label>
+                <input type="text" id="firstName"
+                    class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            </div>
+            <div>
+                <label for="lastName" class="block text-sm font-medium text-gray-700">Last Name</label>
+                <input type="text" id="lastName"
+                    class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            </div>
+        </div>
         <div>
-            <label for="fullName" class="block text-sm font-medium text-gray-700">Full Name</label>
-            <input type="text" id="fullName"
-                class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            <label for="pronouns" class="block text-sm font-medium text-gray-700">Pronouns</label>
+            <input type="text" id="pronouns"
+                class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                placeholder="e.g., she/her">
         </div>
         <div>
             <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
@@ -37,10 +49,34 @@
                 class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
         </div>
         <div>
-            <label for="location" class="block text-sm font-medium text-gray-700">Current Location (City, State)</label>
-            <input type="text" id="location"
+            <label for="address" class="block text-sm font-medium text-gray-700">Address</label>
+            <input type="text" id="address"
+                class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+        </div>
+        <div class="grid grid-cols-3 gap-4">
+            <div>
+                <label for="city" class="block text-sm font-medium text-gray-700">City</label>
+                <input type="text" id="city"
+                    class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    value="Sunnyvale">
+            </div>
+            <div>
+                <label for="state" class="block text-sm font-medium text-gray-700">State</label>
+                <input type="text" id="state"
+                    class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    value="California">
+            </div>
+            <div>
+                <label for="zipCode" class="block text-sm font-medium text-gray-700">Zip Code</label>
+                <input type="text" id="zipCode"
+                    class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            </div>
+        </div>
+        <div>
+            <label for="country" class="block text-sm font-medium text-gray-700">Country</label>
+            <input type="text" id="country"
                 class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                placeholder="e.g. San Francisco, CA">
+                value="United States">
         </div>
         <div>
             <label for="linkedinUrl" class="block text-sm font-medium text-gray-700">LinkedIn URL</label>
@@ -50,6 +86,16 @@
         <div>
             <label for="portfolioUrl" class="block text-sm font-medium text-gray-700">Portfolio/Website URL</label>
             <input type="url" id="portfolioUrl"
+                class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+        </div>
+        <div>
+            <label for="company" class="block text-sm font-medium text-gray-700">Current/Last Company</label>
+            <input type="text" id="company"
+                class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+        </div>
+        <div>
+            <label for="currentJobTitle" class="block text-sm font-medium text-gray-700">Current/Last Job Title</label>
+            <input type="text" id="currentJobTitle"
                 class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
         </div>
         <div>
