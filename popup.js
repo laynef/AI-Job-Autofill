@@ -78,6 +78,11 @@ try {
         document.getElementById('autofill').addEventListener('click', function () {
             statusEl.textContent = 'Autofilling...';
             chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+                // Check if we have a valid tab to inject into
+                if (tabs.length === 0 || !tabs[0].id) {
+                    statusEl.textContent = 'Could not find active tab.';
+                    return;
+                }
                 chrome.scripting.executeScript({
                     target: { tabId: tabs[0].id },
                     function: autofillPage,
@@ -85,7 +90,7 @@ try {
                     statusEl.textContent = 'Autofill complete!';
                     setTimeout(() => statusEl.textContent = '', 3000);
                 }).catch(err => {
-                    statusEl.textContent = 'Error during autofill.';
+                    statusEl.textContent = 'Autofill failed on this page.';
                     console.error('Autofill script injection failed:', err);
                     setTimeout(() => statusEl.textContent = '', 3000);
                 });
@@ -99,6 +104,7 @@ try {
 
 // This function is injected into the page to perform the autofill
 async function autofillPage() {
+    console.log("AI Autofill: Starting process...");
     function findQuestionForInput(element) {
         const checks = [
             element.getAttribute('aria-label'),
@@ -136,14 +142,28 @@ async function autofillPage() {
             const descDiv = document.querySelector('#job-description, [class*="job-description"], [class*="jobdescription"]');
             if (descDiv) jobDescription = descDiv.innerText;
         }
-    } catch (e) { console.error("Could not parse page context:", e); }
+        console.log("AI Autofill: Found job title:", jobTitle);
+    } catch (e) { console.error("AI Autofill: Could not parse page context:", e); }
 
     const userData = await new Promise(resolve => {
         const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'company', 'currentJobTitle', 'resume', 'additionalInfo'];
-        chrome.storage.local.get(fields, resolve);
+        chrome.storage.local.get(fields, (result) => {
+            if (chrome.runtime.lastError) {
+                console.error("AI Autofill: Error getting user data from storage.");
+                resolve({});
+            } else {
+                resolve(result);
+            }
+        });
     });
 
+    if (!userData) {
+        console.error("AI Autofill: Could not load user data. Aborting.");
+        return;
+    }
+
     const elements = document.querySelectorAll('input, textarea, select');
+    console.log(`AI Autofill: Found ${elements.length} form elements to process.`);
     const demographicKeywords = ['race', 'ethnicity', 'gender', 'disability', 'veteran', 'sexual orientation'];
 
     for (const el of elements) {
@@ -167,7 +187,6 @@ async function autofillPage() {
             continue;
         }
 
-        // Handle file inputs - we can't set the file, so we notify the user
         if (el.type === 'file') {
             el.style.border = '2px solid #8B5CF6';
             let notice = document.createElement('p');
@@ -175,7 +194,9 @@ async function autofillPage() {
             notice.style.color = '#8B5CF6';
             notice.style.fontSize = '12px';
             notice.style.marginTop = '4px';
-            el.parentElement.insertBefore(notice, el.nextSibling);
+            if (!el.parentElement.querySelector('p[style*="color: #8B5CF6"]')) {
+                el.parentElement.insertBefore(notice, el.nextSibling);
+            }
             continue;
         }
 
@@ -235,7 +256,6 @@ ${jobDescription || 'Not found on page.'}
 - Return ONLY the exact text of the best option from the list. Do not add any other words, explanation, or punctuation.
 ---
 **BEST OPTION:**`;
-                    // Prepare payload with PDF resume
                     const parts = [{ text: prompt }];
                     if (userData.resume && userData.resume.startsWith('data:application/pdf;base64,')) {
                         const base64Data = userData.resume.split(',')[1];
