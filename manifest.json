@@ -1,0 +1,46 @@
+{
+    "manifest_version": 3,
+    "name": "AI Job Application Autofill",
+    "version": "1.0",
+    "description": "Autofills job applications using your saved information and AI.",
+    "permissions": [
+        "storage",
+        "activeTab",
+        "scripting"
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": {
+            "16": "images/icon16.svg",
+            "48": "images/icon48.svg",
+            "128": "images/icon128.svg"
+        }
+    },
+    "icons": {
+        "16": "images/icon16.svg",
+        "48": "images/icon48.svg",
+        "128": "images/icon128.svg"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "content.js"
+            ]
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "images/icon16.svg",
+                "images/icon48.svg",
+                "images/icon128.svg"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        }
+    ]
+}
