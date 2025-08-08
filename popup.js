@@ -3,7 +3,7 @@ try {
     document.addEventListener('DOMContentLoaded', function () {
         const statusEl = document.getElementById('status');
         const resumeFileNameEl = document.getElementById('resumeFileName');
-        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'company', 'currentJobTitle', 'additionalInfo'];
+        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'company', 'currentJobTitle', 'additionalInfo', 'apiKey'];
 
         // Load saved data when the popup opens
         chrome.storage.local.get([...textFields, 'resumeFileName'], function (result) {
@@ -325,7 +325,7 @@ ${jobDescription || 'Not found on page.'}
                         });
                     }
                     const payload = { contents: [{ parts: parts }] };
-                    const apiKey = userData.apiKey;
+                    const apiKey = "";
                     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
                     const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
