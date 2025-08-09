@@ -3,6 +3,7 @@ try {
     document.addEventListener('DOMContentLoaded', function() {
         const statusEl = document.getElementById('status');
         const resumeFileNameEl = document.getElementById('resumeFileName');
+        const resumeFileInput = document.getElementById('resumeFile');
         const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'company', 'currentJobTitle', 'additionalInfo', 'apiKey'];
 
         // Load saved data when the popup opens
@@ -22,6 +23,19 @@ try {
             }
         });
 
+        // Add an event listener to the file input for immediate UI feedback
+        if (resumeFileInput) {
+            resumeFileInput.addEventListener('change', function() {
+                if (this.files && this.files[0]) {
+                    const fileName = this.files[0].name;
+                    if (resumeFileNameEl) {
+                        resumeFileNameEl.textContent = `Selected: ${fileName} (click Save)`;
+                        resumeFileNameEl.style.color = '#D97706'; // An amber color to indicate "pending"
+                    }
+                }
+            });
+        }
+
         // Save data when the save button is clicked
         document.getElementById('save').addEventListener('click', function() {
             try {
@@ -30,13 +44,10 @@ try {
                     const el = document.getElementById(field);
                     if (el) {
                         dataToSave[field] = el.value;
-                    } else {
-                        // This warning helps debug if the HTML is missing an element.
-                        console.warn(`Element with ID "${field}" not found in popup.html.`);
                     }
                 });
 
-                const resumeFile = document.getElementById('resumeFile')?.files[0];
+                const newResumeFile = resumeFileInput?.files[0];
 
                 const saveDataToStorage = (data) => {
                     chrome.storage.local.set(data, function() {
@@ -47,25 +58,28 @@ try {
                             statusEl.textContent = 'Information saved!';
                             if (data.resumeFileName && resumeFileNameEl) {
                                 resumeFileNameEl.textContent = `Saved file: ${data.resumeFileName}`;
+                                resumeFileNameEl.style.color = ''; // Reset color on successful save
                             }
                         }
                         setTimeout(() => { if(statusEl) statusEl.textContent = ''; }, 2500);
                     });
                 };
 
-                if (resumeFile) {
+                if (newResumeFile) {
                     const reader = new FileReader();
                     reader.onload = function(e) {
                         dataToSave.resume = e.target.result; // The Base64 string
-                        dataToSave.resumeFileName = resumeFile.name;
+                        dataToSave.resumeFileName = newResumeFile.name;
                         saveDataToStorage(dataToSave);
                     };
                     reader.onerror = function(err) {
                         statusEl.textContent = 'Error reading file.';
                         console.error("File reading error:", err);
                     };
-                    reader.readAsDataURL(resumeFile);
+                    reader.readAsDataURL(newResumeFile);
                 } else {
+                    // If no new file is selected, just save the text fields.
+                    // The existing resume data in storage will be preserved.
                     saveDataToStorage(dataToSave);
                 }
             } catch (error) {
@@ -78,7 +92,6 @@ try {
         document.getElementById('autofill').addEventListener('click', function() {
             statusEl.textContent = 'Autofilling...';
             chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-                // Check if we have a valid tab to inject into
                 if (tabs.length === 0 || !tabs[0].id) {
                     statusEl.textContent = 'Could not find active tab.';
                     return;
@@ -108,11 +121,9 @@ async function autofillPage() {
 
     // --- HELPER FUNCTIONS ---
 
-    // Simulates natural typing into an input or textarea element.
     async function simulateTyping(element, text) {
         if (!text) return;
         element.focus();
-        // Clear existing value before typing
         element.value = '';
         element.dispatchEvent(new Event('input', { bubbles: true }));
 
@@ -125,7 +136,6 @@ async function autofillPage() {
         element.blur();
     }
 
-    // Finds the most likely question/label for a given form element.
     function findQuestionForInput(element) {
         const checks = [
             element.getAttribute('aria-label'),
@@ -188,7 +198,12 @@ async function autofillPage() {
     const demographicKeywords = ['race', 'ethnicity', 'gender', 'disability', 'veteran', 'sexual orientation'];
 
     for (const el of elements) {
-        if (el.type === 'hidden' || el.disabled || el.readOnly || (el.value && el.type !== 'radio' && el.type !== 'checkbox')) continue;
+        if (el.type === 'hidden' || el.disabled || el.readOnly) continue;
+
+        const elType = el.tagName.toLowerCase();
+        if ( (elType === 'input' || elType === 'textarea') && el.value.trim() !== '' && el.type !== 'radio' && el.type !== 'checkbox' ) continue;
+        if (elType === 'select' && el.selectedIndex !== 0 && el.value !== '') continue;
+        if ((el.type === 'radio' || el.type === 'checkbox') && document.querySelector(`input[name="${el.name}"]:checked`)) continue;
 
         const question = findQuestionForInput(el);
         const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question}`.toLowerCase();
@@ -221,7 +236,6 @@ async function autofillPage() {
             continue;
         }
 
-        // Check if a text input has an associated datalist of options
         const dataListId = el.getAttribute('list');
         const dataList = dataListId ? document.getElementById(dataListId) : null;
         const hasOptions = dataList && dataList.options.length > 0;
@@ -291,7 +305,6 @@ ${jobDescription || 'Not found on page.'}
                 } catch (error) { console.error('AI Selection Error:', error); }
             }
         } else if (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea') {
-            // This block now handles ONLY plain text inputs without associated options.
             let valueToType = '';
             if (combinedText.includes('first') && combinedText.includes('name')) valueToType = userData.firstName || '';
             else if (combinedText.includes('last') && combinedText.includes('name')) valueToType = userData.lastName || '';
@@ -313,7 +326,6 @@ ${jobDescription || 'Not found on page.'}
             if (valueToType) {
                  await simulateTyping(el, valueToType);
             } else {
-                // If it's not a standard field, use AI for a text answer.
                 const cleanQuestion = question.replace(/[*:]$/, '').trim();
                 if (cleanQuestion.length > 10 && !isDemographic) {
                     try {
