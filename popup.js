@@ -112,14 +112,15 @@ async function autofillPage() {
     async function simulateTyping(element, text) {
         if (!text) return;
         element.focus();
+        // Clear existing value before typing
+        element.value = '';
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+
         for (const char of text) {
             element.value += char;
-            // Dispatch an 'input' event, which many frameworks listen for.
             element.dispatchEvent(new Event('input', { bubbles: true }));
-            // Wait for a short, random time to mimic human typing speed.
             await new Promise(resolve => setTimeout(resolve, Math.random() * 50 + 25));
         }
-        // Trigger a 'change' event at the end, which some forms might need.
         element.dispatchEvent(new Event('change', { bubbles: true }));
         element.blur();
     }
@@ -220,33 +221,19 @@ async function autofillPage() {
             continue;
         }
 
-        if (el.tagName.toLowerCase() === 'input' && el.type !== 'radio' && el.type !== 'checkbox') {
-            let valueToType = '';
-            if (combinedText.includes('first') && combinedText.includes('name')) valueToType = userData.firstName || '';
-            else if (combinedText.includes('last') && combinedText.includes('name')) valueToType = userData.lastName || '';
-            else if (combinedText.includes('preferred') && combinedText.includes('name')) valueToType = userData.firstName || '';
-            else if (combinedText.includes('full') && combinedText.includes('name')) valueToType = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
-            else if (combinedText.includes('email')) valueToType = userData.email || '';
-            else if (combinedText.includes('phone') || combinedText.includes('tel')) valueToType = userData.phone || '';
-            else if (combinedText.includes('pronouns')) valueToType = userData.pronouns || '';
-            else if (combinedText.includes('address')) valueToType = userData.address || '';
-            else if (combinedText.includes('city')) valueToType = userData.city || '';
-            else if (combinedText.includes('state') || combinedText.includes('province')) valueToType = userData.state || '';
-            else if (combinedText.includes('zip') || combinedText.includes('postal')) valueToType = userData.zipCode || '';
-            else if (combinedText.includes('country')) valueToType = userData.country || '';
-            else if (combinedText.includes('linkedin')) valueToType = userData.linkedinUrl || '';
-            else if (combinedText.includes('website') || combinedText.includes('portfolio')) valueToType = userData.portfolioUrl || '';
-            else if (combinedText.includes('company')) valueToType = userData.company || '';
-            else if (combinedText.includes('title')) valueToType = userData.currentJobTitle || '';
-            await simulateTyping(el, valueToType);
-        }
+        // Check if a text input has an associated datalist of options
+        const dataListId = el.getAttribute('list');
+        const dataList = dataListId ? document.getElementById(dataListId) : null;
+        const hasOptions = dataList && dataList.options.length > 0;
 
-        if (el.tagName.toLowerCase() === 'select' || el.type === 'radio' || el.type === 'checkbox') {
+        if ((el.tagName.toLowerCase() === 'select' || hasOptions) || el.type === 'radio' || el.type === 'checkbox') {
             const cleanQuestion = question.replace(/[*:]$/, '').trim();
             let options = [];
             if (el.tagName.toLowerCase() === 'select') {
                 options = Array.from(el.options).map(opt => opt.text).filter(t => t.trim() !== '' && !t.toLowerCase().includes('select'));
-            } else {
+            } else if (hasOptions) {
+                options = Array.from(dataList.options).map(opt => opt.value);
+            } else { // Radio or Checkbox
                 const groupName = el.name;
                 options = Array.from(document.querySelectorAll(`input[name="${groupName}"]`)).map(radio => document.querySelector(`label[for="${radio.id}"]`)?.innerText.trim()).filter(Boolean);
             }
@@ -291,6 +278,8 @@ ${jobDescription || 'Not found on page.'}
                             for (let option of el.options) {
                                 if (option.text.trim() === aiChoice) { el.value = option.value; el.dispatchEvent(new Event('change', { bubbles: true })); break; }
                             }
+                        } else if (hasOptions) {
+                            await simulateTyping(el, aiChoice);
                         } else if (el.type === 'radio' || el.type === 'checkbox') {
                             const inputs = document.querySelectorAll(`input[name="${el.name}"]`);
                             for (const input of inputs) {
@@ -301,13 +290,34 @@ ${jobDescription || 'Not found on page.'}
                     }
                 } catch (error) { console.error('AI Selection Error:', error); }
             }
-        }
-
-        if ((el.tagName.toLowerCase() === 'textarea' || el.type === 'text') && !el.value) {
-            const cleanQuestion = question.replace(/[*:]$/, '').trim();
-            if (cleanQuestion.length > 10 && !isDemographic) {
-                try {
-                    const prompt = `You are an expert career assistant. Your primary goal is to align my profile with the role by analyzing the provided Job Description. I will provide my resume separately.
+        } else if (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea') {
+            // This block now handles ONLY plain text inputs without associated options.
+            let valueToType = '';
+            if (combinedText.includes('first') && combinedText.includes('name')) valueToType = userData.firstName || '';
+            else if (combinedText.includes('last') && combinedText.includes('name')) valueToType = userData.lastName || '';
+            else if (combinedText.includes('preferred') && combinedText.includes('name')) valueToType = userData.firstName || '';
+            else if (combinedText.includes('full') && combinedText.includes('name')) valueToType = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+            else if (combinedText.includes('email')) valueToType = userData.email || '';
+            else if (combinedText.includes('phone') || combinedText.includes('tel')) valueToType = userData.phone || '';
+            else if (combinedText.includes('pronouns')) valueToType = userData.pronouns || '';
+            else if (combinedText.includes('address')) valueToType = userData.address || '';
+            else if (combinedText.includes('city')) valueToType = userData.city || '';
+            else if (combinedText.includes('state') || combinedText.includes('province')) valueToType = userData.state || '';
+            else if (combinedText.includes('zip') || combinedText.includes('postal')) valueToType = userData.zipCode || '';
+            else if (combinedText.includes('country')) valueToType = userData.country || '';
+            else if (combinedText.includes('linkedin')) valueToType = userData.linkedinUrl || '';
+            else if (combinedText.includes('website') || combinedText.includes('portfolio')) valueToType = userData.portfolioUrl || '';
+            else if (combinedText.includes('company')) valueToType = userData.company || '';
+            else if (combinedText.includes('title')) valueToType = userData.currentJobTitle || '';
+            
+            if (valueToType) {
+                 await simulateTyping(el, valueToType);
+            } else {
+                // If it's not a standard field, use AI for a text answer.
+                const cleanQuestion = question.replace(/[*:]$/, '').trim();
+                if (cleanQuestion.length > 10 && !isDemographic) {
+                    try {
+                        const prompt = `You are an expert career assistant. Your primary goal is to align my profile with the role by analyzing the provided Job Description. I will provide my resume separately.
 ---
 **CONTEXT: THE JOB DESCRIPTION**
 ${jobDescription || 'Not found on page.'}
@@ -324,22 +334,23 @@ ${jobDescription || 'Not found on page.'}
 3. Write only the answer itself, with no preamble.
 ---
 **ANSWER:**`;
-                    const parts = [{ text: prompt }];
-                     if (userData.resume && userData.resume.startsWith('data:application/pdf;base64,')) {
-                        const base64Data = userData.resume.split(',')[1];
-                        parts.push({ inlineData: { mimeType: "application/pdf", data: base64Data } });
-                    }
-                    const payload = { contents: [{ parts: parts }] };
-                    const apiKey = userData.apiKey || "";
-                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                        const parts = [{ text: prompt }];
+                         if (userData.resume && userData.resume.startsWith('data:application/pdf;base64,')) {
+                            const base64Data = userData.resume.split(',')[1];
+                            parts.push({ inlineData: { mimeType: "application/pdf", data: base64Data } });
+                        }
+                        const payload = { contents: [{ parts: parts }] };
+                        const apiKey = userData.apiKey || "";
+                        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
-                    const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                    if (!response.ok) throw new Error(`API Error: ${response.status}`);
-                    const result = await response.json();
-                    if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-                        await simulateTyping(el, result.candidates[0].content.parts[0].text.trim());
-                    }
-                } catch (error) { console.error('AI Text Error:', error); }
+                        const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                        if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                        const result = await response.json();
+                        if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+                            await simulateTyping(el, result.candidates[0].content.parts[0].text.trim());
+                        }
+                    } catch (error) { console.error('AI Text Error:', error); }
+                }
             }
         }
     }
