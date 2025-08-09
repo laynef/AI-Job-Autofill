@@ -1,133 +1,65 @@
 <!DOCTYPE html>
 <html>
-
 <head>
     <title>AI Job Application Autofill</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <style>
         body {
-            width: 380px;
+            width: 400px;
             background-color: #f9fafb;
         }
     </style>
 </head>
-
 <body class="p-4">
 
     <div class="flex justify-between items-center mb-4">
         <h1 class="text-xl font-bold text-gray-800">Your Information</h1>
-        <img src="images/icon48.svg" class="w-8 h-8 rounded-lg">
+        <img src="images/icon48.png" class="w-8 h-8 rounded-lg">
     </div>
 
     <div class="space-y-4 max-h-96 overflow-y-auto pr-2">
+        <!-- Personal Info -->
         <div class="grid grid-cols-2 gap-4">
             <div>
                 <label for="firstName" class="block text-sm font-medium text-gray-700">First Name</label>
-                <input type="text" id="firstName"
-                    class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                <input type="text" id="firstName" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
             </div>
             <div>
                 <label for="lastName" class="block text-sm font-medium text-gray-700">Last Name</label>
-                <input type="text" id="lastName"
-                    class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                <input type="text" id="lastName" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
             </div>
         </div>
-        <div>
-            <label for="pronouns" class="block text-sm font-medium text-gray-700">Pronouns</label>
-            <input type="text" id="pronouns"
-                class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                placeholder="e.g., she/her">
-        </div>
-        <div>
-            <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
-            <input type="email" id="email"
-                class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-        </div>
-        <div>
-            <label for="phone" class="block text-sm font-medium text-gray-700">Phone</label>
-            <input type="tel" id="phone"
-                class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-        </div>
-        <div>
-            <label for="address" class="block text-sm font-medium text-gray-700">Address</label>
-            <input type="text" id="address"
-                class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-        </div>
+        <input type="text" id="pronouns" placeholder="Pronouns (e.g., she/her)" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
+        <input type="email" id="email" placeholder="Email" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
+        <input type="tel" id="phone" placeholder="Phone" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
+        <input type="text" id="address" placeholder="Address" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
         <div class="grid grid-cols-3 gap-4">
-            <div>
-                <label for="city" class="block text-sm font-medium text-gray-700">City</label>
-                <input type="text" id="city"
-                    class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    value="Sunnyvale">
-            </div>
-            <div>
-                <label for="state" class="block text-sm font-medium text-gray-700">State</label>
-                <input type="text" id="state"
-                    class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    value="California">
-            </div>
-            <div>
-                <label for="zipCode" class="block text-sm font-medium text-gray-700">Zip Code</label>
-                <input type="text" id="zipCode"
-                    class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-            </div>
+             <input type="text" id="city" placeholder="City" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
+             <input type="text" id="state" placeholder="State" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
+             <input type="text" id="zipCode" placeholder="Zip Code" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
         </div>
+        <input type="text" id="country" placeholder="Country" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
+        <input type="url" id="linkedinUrl" placeholder="LinkedIn URL" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
+        <input type="url" id="portfolioUrl" placeholder="Portfolio/Website URL" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
+        
+        <!-- Other Info -->
+        <h2 class="text-lg font-semibold text-gray-700 pt-2">Other Information</h2>
+        <input type="password" id="apiKey" placeholder="Optional: Google AI API Key" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
         <div>
-            <label for="country" class="block text-sm font-medium text-gray-700">Country</label>
-            <input type="text" id="country"
-                class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                value="United States">
-        </div>
-        <div>
-            <label for="linkedinUrl" class="block text-sm font-medium text-gray-700">LinkedIn URL</label>
-            <input type="url" id="linkedinUrl"
-                class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-        </div>
-        <div>
-            <label for="portfolioUrl" class="block text-sm font-medium text-gray-700">Portfolio/Website URL</label>
-            <input type="url" id="portfolioUrl"
-                class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-        </div>
-        <div>
-            <label for="company" class="block text-sm font-medium text-gray-700">Current/Last Company</label>
-            <input type="text" id="company"
-                class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-        </div>
-        <div>
-            <label for="currentJobTitle" class="block text-sm font-medium text-gray-700">Current/Last Job Title</label>
-            <input type="text" id="currentJobTitle"
-                class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-        </div>
-        <div>
-            <label for="resumeFile" class="block text-sm font-medium text-gray-700">Resume/CV (.pdf file)</label>
-            <input type="file" id="resumeFile" accept=".pdf"
-                class="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100" />
+            <label for="resumeFile" class="block text-sm font-medium text-gray-700">Resume/CV (.pdf, .docx)</label>
+            <input type="file" id="resumeFile" accept=".pdf,.docx" class="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"/>
             <p id="resumeFileName" class="text-xs text-gray-500 mt-1"></p>
         </div>
         <div>
-            <label for="additionalInfo" class="block text-sm font-medium text-gray-700">Additional Info (Cover letter
-                points, key skills)</label>
-            <textarea id="additionalInfo" rows="5"
-                class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                placeholder="e.g., 'Passionate about user-centric design', '5+ years of experience in project management'"></textarea>
+            <label for="additionalInfo" class="block text-sm font-medium text-gray-700">Additional Info (Cover letter points, key skills)</label>
+            <textarea id="additionalInfo" rows="4" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm"></textarea>
         </div>
     </div>
 
-    <div>
-        <label for="apiKey" class="block text-sm font-medium text-gray-700">Google AI API Key</label>
-        <input type="password" id="apiKey"
-            class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-            placeholder="Enter your Google AI API key">
-    </div>
-    <button id="save"
-        class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Save
-        Information</button>
-    <button id="autofill"
-        class="mt-2 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">Autofill
-        Page</button>
+    <button id="save" class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Save Information</button>
+    <button id="autofill" class="mt-2 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">Autofill Page</button>
     <p id="status" class="text-center text-sm mt-2 text-gray-500"></p>
 
     <script src="popup.js"></script>
 </body>
-
 </html>

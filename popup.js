@@ -4,33 +4,24 @@ try {
         const statusEl = document.getElementById('status');
         const resumeFileNameEl = document.getElementById('resumeFileName');
         const resumeFileInput = document.getElementById('resumeFile');
-        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'company', 'currentJobTitle', 'additionalInfo', 'apiKey'];
+        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'apiKey', 'additionalInfo'];
 
         // Load saved data when the popup opens
         chrome.storage.local.get([...textFields, 'resumeFileName'], function(result) {
-            if (chrome.runtime.lastError) {
-                console.error("Error loading data:", chrome.runtime.lastError.message);
-                return;
-            }
+            if (chrome.runtime.lastError) { return console.error("Error loading data:", chrome.runtime.lastError.message); }
             textFields.forEach(field => {
                 const el = document.getElementById(field);
-                if (el && result[field]) {
-                    el.value = result[field];
-                }
+                if (el && result[field]) el.value = result[field];
             });
-            if (result.resumeFileName && resumeFileNameEl) {
-                resumeFileNameEl.textContent = `Saved file: ${result.resumeFileName}`;
-            }
+            if (result.resumeFileName && resumeFileNameEl) resumeFileNameEl.textContent = `Saved file: ${result.resumeFileName}`;
         });
 
-        // Add an event listener to the file input for immediate UI feedback
         if (resumeFileInput) {
             resumeFileInput.addEventListener('change', function() {
                 if (this.files && this.files[0]) {
-                    const fileName = this.files[0].name;
                     if (resumeFileNameEl) {
-                        resumeFileNameEl.textContent = `Selected: ${fileName} (click Save)`;
-                        resumeFileNameEl.style.color = '#D97706'; // An amber color to indicate "pending"
+                        resumeFileNameEl.textContent = `Selected: ${this.files[0].name} (click Save)`;
+                        resumeFileNameEl.style.color = '#D97706';
                     }
                 }
             });
@@ -42,9 +33,7 @@ try {
                 let dataToSave = {};
                 textFields.forEach(field => {
                     const el = document.getElementById(field);
-                    if (el) {
-                        dataToSave[field] = el.value;
-                    }
+                    if (el) dataToSave[field] = el.value;
                 });
 
                 const newResumeFile = resumeFileInput?.files[0];
@@ -58,7 +47,7 @@ try {
                             statusEl.textContent = 'Information saved!';
                             if (data.resumeFileName && resumeFileNameEl) {
                                 resumeFileNameEl.textContent = `Saved file: ${data.resumeFileName}`;
-                                resumeFileNameEl.style.color = ''; // Reset color on successful save
+                                resumeFileNameEl.style.color = '';
                             }
                         }
                         setTimeout(() => { if(statusEl) statusEl.textContent = ''; }, 2500);
@@ -78,8 +67,6 @@ try {
                     };
                     reader.readAsDataURL(newResumeFile);
                 } else {
-                    // If no new file is selected, just save the text fields.
-                    // The existing resume data in storage will be preserved.
                     saveDataToStorage(dataToSave);
                 }
             } catch (error) {
@@ -123,6 +110,8 @@ async function autofillPage() {
 
     async function simulateTyping(element, text) {
         if (typeof text !== 'string') return;
+        element.click(); // Click to activate the field
+        await new Promise(resolve => setTimeout(resolve, 50)); // Brief pause
         element.focus();
         element.value = '';
         element.dispatchEvent(new Event('input', { bubbles: true }));
@@ -130,7 +119,7 @@ async function autofillPage() {
         for (const char of text) {
             element.value += char;
             element.dispatchEvent(new Event('input', { bubbles: true }));
-            await new Promise(resolve => setTimeout(resolve, Math.random() * 50 + 25));
+            await new Promise(resolve => setTimeout(resolve, Math.random() * 40 + 20));
         }
         element.dispatchEvent(new Event('change', { bubbles: true }));
         element.blur();
@@ -157,36 +146,64 @@ async function autofillPage() {
         return '';
     }
     
-    function findOptionsForInput(element) {
-        // 1. Select element
+    async function findOptionsForInput(element) {
+        let options = [];
         if (element.tagName.toLowerCase() === 'select') {
-            return Array.from(element.options).map(opt => opt.text).filter(t => t.trim() !== '' && !t.toLowerCase().includes('select'));
-        }
-        // 2. Datalist for text inputs
-        const dataListId = element.getAttribute('list');
-        if (dataListId) {
-            const dataList = document.getElementById(dataListId);
-            if (dataList) return Array.from(dataList.options).map(opt => opt.value);
-        }
-        // 3. Radio or Checkbox group
-        if (element.type === 'radio' || element.type === 'checkbox') {
+            options = Array.from(element.options).map(opt => opt.text).filter(t => t.trim() !== '' && !t.toLowerCase().includes('select'));
+        } else if (element.getAttribute('list')) {
+            const dataList = document.getElementById(element.getAttribute('list'));
+            if (dataList) options = Array.from(dataList.options).map(opt => opt.value);
+        } else if (element.type === 'radio' || element.type === 'checkbox') {
             const groupName = element.name;
             if (groupName) {
-                return Array.from(document.querySelectorAll(`input[name="${groupName}"]`))
+                options = Array.from(document.querySelectorAll(`input[name="${groupName}"]`))
                     .map(radio => document.querySelector(`label[for="${radio.id}"]`)?.innerText.trim())
                     .filter(Boolean);
             }
         }
-        // 4. ARIA controls for custom dropdowns
-        const ariaControlsId = element.getAttribute('aria-controls');
-        if (ariaControlsId) {
-            const controlledEl = document.getElementById(ariaControlsId);
+        if (options.length > 0) return options;
+
+        const isComboBox = element.getAttribute('role') === 'combobox' || element.hasAttribute('aria-controls') || element.getAttribute('aria-haspopup') === 'listbox';
+        if (isComboBox) {
+            element.click();
+            await new Promise(resolve => setTimeout(resolve, 750));
+            
+            const ariaControlsId = element.getAttribute('aria-controls');
+            let controlledEl = ariaControlsId ? document.getElementById(ariaControlsId) : document.querySelector('[role="listbox"]:not([style*="display: none"])');
+            
             if (controlledEl) {
-                const options = Array.from(controlledEl.querySelectorAll('[role="option"]'));
-                if (options.length > 0) return options.map(opt => opt.innerText.trim());
+                const optionElements = Array.from(controlledEl.querySelectorAll('[role="option"]'));
+                if (optionElements.length > 0) {
+                    return optionElements.map(opt => opt.innerText.trim());
+                }
             }
+            document.body.click();
         }
-        return []; // No options found
+        return [];
+    }
+
+    async function getAIResponse(prompt, userData) {
+        const parts = [{ text: prompt }];
+        let mimeType = '';
+        if (userData.resumeFileName?.endsWith('.pdf')) {
+            mimeType = 'application/pdf';
+        } else if (userData.resumeFileName?.endsWith('.docx')) {
+            mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        }
+
+        if (userData.resume && mimeType) {
+            const base64Data = userData.resume.split(',')[1];
+            parts.push({ inlineData: { mimeType, data: base64Data } });
+        }
+
+        const payload = { contents: [{ parts }] };
+        const apiKey = userData.apiKey || "";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+        const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!response.ok) throw new Error(`API Error: ${response.status}`);
+        const result = await response.json();
+        return result.candidates?.[0]?.content?.parts?.[0]?.text.trim();
     }
 
 
@@ -211,7 +228,7 @@ async function autofillPage() {
     } catch(e) { console.error("AI Autofill: Could not parse page context:", e); }
 
     const userData = await new Promise(resolve => {
-        const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'company', 'currentJobTitle', 'resume', 'additionalInfo', 'apiKey'];
+        const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'resume', 'resumeFileName', 'additionalInfo', 'apiKey'];
         chrome.storage.local.get(fields, (result) => {
             if (chrome.runtime.lastError) {
                 console.error("AI Autofill: Error getting user data from storage.");
@@ -227,19 +244,38 @@ async function autofillPage() {
         return;
     }
 
+    const workHistoryPrompt = "Analyze the attached resume and extract the work experience. Return a JSON array where each object has 'jobTitle', 'company', 'startDate', 'endDate', and 'responsibilities' keys. The responsibilities should be a single string with key achievements separated by newlines.";
+    let workHistory = [];
+    try {
+        const historyJson = await getAIResponse(workHistoryPrompt, userData);
+        if (historyJson) {
+            const cleanedJson = historyJson.replace(/```json/g, '').replace(/```/g, '').trim();
+            workHistory = JSON.parse(cleanedJson);
+        }
+    } catch(e) { console.error("AI Autofill: Could not parse work history from resume.", e); }
+
+    await new Promise(resolve => setTimeout(resolve, 500)); // Wait for the page to finish loading dynamic content
+
     const elements = document.querySelectorAll('input, textarea, select');
     const demographicKeywords = ['race', 'ethnicity', 'gender', 'disability', 'veteran', 'sexual orientation'];
+    let usedAnswers = new Set();
+    let experienceIndex = 0;
 
     for (const el of elements) {
         if (el.type === 'hidden' || el.disabled || el.readOnly) continue;
 
         const elType = el.tagName.toLowerCase();
-        if ( (elType === 'input' || elType === 'textarea') && el.value.trim() !== '' && el.type !== 'radio' && el.type !== 'checkbox' ) continue;
-        if (elType === 'select' && el.selectedIndex !== 0 && el.value !== '') continue;
-        if ((el.type === 'radio' || el.type === 'checkbox') && document.querySelector(`input[name="${el.name}"]:checked`)) continue;
+        if ( (elType === 'input' || elType === 'textarea') && el.value.trim() !== '' && el.type !== 'radio' && el.type !== 'checkbox' ) {
+            continue;
+        }
+        if (elType === 'select' && el.selectedIndex !== 0 && el.value !== '') {
+            continue;
+        }
+        if ((el.type === 'radio' || el.type === 'checkbox') && document.querySelector(`input[name="${el.name}"]:checked`)) {
+            continue;
+        }
 
         const question = findQuestionForInput(el);
-        const options = findOptionsForInput(el);
         const isDemographic = demographicKeywords.some(keyword => question.toLowerCase().includes(keyword));
 
         if (isDemographic) {
@@ -262,14 +298,36 @@ async function autofillPage() {
             if (!notice) {
                 notice = document.createElement('p');
                 notice.className = 'autofill-notice';
-                notice.textContent = 'Please attach your resume PDF here.';
+                notice.textContent = 'Please attach your resume file here.';
                 notice.style.cssText = 'color: #8B5CF6; font-size: 12px; margin-top: 4px;';
                 el.parentElement.insertBefore(notice, el.nextSibling);
             }
             continue;
         }
 
-        // Handle all inputs with options (select, radio, checkbox, text with datalist/aria)
+        const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question}`.toLowerCase();
+        if (combinedText.includes('experience') || (workHistory[experienceIndex] && (combinedText.includes(workHistory[experienceIndex].company.toLowerCase()) || combinedText.includes(workHistory[experienceIndex].jobTitle.toLowerCase())))) {
+            if (experienceIndex < workHistory.length) {
+                const currentJob = workHistory[experienceIndex];
+                if (combinedText.includes('title')) await simulateTyping(el, currentJob.jobTitle);
+                else if (combinedText.includes('company')) await simulateTyping(el, currentJob.company);
+                else if (combinedText.includes('start')) await simulateTyping(el, currentJob.startDate);
+                else if (combinedText.includes('end')) await simulateTyping(el, currentJob.endDate);
+                else if (combinedText.includes('responsibilities') || combinedText.includes('description')) {
+                    await simulateTyping(el, currentJob.responsibilities);
+                    experienceIndex++;
+                    const addButton = Array.from(document.querySelectorAll('button, a, [role="button"]')).find(b => b.innerText.toLowerCase().includes('add') && b.innerText.toLowerCase().includes('experience'));
+                    if (addButton) {
+                        addButton.click();
+                        await new Promise(resolve => setTimeout(resolve, 500)); // Wait for new fields to appear
+                    }
+                }
+                continue;
+            }
+        }
+        
+        const options = await findOptionsForInput(el);
+
         if (options.length > 0) {
             const cleanQuestion = question.replace(/[*:]$/, '').trim();
             if (cleanQuestion.length > 5) {
@@ -279,33 +337,22 @@ async function autofillPage() {
 **CONTEXT:**
 - **Job Description:** ${jobDescription || 'Not found on page.'}
 - **My Profile:** ${userData.additionalInfo || 'Not provided.'}
+- **Answers Already Used on This Page:** ${Array.from(usedAnswers).join(", ")}
 ---
-**TASK: From the list below, choose the single most appropriate option to answer the question. I will provide my resume separately.**
+**TASK: From the list below, choose the single most appropriate and unique option to answer the question. I will provide my resume separately.**
 **Question:** "${cleanQuestion}"
 **Options:**
 - ${options.join("\n- ")}
 ---
-**INSTRUCTIONS:** Return ONLY the exact text of the best option from the list.
+**INSTRUCTIONS:** Return ONLY the exact text of the best option from the list. Do not repeat an answer that has already been used.
 ---
 **BEST OPTION:**`;
-                    const parts = [{ text: prompt }];
-                    if (userData.resume && userData.resume.startsWith('data:application/pdf;base64,')) {
-                        const base64Data = userData.resume.split(',')[1];
-                        parts.push({ inlineData: { mimeType: "application/pdf", data: base64Data } });
-                    }
-                    const payload = { contents: [{ parts: parts }] };
-                    const apiKey = userData.apiKey || "";
-                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-
-                    const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                    if (!response.ok) throw new Error(`API Error: ${response.status}`);
-                    const result = await response.json();
-                    const aiChoice = result.candidates?.[0]?.content?.parts?.[0]?.text.trim();
-
+                    const aiChoice = await getAIResponse(prompt, userData);
                     if (aiChoice) {
+                        usedAnswers.add(aiChoice);
                         if (el.tagName.toLowerCase() === 'select') {
                             for (let option of el.options) {
-                                if (option.text.trim() === aiChoice) { el.value = option.value; el.dispatchEvent(new Event('change', { bubbles: true })); break; }
+                                if (option.text.trim() === aiChoice) { el.click(); await new Promise(r => setTimeout(r, 50)); el.value = option.value; el.dispatchEvent(new Event('change', { bubbles: true })); el.blur(); break; }
                             }
                         } else if (el.type === 'radio' || el.type === 'checkbox') {
                             const inputs = document.querySelectorAll(`input[name="${el.name}"]`);
@@ -313,19 +360,17 @@ async function autofillPage() {
                                 const label = document.querySelector(`label[for="${input.id}"]`);
                                 if (label && label.innerText.trim() === aiChoice) { input.click(); break; }
                             }
-                        } else { // This handles text inputs with datalists or ARIA options
+                        } else { 
                             await simulateTyping(el, aiChoice);
                         }
                     }
                 } catch (error) { console.error('AI Selection Error:', error); }
             }
-            continue; // Move to next element after handling selection
+            continue;
         }
         
-        // Handle plain text inputs and textareas
         if (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea') {
             let valueToType = '';
-            const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question}`.toLowerCase();
             if (combinedText.includes('first') && combinedText.includes('name')) valueToType = userData.firstName || '';
             else if (combinedText.includes('last') && combinedText.includes('name')) valueToType = userData.lastName || '';
             else if (combinedText.includes('preferred') && combinedText.includes('name')) valueToType = userData.firstName || '';
@@ -340,8 +385,6 @@ async function autofillPage() {
             else if (combinedText.includes('country')) valueToType = userData.country || '';
             else if (combinedText.includes('linkedin')) valueToType = userData.linkedinUrl || '';
             else if (combinedText.includes('website') || combinedText.includes('portfolio')) valueToType = userData.portfolioUrl || '';
-            else if (combinedText.includes('company')) valueToType = userData.company || '';
-            else if (combinedText.includes('title')) valueToType = userData.currentJobTitle || '';
             
             if (valueToType) {
                  await simulateTyping(el, valueToType);
@@ -351,35 +394,24 @@ async function autofillPage() {
                     try {
                         const prompt = `You are an expert career assistant. Your primary goal is to align my profile with the role by analyzing the provided Job Description. I will provide my resume separately.
 ---
-**CONTEXT: THE JOB DESCRIPTION**
-${jobDescription || 'Not found on page.'}
+**CONTEXT:**
+- **Job Description:** ${jobDescription || 'Not found on page.'}
+- **My Profile:** ${userData.additionalInfo || 'Not provided.'}
+- **Answers Already Used on This Page:** ${Array.from(usedAnswers).join(", ")}
 ---
-**CONTEXT: MY PROFILE**
-- **Additional Info/Skills:** ${userData.additionalInfo || 'Not provided.'}
----
-**TASK: Answer the following application question.**
+**TASK: Answer the following application question concisely and uniquely.**
 **Question:** "${cleanQuestion}"
 ---
 **INSTRUCTIONS:**
-1. Analyze the Job Description and my profile to formulate a concise, professional answer.
+1. Formulate a professional answer that has not been used before on this page.
 2. For salary questions, state my expectations are negotiable and competitive.
 3. Write only the answer itself, with no preamble.
 ---
 **ANSWER:**`;
-                        const parts = [{ text: prompt }];
-                         if (userData.resume && userData.resume.startsWith('data:application/pdf;base64,')) {
-                            const base64Data = userData.resume.split(',')[1];
-                            parts.push({ inlineData: { mimeType: "application/pdf", data: base64Data } });
-                        }
-                        const payload = { contents: [{ parts: parts }] };
-                        const apiKey = userData.apiKey || "";
-                        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-
-                        const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                        if (!response.ok) throw new Error(`API Error: ${response.status}`);
-                        const result = await response.json();
-                        if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-                            await simulateTyping(el, result.candidates[0].content.parts[0].text.trim());
+                        const aiAnswer = await getAIResponse(prompt, userData);
+                        if (aiAnswer) {
+                            usedAnswers.add(aiAnswer);
+                            await simulateTyping(el, aiAnswer);
                         }
                     } catch (error) { console.error('AI Text Error:', error); }
                 }
