@@ -1,12 +1,12 @@
 // This top-level try...catch block prevents the entire script from failing if an unexpected error occurs during setup.
 try {
-    document.addEventListener('DOMContentLoaded', function () {
+    document.addEventListener('DOMContentLoaded', function() {
         const statusEl = document.getElementById('status');
         const resumeFileNameEl = document.getElementById('resumeFileName');
         const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'company', 'currentJobTitle', 'additionalInfo', 'apiKey'];
 
         // Load saved data when the popup opens
-        chrome.storage.local.get([...textFields, 'resumeFileName'], function (result) {
+        chrome.storage.local.get([...textFields, 'resumeFileName'], function(result) {
             if (chrome.runtime.lastError) {
                 console.error("Error loading data:", chrome.runtime.lastError.message);
                 return;
@@ -23,7 +23,7 @@ try {
         });
 
         // Save data when the save button is clicked
-        document.getElementById('save').addEventListener('click', function () {
+        document.getElementById('save').addEventListener('click', function() {
             try {
                 let dataToSave = {};
                 textFields.forEach(field => {
@@ -39,7 +39,7 @@ try {
                 const resumeFile = document.getElementById('resumeFile')?.files[0];
 
                 const saveDataToStorage = (data) => {
-                    chrome.storage.local.set(data, function () {
+                    chrome.storage.local.set(data, function() {
                         if (chrome.runtime.lastError) {
                             statusEl.textContent = `Error: ${chrome.runtime.lastError.message}`;
                             console.error("Save error:", chrome.runtime.lastError);
@@ -49,18 +49,18 @@ try {
                                 resumeFileNameEl.textContent = `Saved file: ${data.resumeFileName}`;
                             }
                         }
-                        setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2500);
+                        setTimeout(() => { if(statusEl) statusEl.textContent = ''; }, 2500);
                     });
                 };
 
                 if (resumeFile) {
                     const reader = new FileReader();
-                    reader.onload = function (e) {
+                    reader.onload = function(e) {
                         dataToSave.resume = e.target.result; // The Base64 string
                         dataToSave.resumeFileName = resumeFile.name;
                         saveDataToStorage(dataToSave);
                     };
-                    reader.onerror = function (err) {
+                    reader.onerror = function(err) {
                         statusEl.textContent = 'Error reading file.';
                         console.error("File reading error:", err);
                     };
@@ -75,24 +75,24 @@ try {
         });
 
         // Autofill button logic
-        document.getElementById('autofill').addEventListener('click', function () {
+        document.getElementById('autofill').addEventListener('click', function() {
             statusEl.textContent = 'Autofilling...';
-            chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+            chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
                 // Check if we have a valid tab to inject into
                 if (tabs.length === 0 || !tabs[0].id) {
                     statusEl.textContent = 'Could not find active tab.';
                     return;
                 }
                 chrome.scripting.executeScript({
-                    target: { tabId: tabs[0].id },
+                    target: {tabId: tabs[0].id},
                     function: autofillPage,
                 }).then(() => {
-                    statusEl.textContent = 'Autofill complete!';
-                    setTimeout(() => statusEl.textContent = '', 3000);
+                     statusEl.textContent = 'Autofill complete!';
+                     setTimeout(() => statusEl.textContent = '', 3000);
                 }).catch(err => {
-                    statusEl.textContent = 'Autofill failed on this page.';
-                    console.error('Autofill script injection failed:', err);
-                    setTimeout(() => statusEl.textContent = '', 3000);
+                     statusEl.textContent = 'Autofill failed on this page.';
+                     console.error('Autofill script injection failed:', err);
+                     setTimeout(() => statusEl.textContent = '', 3000);
                 });
             });
         });
@@ -105,6 +105,26 @@ try {
 // This function is injected into the page to perform the autofill
 async function autofillPage() {
     console.log("AI Autofill: Starting process...");
+
+    // --- HELPER FUNCTIONS ---
+
+    // Simulates natural typing into an input or textarea element.
+    async function simulateTyping(element, text) {
+        if (!text) return;
+        element.focus();
+        for (const char of text) {
+            element.value += char;
+            // Dispatch an 'input' event, which many frameworks listen for.
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            // Wait for a short, random time to mimic human typing speed.
+            await new Promise(resolve => setTimeout(resolve, Math.random() * 50 + 25));
+        }
+        // Trigger a 'change' event at the end, which some forms might need.
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        element.blur();
+    }
+
+    // Finds the most likely question/label for a given form element.
     function findQuestionForInput(element) {
         const checks = [
             element.getAttribute('aria-label'),
@@ -126,6 +146,8 @@ async function autofillPage() {
         return '';
     }
 
+    // --- MAIN SCRIPT LOGIC ---
+
     const jobTitle = document.querySelector('h1')?.innerText || document.querySelector('h2')?.innerText || '';
     let jobDescription = '';
     try {
@@ -142,11 +164,10 @@ async function autofillPage() {
             const descDiv = document.querySelector('#job-description, [class*="job-description"], [class*="jobdescription"]');
             if (descDiv) jobDescription = descDiv.innerText;
         }
-        console.log("AI Autofill: Found job title:", jobTitle);
-    } catch (e) { console.error("AI Autofill: Could not parse page context:", e); }
+    } catch(e) { console.error("AI Autofill: Could not parse page context:", e); }
 
     const userData = await new Promise(resolve => {
-        const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'company', 'currentJobTitle', 'resume', 'additionalInfo'];
+        const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'company', 'currentJobTitle', 'resume', 'additionalInfo', 'apiKey'];
         chrome.storage.local.get(fields, (result) => {
             if (chrome.runtime.lastError) {
                 console.error("AI Autofill: Error getting user data from storage.");
@@ -163,7 +184,6 @@ async function autofillPage() {
     }
 
     const elements = document.querySelectorAll('input, textarea, select');
-    console.log(`AI Autofill: Found ${elements.length} form elements to process.`);
     const demographicKeywords = ['race', 'ethnicity', 'gender', 'disability', 'veteran', 'sexual orientation'];
 
     for (const el of elements) {
@@ -171,52 +191,54 @@ async function autofillPage() {
 
         const question = findQuestionForInput(el);
         const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question}`.toLowerCase();
-
         const isDemographic = demographicKeywords.some(keyword => combinedText.includes(keyword));
+
         if (isDemographic) {
             if (el.tagName.toLowerCase() === 'select') {
                 for (let option of el.options) {
                     if (option.text.toLowerCase().includes('decline') || option.text.toLowerCase().includes('prefer not')) {
-                        el.value = option.value; break;
+                        el.value = option.value; el.dispatchEvent(new Event('change', { bubbles: true })); break;
                     }
                 }
             } else if (el.type === 'radio' || el.type === 'checkbox') {
                 const labelText = (document.querySelector(`label[for="${el.id}"]`)?.innerText || '').toLowerCase();
-                if (labelText.includes('decline') || labelText.includes('prefer not')) el.checked = true;
+                if (labelText.includes('decline') || labelText.includes('prefer not')) el.click();
             }
             continue;
         }
 
         if (el.type === 'file') {
             el.style.border = '2px solid #8B5CF6';
-            let notice = document.createElement('p');
-            notice.textContent = 'Please attach your resume PDF here.';
-            notice.style.color = '#8B5CF6';
-            notice.style.fontSize = '12px';
-            notice.style.marginTop = '4px';
-            if (!el.parentElement.querySelector('p[style*="color: #8B5CF6"]')) {
+            let notice = el.parentElement.querySelector('p.autofill-notice');
+            if (!notice) {
+                notice = document.createElement('p');
+                notice.className = 'autofill-notice';
+                notice.textContent = 'Please attach your resume PDF here.';
+                notice.style.cssText = 'color: #8B5CF6; font-size: 12px; margin-top: 4px;';
                 el.parentElement.insertBefore(notice, el.nextSibling);
             }
             continue;
         }
 
         if (el.tagName.toLowerCase() === 'input' && el.type !== 'radio' && el.type !== 'checkbox') {
-            if (combinedText.includes('first') && combinedText.includes('name')) el.value = userData.firstName || '';
-            else if (combinedText.includes('last') && combinedText.includes('name')) el.value = userData.lastName || '';
-            else if (combinedText.includes('preferred') && combinedText.includes('name')) el.value = userData.firstName || '';
-            else if (combinedText.includes('full') && combinedText.includes('name')) el.value = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
-            else if (combinedText.includes('email')) el.value = userData.email || '';
-            else if (combinedText.includes('phone') || combinedText.includes('tel')) el.value = userData.phone || '';
-            else if (combinedText.includes('pronouns')) el.value = userData.pronouns || '';
-            else if (combinedText.includes('address')) el.value = userData.address || '';
-            else if (combinedText.includes('city')) el.value = userData.city || '';
-            else if (combinedText.includes('state') || combinedText.includes('province')) el.value = userData.state || '';
-            else if (combinedText.includes('zip') || combinedText.includes('postal')) el.value = userData.zipCode || '';
-            else if (combinedText.includes('country')) el.value = userData.country || '';
-            else if (combinedText.includes('linkedin')) el.value = userData.linkedinUrl || '';
-            else if (combinedText.includes('website') || combinedText.includes('portfolio')) el.value = userData.portfolioUrl || '';
-            else if (combinedText.includes('company')) el.value = userData.company || '';
-            else if (combinedText.includes('title')) el.value = userData.currentJobTitle || '';
+            let valueToType = '';
+            if (combinedText.includes('first') && combinedText.includes('name')) valueToType = userData.firstName || '';
+            else if (combinedText.includes('last') && combinedText.includes('name')) valueToType = userData.lastName || '';
+            else if (combinedText.includes('preferred') && combinedText.includes('name')) valueToType = userData.firstName || '';
+            else if (combinedText.includes('full') && combinedText.includes('name')) valueToType = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+            else if (combinedText.includes('email')) valueToType = userData.email || '';
+            else if (combinedText.includes('phone') || combinedText.includes('tel')) valueToType = userData.phone || '';
+            else if (combinedText.includes('pronouns')) valueToType = userData.pronouns || '';
+            else if (combinedText.includes('address')) valueToType = userData.address || '';
+            else if (combinedText.includes('city')) valueToType = userData.city || '';
+            else if (combinedText.includes('state') || combinedText.includes('province')) valueToType = userData.state || '';
+            else if (combinedText.includes('zip') || combinedText.includes('postal')) valueToType = userData.zipCode || '';
+            else if (combinedText.includes('country')) valueToType = userData.country || '';
+            else if (combinedText.includes('linkedin')) valueToType = userData.linkedinUrl || '';
+            else if (combinedText.includes('website') || combinedText.includes('portfolio')) valueToType = userData.portfolioUrl || '';
+            else if (combinedText.includes('company')) valueToType = userData.company || '';
+            else if (combinedText.includes('title')) valueToType = userData.currentJobTitle || '';
+            await simulateTyping(el, valueToType);
         }
 
         if (el.tagName.toLowerCase() === 'select' || el.type === 'radio' || el.type === 'checkbox') {
@@ -228,7 +250,7 @@ async function autofillPage() {
                 const groupName = el.name;
                 options = Array.from(document.querySelectorAll(`input[name="${groupName}"]`)).map(radio => document.querySelector(`label[for="${radio.id}"]`)?.innerText.trim()).filter(Boolean);
             }
-
+            
             if (cleanQuestion.length > 5 && options.length > 0) {
                 try {
                     const prompt = `You are an expert career assistant. Your task is to select the best option from a list to answer an application question, based on my profile and the job description.
@@ -247,27 +269,16 @@ ${jobDescription || 'Not found on page.'}
 - ${options.join("\n- ")}
 ---
 **INSTRUCTIONS:**
-- Analyze my profile and the job description to make the most logical choice.
-- If the question is about experience, choose the option that best reflects the skills in my profile.
-- If the question is about work style, choose the option that sounds most proactive, collaborative, and positive.
-- For "How did you hear about us?", prefer "LinkedIn" or "Company Website".
-- For authorization/sponsorship, choose "Yes" for authorization and "No" for sponsorship.
-- For opting out of texts, choose the option that opts out or says no.
 - Return ONLY the exact text of the best option from the list. Do not add any other words, explanation, or punctuation.
 ---
 **BEST OPTION:**`;
                     const parts = [{ text: prompt }];
                     if (userData.resume && userData.resume.startsWith('data:application/pdf;base64,')) {
                         const base64Data = userData.resume.split(',')[1];
-                        parts.push({
-                            inlineData: {
-                                mimeType: "application/pdf",
-                                data: base64Data
-                            }
-                        });
+                        parts.push({ inlineData: { mimeType: "application/pdf", data: base64Data } });
                     }
                     const payload = { contents: [{ parts: parts }] };
-                    const apiKey = userData.apiKey;
+                    const apiKey = userData.apiKey || "";
                     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
                     const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -278,14 +289,13 @@ ${jobDescription || 'Not found on page.'}
                     if (aiChoice) {
                         if (el.tagName.toLowerCase() === 'select') {
                             for (let option of el.options) {
-                                if (option.text.trim() === aiChoice) { el.value = option.value; break; }
+                                if (option.text.trim() === aiChoice) { el.value = option.value; el.dispatchEvent(new Event('change', { bubbles: true })); break; }
                             }
                         } else if (el.type === 'radio' || el.type === 'checkbox') {
-                            const groupName = el.name;
-                            const inputs = document.querySelectorAll(`input[name="${groupName}"]`);
+                            const inputs = document.querySelectorAll(`input[name="${el.name}"]`);
                             for (const input of inputs) {
                                 const label = document.querySelector(`label[for="${input.id}"]`);
-                                if (label && label.innerText.trim() === aiChoice) { input.checked = true; break; }
+                                if (label && label.innerText.trim() === aiChoice) { input.click(); break; }
                             }
                         }
                     }
@@ -315,24 +325,19 @@ ${jobDescription || 'Not found on page.'}
 ---
 **ANSWER:**`;
                     const parts = [{ text: prompt }];
-                    if (userData.resume && userData.resume.startsWith('data:application/pdf;base64,')) {
+                     if (userData.resume && userData.resume.startsWith('data:application/pdf;base64,')) {
                         const base64Data = userData.resume.split(',')[1];
-                        parts.push({
-                            inlineData: {
-                                mimeType: "application/pdf",
-                                data: base64Data
-                            }
-                        });
+                        parts.push({ inlineData: { mimeType: "application/pdf", data: base64Data } });
                     }
                     const payload = { contents: [{ parts: parts }] };
-                    const apiKey = userData.apiKey;
+                    const apiKey = userData.apiKey || "";
                     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
                     const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                     if (!response.ok) throw new Error(`API Error: ${response.status}`);
                     const result = await response.json();
                     if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-                        el.value = result.candidates[0].content.parts[0].text.trim();
+                        await simulateTyping(el, result.candidates[0].content.parts[0].text.trim());
                     }
                 } catch (error) { console.error('AI Text Error:', error); }
             }
