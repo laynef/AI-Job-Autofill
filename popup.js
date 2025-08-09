@@ -122,7 +122,7 @@ async function autofillPage() {
     // --- HELPER FUNCTIONS ---
 
     async function simulateTyping(element, text) {
-        if (!text) return;
+        if (typeof text !== 'string') return;
         element.focus();
         element.value = '';
         element.dispatchEvent(new Event('input', { bubbles: true }));
@@ -156,6 +156,39 @@ async function autofillPage() {
         }
         return '';
     }
+    
+    function findOptionsForInput(element) {
+        // 1. Select element
+        if (element.tagName.toLowerCase() === 'select') {
+            return Array.from(element.options).map(opt => opt.text).filter(t => t.trim() !== '' && !t.toLowerCase().includes('select'));
+        }
+        // 2. Datalist for text inputs
+        const dataListId = element.getAttribute('list');
+        if (dataListId) {
+            const dataList = document.getElementById(dataListId);
+            if (dataList) return Array.from(dataList.options).map(opt => opt.value);
+        }
+        // 3. Radio or Checkbox group
+        if (element.type === 'radio' || element.type === 'checkbox') {
+            const groupName = element.name;
+            if (groupName) {
+                return Array.from(document.querySelectorAll(`input[name="${groupName}"]`))
+                    .map(radio => document.querySelector(`label[for="${radio.id}"]`)?.innerText.trim())
+                    .filter(Boolean);
+            }
+        }
+        // 4. ARIA controls for custom dropdowns
+        const ariaControlsId = element.getAttribute('aria-controls');
+        if (ariaControlsId) {
+            const controlledEl = document.getElementById(ariaControlsId);
+            if (controlledEl) {
+                const options = Array.from(controlledEl.querySelectorAll('[role="option"]'));
+                if (options.length > 0) return options.map(opt => opt.innerText.trim());
+            }
+        }
+        return []; // No options found
+    }
+
 
     // --- MAIN SCRIPT LOGIC ---
 
@@ -206,8 +239,8 @@ async function autofillPage() {
         if ((el.type === 'radio' || el.type === 'checkbox') && document.querySelector(`input[name="${el.name}"]:checked`)) continue;
 
         const question = findQuestionForInput(el);
-        const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question}`.toLowerCase();
-        const isDemographic = demographicKeywords.some(keyword => combinedText.includes(keyword));
+        const options = findOptionsForInput(el);
+        const isDemographic = demographicKeywords.some(keyword => question.toLowerCase().includes(keyword));
 
         if (isDemographic) {
             if (el.tagName.toLowerCase() === 'select') {
@@ -236,41 +269,23 @@ async function autofillPage() {
             continue;
         }
 
-        const dataListId = el.getAttribute('list');
-        const dataList = dataListId ? document.getElementById(dataListId) : null;
-        const hasOptions = dataList && dataList.options.length > 0;
-
-        if ((el.tagName.toLowerCase() === 'select' || hasOptions) || el.type === 'radio' || el.type === 'checkbox') {
+        // Handle all inputs with options (select, radio, checkbox, text with datalist/aria)
+        if (options.length > 0) {
             const cleanQuestion = question.replace(/[*:]$/, '').trim();
-            let options = [];
-            if (el.tagName.toLowerCase() === 'select') {
-                options = Array.from(el.options).map(opt => opt.text).filter(t => t.trim() !== '' && !t.toLowerCase().includes('select'));
-            } else if (hasOptions) {
-                options = Array.from(dataList.options).map(opt => opt.value);
-            } else { // Radio or Checkbox
-                const groupName = el.name;
-                options = Array.from(document.querySelectorAll(`input[name="${groupName}"]`)).map(radio => document.querySelector(`label[for="${radio.id}"]`)?.innerText.trim()).filter(Boolean);
-            }
-            
-            if (cleanQuestion.length > 5 && options.length > 0) {
+            if (cleanQuestion.length > 5) {
                 try {
-                    const prompt = `You are an expert career assistant. Your task is to select the best option from a list to answer an application question, based on my profile and the job description.
+                    const prompt = `You are an expert career assistant. Your task is to select the best option from a list to answer an application question.
 ---
-**CONTEXT: THE JOB DESCRIPTION**
-${jobDescription || 'Not found on page.'}
----
-**CONTEXT: MY PROFILE**
-- **Additional Info/Skills:** ${userData.additionalInfo || 'Not provided.'}
-- **Current/Last Company:** ${userData.company || 'Not provided'}
-- **Current/Last Job Title:** ${userData.currentJobTitle || 'Not provided'}
+**CONTEXT:**
+- **Job Description:** ${jobDescription || 'Not found on page.'}
+- **My Profile:** ${userData.additionalInfo || 'Not provided.'}
 ---
 **TASK: From the list below, choose the single most appropriate option to answer the question. I will provide my resume separately.**
 **Question:** "${cleanQuestion}"
 **Options:**
 - ${options.join("\n- ")}
 ---
-**INSTRUCTIONS:**
-- Return ONLY the exact text of the best option from the list. Do not add any other words, explanation, or punctuation.
+**INSTRUCTIONS:** Return ONLY the exact text of the best option from the list.
 ---
 **BEST OPTION:**`;
                     const parts = [{ text: prompt }];
@@ -292,20 +307,25 @@ ${jobDescription || 'Not found on page.'}
                             for (let option of el.options) {
                                 if (option.text.trim() === aiChoice) { el.value = option.value; el.dispatchEvent(new Event('change', { bubbles: true })); break; }
                             }
-                        } else if (hasOptions) {
-                            await simulateTyping(el, aiChoice);
                         } else if (el.type === 'radio' || el.type === 'checkbox') {
                             const inputs = document.querySelectorAll(`input[name="${el.name}"]`);
                             for (const input of inputs) {
                                 const label = document.querySelector(`label[for="${input.id}"]`);
                                 if (label && label.innerText.trim() === aiChoice) { input.click(); break; }
                             }
+                        } else { // This handles text inputs with datalists or ARIA options
+                            await simulateTyping(el, aiChoice);
                         }
                     }
                 } catch (error) { console.error('AI Selection Error:', error); }
             }
-        } else if (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea') {
+            continue; // Move to next element after handling selection
+        }
+        
+        // Handle plain text inputs and textareas
+        if (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea') {
             let valueToType = '';
+            const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question}`.toLowerCase();
             if (combinedText.includes('first') && combinedText.includes('name')) valueToType = userData.firstName || '';
             else if (combinedText.includes('last') && combinedText.includes('name')) valueToType = userData.lastName || '';
             else if (combinedText.includes('preferred') && combinedText.includes('name')) valueToType = userData.firstName || '';
