@@ -107,11 +107,16 @@ async function autofillPage() {
     console.log("AI Autofill: Starting process...");
 
     // --- HELPER FUNCTIONS ---
+    async function simulateClick(element) {
+        element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await new Promise(resolve => setTimeout(resolve, 50));
+    }
 
     async function simulateTyping(element, text) {
         if (typeof text !== 'string') return;
-        element.click(); // Click to activate the field
-        await new Promise(resolve => setTimeout(resolve, 50)); // Brief pause
+        await simulateClick(element);
         element.focus();
         element.value = '';
         element.dispatchEvent(new Event('input', { bubbles: true }));
@@ -161,11 +166,11 @@ async function autofillPage() {
                     .filter(Boolean);
             }
         }
-        if (options.length > 0) return options;
+        if (options.length > 0) return { options, source: element };
 
         const isComboBox = element.getAttribute('role') === 'combobox' || element.hasAttribute('aria-controls') || element.getAttribute('aria-haspopup') === 'listbox';
         if (isComboBox) {
-            element.click();
+            await simulateClick(element);
             await new Promise(resolve => setTimeout(resolve, 750));
             
             const ariaControlsId = element.getAttribute('aria-controls');
@@ -174,12 +179,12 @@ async function autofillPage() {
             if (controlledEl) {
                 const optionElements = Array.from(controlledEl.querySelectorAll('[role="option"]'));
                 if (optionElements.length > 0) {
-                    return optionElements.map(opt => opt.innerText.trim());
+                    return { options: optionElements.map(opt => opt.innerText.trim()), source: controlledEl };
                 }
             }
-            document.body.click();
+            await simulateClick(document.body); // Click away to close
         }
-        return [];
+        return { options: [] };
     }
 
     async function getAIResponse(prompt, userData) {
@@ -196,7 +201,7 @@ async function autofillPage() {
             parts.push({ inlineData: { mimeType, data: base64Data } });
         }
 
-        const payload = { contents: [{ parts }] };
+        const payload = { contents: [{ role: "user", parts: parts }] };
         const apiKey = userData.apiKey || "";
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
@@ -289,7 +294,7 @@ async function autofillPage() {
                     }
                 } else if (el.type === 'radio' || el.type === 'checkbox') {
                     const labelText = (document.querySelector(`label[for="${el.id}"]`)?.innerText || '').toLowerCase();
-                    if (labelText.includes('decline') || labelText.includes('prefer not')) el.click();
+                    if (labelText.includes('decline') || labelText.includes('prefer not')) await simulateClick(el);
                 }
                 continue;
             }
@@ -320,7 +325,7 @@ async function autofillPage() {
                         experienceIndex++;
                         const addButton = Array.from(document.querySelectorAll('button, a, [role="button"]')).find(b => b.innerText.toLowerCase().includes('add') && b.innerText.toLowerCase().includes('experience'));
                         if (addButton) {
-                            addButton.click();
+                            await simulateClick(addButton);
                             await new Promise(resolve => setTimeout(resolve, 500));
                         }
                     }
@@ -328,7 +333,7 @@ async function autofillPage() {
                 }
             }
             
-            const options = await findOptionsForInput(el);
+            const { options, source } = await findOptionsForInput(el);
 
             if (options.length > 0) {
                 const cleanQuestion = question.replace(/[*:]$/, '').trim();
@@ -353,16 +358,22 @@ async function autofillPage() {
                         usedAnswers.add(aiChoice);
                         if (el.tagName.toLowerCase() === 'select') {
                             for (let option of el.options) {
-                                if (option.text.trim() === aiChoice) { el.click(); await new Promise(r => setTimeout(r, 50)); el.value = option.value; el.dispatchEvent(new Event('change', { bubbles: true })); el.blur(); break; }
+                                if (option.text.trim() === aiChoice) { await simulateClick(el); el.value = option.value; el.dispatchEvent(new Event('change', { bubbles: true })); el.blur(); break; }
                             }
                         } else if (el.type === 'radio' || el.type === 'checkbox') {
                             const inputs = document.querySelectorAll(`input[name="${el.name}"]`);
                             for (const input of inputs) {
                                 const label = document.querySelector(`label[for="${input.id}"]`);
-                                if (label && label.innerText.trim() === aiChoice) { input.click(); break; }
+                                if (label && label.innerText.trim() === aiChoice) { await simulateClick(input); break; }
                             }
-                        } else { 
-                            await simulateTyping(el, aiChoice);
+                        } else {
+                            const optionElements = Array.from(source.querySelectorAll('[role="option"]'));
+                            const targetOption = optionElements.find(opt => opt.innerText.trim() === aiChoice);
+                            if (targetOption) {
+                                await simulateClick(targetOption);
+                            } else {
+                                await simulateTyping(el, aiChoice);
+                            }
                         }
                     }
                 }
