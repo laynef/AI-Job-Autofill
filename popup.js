@@ -256,82 +256,83 @@ async function autofillPage() {
 
     await new Promise(resolve => setTimeout(resolve, 500)); // Wait for the page to finish loading dynamic content
 
-    const elements = document.querySelectorAll('input, textarea, select');
     const demographicKeywords = ['race', 'ethnicity', 'gender', 'disability', 'veteran', 'sexual orientation'];
     let usedAnswers = new Set();
     let experienceIndex = 0;
+    
+    const allElements = Array.from(document.querySelectorAll('input, textarea, select'));
 
-    for (const el of elements) {
-        if (el.type === 'hidden' || el.disabled || el.readOnly) continue;
-
-        const elType = el.tagName.toLowerCase();
-        if ( (elType === 'input' || elType === 'textarea') && el.value.trim() !== '' && el.type !== 'radio' && el.type !== 'checkbox' ) {
-            continue;
-        }
-        if (elType === 'select' && el.selectedIndex !== 0 && el.value !== '') {
-            continue;
-        }
-        if ((el.type === 'radio' || el.type === 'checkbox') && document.querySelector(`input[name="${el.name}"]:checked`)) {
-            continue;
-        }
-
-        const question = findQuestionForInput(el);
-        const isDemographic = demographicKeywords.some(keyword => question.toLowerCase().includes(keyword));
-
-        if (isDemographic) {
-            if (el.tagName.toLowerCase() === 'select') {
-                for (let option of el.options) {
-                    if (option.text.toLowerCase().includes('decline') || option.text.toLowerCase().includes('prefer not')) {
-                        el.value = option.value; el.dispatchEvent(new Event('change', { bubbles: true })); break;
-                    }
-                }
-            } else if (el.type === 'radio' || el.type === 'checkbox') {
-                const labelText = (document.querySelector(`label[for="${el.id}"]`)?.innerText || '').toLowerCase();
-                if (labelText.includes('decline') || labelText.includes('prefer not')) el.click();
+    for (const el of allElements) {
+        try {
+            const style = window.getComputedStyle(el);
+            if (el.type === 'hidden' || el.disabled || el.readOnly || style.display === 'none' || style.visibility === 'hidden') {
+                continue;
             }
-            continue;
-        }
 
-        if (el.type === 'file') {
-            el.style.border = '2px solid #8B5CF6';
-            let notice = el.parentElement.querySelector('p.autofill-notice');
-            if (!notice) {
-                notice = document.createElement('p');
-                notice.className = 'autofill-notice';
-                notice.textContent = 'Please attach your resume file here.';
-                notice.style.cssText = 'color: #8B5CF6; font-size: 12px; margin-top: 4px;';
-                el.parentElement.insertBefore(notice, el.nextSibling);
-            }
-            continue;
-        }
+            const elType = el.tagName.toLowerCase();
+            if ( (elType === 'input' || elType === 'textarea') && el.value.trim() !== '' && el.type !== 'radio' && el.type !== 'checkbox' ) continue;
+            if (elType === 'select' && el.selectedIndex !== 0 && el.value !== '') continue;
+            if ((el.type === 'radio' || el.type === 'checkbox') && document.querySelector(`input[name="${el.name}"]:checked`)) continue;
 
-        const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question}`.toLowerCase();
-        if (combinedText.includes('experience') || (workHistory[experienceIndex] && (combinedText.includes(workHistory[experienceIndex].company.toLowerCase()) || combinedText.includes(workHistory[experienceIndex].jobTitle.toLowerCase())))) {
-            if (experienceIndex < workHistory.length) {
-                const currentJob = workHistory[experienceIndex];
-                if (combinedText.includes('title')) await simulateTyping(el, currentJob.jobTitle);
-                else if (combinedText.includes('company')) await simulateTyping(el, currentJob.company);
-                else if (combinedText.includes('start')) await simulateTyping(el, currentJob.startDate);
-                else if (combinedText.includes('end')) await simulateTyping(el, currentJob.endDate);
-                else if (combinedText.includes('responsibilities') || combinedText.includes('description')) {
-                    await simulateTyping(el, currentJob.responsibilities);
-                    experienceIndex++;
-                    const addButton = Array.from(document.querySelectorAll('button, a, [role="button"]')).find(b => b.innerText.toLowerCase().includes('add') && b.innerText.toLowerCase().includes('experience'));
-                    if (addButton) {
-                        addButton.click();
-                        await new Promise(resolve => setTimeout(resolve, 500)); // Wait for new fields to appear
+            el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+            await new Promise(resolve => setTimeout(resolve, 200));
+
+            const question = findQuestionForInput(el);
+            const isDemographic = demographicKeywords.some(keyword => question.toLowerCase().includes(keyword));
+
+            if (isDemographic) {
+                if (el.tagName.toLowerCase() === 'select') {
+                    for (let option of el.options) {
+                        if (option.text.toLowerCase().includes('decline') || option.text.toLowerCase().includes('prefer not')) {
+                            el.value = option.value; el.dispatchEvent(new Event('change', { bubbles: true })); break;
+                        }
                     }
+                } else if (el.type === 'radio' || el.type === 'checkbox') {
+                    const labelText = (document.querySelector(`label[for="${el.id}"]`)?.innerText || '').toLowerCase();
+                    if (labelText.includes('decline') || labelText.includes('prefer not')) el.click();
                 }
                 continue;
             }
-        }
-        
-        const options = await findOptionsForInput(el);
 
-        if (options.length > 0) {
-            const cleanQuestion = question.replace(/[*:]$/, '').trim();
-            if (cleanQuestion.length > 5) {
-                try {
+            if (el.type === 'file') {
+                el.style.border = '2px solid #8B5CF6';
+                let notice = el.parentElement.querySelector('p.autofill-notice');
+                if (!notice) {
+                    notice = document.createElement('p');
+                    notice.className = 'autofill-notice';
+                    notice.textContent = 'Please attach your resume file here.';
+                    notice.style.cssText = 'color: #8B5CF6; font-size: 12px; margin-top: 4px;';
+                    el.parentElement.insertBefore(notice, el.nextSibling);
+                }
+                continue;
+            }
+
+            const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question}`.toLowerCase();
+            if (combinedText.includes('experience') || (workHistory[experienceIndex] && (combinedText.includes(workHistory[experienceIndex].company.toLowerCase()) || combinedText.includes(workHistory[experienceIndex].jobTitle.toLowerCase())))) {
+                if (experienceIndex < workHistory.length) {
+                    const currentJob = workHistory[experienceIndex];
+                    if (combinedText.includes('title')) await simulateTyping(el, currentJob.jobTitle);
+                    else if (combinedText.includes('company')) await simulateTyping(el, currentJob.company);
+                    else if (combinedText.includes('start')) await simulateTyping(el, currentJob.startDate);
+                    else if (combinedText.includes('end')) await simulateTyping(el, currentJob.endDate);
+                    else if (combinedText.includes('responsibilities') || combinedText.includes('description')) {
+                        await simulateTyping(el, currentJob.responsibilities);
+                        experienceIndex++;
+                        const addButton = Array.from(document.querySelectorAll('button, a, [role="button"]')).find(b => b.innerText.toLowerCase().includes('add') && b.innerText.toLowerCase().includes('experience'));
+                        if (addButton) {
+                            addButton.click();
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                        }
+                    }
+                    continue;
+                }
+            }
+            
+            const options = await findOptionsForInput(el);
+
+            if (options.length > 0) {
+                const cleanQuestion = question.replace(/[*:]$/, '').trim();
+                if (cleanQuestion.length > 5) {
                     const prompt = `You are an expert career assistant. Your task is to select the best option from a list to answer an application question.
 ---
 **CONTEXT:**
@@ -364,34 +365,32 @@ async function autofillPage() {
                             await simulateTyping(el, aiChoice);
                         }
                     }
-                } catch (error) { console.error('AI Selection Error:', error); }
+                }
+                continue;
             }
-            continue;
-        }
-        
-        if (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea') {
-            let valueToType = '';
-            if (combinedText.includes('first') && combinedText.includes('name')) valueToType = userData.firstName || '';
-            else if (combinedText.includes('last') && combinedText.includes('name')) valueToType = userData.lastName || '';
-            else if (combinedText.includes('preferred') && combinedText.includes('name')) valueToType = userData.firstName || '';
-            else if (combinedText.includes('full') && combinedText.includes('name')) valueToType = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
-            else if (combinedText.includes('email')) valueToType = userData.email || '';
-            else if (combinedText.includes('phone') || combinedText.includes('tel')) valueToType = userData.phone || '';
-            else if (combinedText.includes('pronouns')) valueToType = userData.pronouns || '';
-            else if (combinedText.includes('address')) valueToType = userData.address || '';
-            else if (combinedText.includes('city')) valueToType = userData.city || '';
-            else if (combinedText.includes('state') || combinedText.includes('province')) valueToType = userData.state || '';
-            else if (combinedText.includes('zip') || combinedText.includes('postal')) valueToType = userData.zipCode || '';
-            else if (combinedText.includes('country')) valueToType = userData.country || '';
-            else if (combinedText.includes('linkedin')) valueToType = userData.linkedinUrl || '';
-            else if (combinedText.includes('website') || combinedText.includes('portfolio')) valueToType = userData.portfolioUrl || '';
             
-            if (valueToType) {
-                 await simulateTyping(el, valueToType);
-            } else {
-                const cleanQuestion = question.replace(/[*:]$/, '').trim();
-                if (cleanQuestion.length > 10 && !isDemographic) {
-                    try {
+            if (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea') {
+                let valueToType = '';
+                if (combinedText.includes('first') && combinedText.includes('name')) valueToType = userData.firstName || '';
+                else if (combinedText.includes('last') && combinedText.includes('name')) valueToType = userData.lastName || '';
+                else if (combinedText.includes('preferred') && combinedText.includes('name')) valueToType = userData.firstName || '';
+                else if (combinedText.includes('full') && combinedText.includes('name')) valueToType = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                else if (combinedText.includes('email')) valueToType = userData.email || '';
+                else if (combinedText.includes('phone') || combinedText.includes('tel')) valueToType = userData.phone || '';
+                else if (combinedText.includes('pronouns')) valueToType = userData.pronouns || '';
+                else if (combinedText.includes('address')) valueToType = userData.address || '';
+                else if (combinedText.includes('city')) valueToType = userData.city || '';
+                else if (combinedText.includes('state') || combinedText.includes('province')) valueToType = userData.state || '';
+                else if (combinedText.includes('zip') || combinedText.includes('postal')) valueToType = userData.zipCode || '';
+                else if (combinedText.includes('country')) valueToType = userData.country || '';
+                else if (combinedText.includes('linkedin')) valueToType = userData.linkedinUrl || '';
+                else if (combinedText.includes('website') || combinedText.includes('portfolio')) valueToType = userData.portfolioUrl || '';
+                
+                if (valueToType) {
+                     await simulateTyping(el, valueToType);
+                } else {
+                    const cleanQuestion = question.replace(/[*:]$/, '').trim();
+                    if (cleanQuestion.length > 10 && !isDemographic) {
                         const prompt = `You are an expert career assistant. Your primary goal is to align my profile with the role by analyzing the provided Job Description. I will provide my resume separately.
 ---
 **CONTEXT:**
@@ -413,9 +412,12 @@ async function autofillPage() {
                             usedAnswers.add(aiAnswer);
                             await simulateTyping(el, aiAnswer);
                         }
-                    } catch (error) { console.error('AI Text Error:', error); }
+                    }
                 }
             }
+        } catch (error) {
+            console.error("AI Autofill: Error processing element:", el, error);
         }
     }
+    console.log("AI Autofill: Process finished.");
 }
