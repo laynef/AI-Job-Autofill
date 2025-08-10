@@ -118,14 +118,32 @@ async function autofillPage() {
         if (typeof text !== 'string') return;
         await simulateClick(element);
         element.focus();
-        element.value = '';
+        
+        if (element.isContentEditable) {
+            element.textContent = '';
+        } else {
+            element.value = '';
+        }
         element.dispatchEvent(new Event('input', { bubbles: true }));
 
         for (const char of text) {
-            element.value += char;
+            if (element.isContentEditable) {
+                element.textContent += char;
+            } else {
+                element.value += char;
+            }
             element.dispatchEvent(new Event('input', { bubbles: true }));
             await new Promise(resolve => setTimeout(resolve, Math.random() * 40 + 20));
         }
+        
+        // Fallback: If simulation fails, directly set the value.
+        if (element.value === '' && !element.isContentEditable) {
+            element.value = text;
+        }
+        if (element.textContent === '' && element.isContentEditable) {
+            element.textContent = text;
+        }
+
         element.dispatchEvent(new Event('change', { bubbles: true }));
         element.blur();
     }
@@ -133,7 +151,6 @@ async function autofillPage() {
     function findQuestionForInput(element) {
         const checks = [
             element.getAttribute('aria-label'),
-            element.placeholder,
             element.id ? document.querySelector(`label[for="${element.id}"]`)?.innerText : null,
             element.getAttribute('aria-labelledby') ? document.getElementById(element.getAttribute('aria-labelledby'))?.innerText : null
         ];
@@ -141,19 +158,15 @@ async function autofillPage() {
             if (check && check.trim()) return check.trim();
         }
         let current = element.parentElement;
-        for (let i = 0; i < 5 && current; i++) { // Increased search depth
+        for (let i = 0; i < 3 && current; i++) {
             const clone = current.cloneNode(true);
-            // Attempt to find the element within the cloned structure
-            const cloneEl = clone.querySelector(`[name="${element.name}"]`) || (element.id && clone.querySelector(`#${element.id}`));
-            if (cloneEl) {
-                cloneEl.parentElement.removeChild(cloneEl); // More robust removal
-            }
-            // Find the most likely label text, avoiding overly long strings
+            const cloneEl = clone.querySelector(`[name="${element.name}"]`) || clone.querySelector(`#${element.id}`);
+            if (cloneEl) cloneEl.remove();
             const text = clone.innerText.trim().split('\n')[0].trim();
-            if (text && text.length > 3 && text.length < 200) return text;
+            if (text && text.length > 5 && text.length < 200) return text;
             current = current.parentElement;
         }
-        return ''; // Return empty if no question is found
+        return '';
     }
     
     async function findOptionsForInput(element) {
@@ -219,7 +232,6 @@ async function autofillPage() {
 
     // --- MAIN SCRIPT LOGIC ---
 
-    // --- Page Context Scraping ---
     const jobTitle = document.querySelector('h1')?.innerText || document.querySelector('h2')?.innerText || '';
     let jobDescription = '';
     try {
@@ -238,13 +250,12 @@ async function autofillPage() {
         }
     } catch(e) { console.error("AI Autofill: Could not parse page context:", e); }
 
-    // --- Load User Data ---
     const userData = await new Promise(resolve => {
         const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'resume', 'resumeFileName', 'additionalInfo', 'apiKey'];
         chrome.storage.local.get(fields, (result) => {
             if (chrome.runtime.lastError) {
                 console.error("AI Autofill: Error getting user data from storage.");
-                resolve(null); // Resolve with null on error
+                resolve({});
             } else {
                 resolve(result);
             }
@@ -253,12 +264,6 @@ async function autofillPage() {
 
     if (!userData) {
         console.error("AI Autofill: Could not load user data. Aborting.");
-        alert("AI Autofill: Could not load your saved data. Please check the extension settings.");
-        return;
-    }
-    if (!userData.apiKey) {
-        console.error("AI Autofill: API Key is missing.");
-        alert("AI Autofill: Your API key is not saved. Please add it in the extension popup.");
         return;
     }
 
@@ -274,23 +279,35 @@ async function autofillPage() {
 
     await new Promise(resolve => setTimeout(resolve, 500)); // Wait for the page to finish loading dynamic content
 
+    // Find the main form on the page
+    const forms = Array.from(document.querySelectorAll('form'));
+    const mainForm = forms.sort((a, b) => b.querySelectorAll('input, textarea, select').length - a.querySelectorAll('input, textarea, select').length)[0];
+
+    if (!mainForm) {
+        console.error("AI Autofill: Could not find a suitable form on the page. Aborting.");
+        return;
+    }
+     console.log("AI Autofill: Targeting the following form:", mainForm);
+
+
     const demographicKeywords = ['race', 'ethnicity', 'gender', 'disability', 'veteran', 'sexual orientation'];
     let usedAnswers = new Set();
     let experienceIndex = 0;
     
-    const allElements = Array.from(document.querySelectorAll('input, textarea, select'));
+    // Expanded selector to include links and other interactive elements, but constrained to the main form
+    const allElements = Array.from(mainForm.querySelectorAll('input, textarea, select, a[href], [role="textbox"], [role="combobox"], [contenteditable="true"]'));
 
     for (const el of allElements) {
         try {
             const style = window.getComputedStyle(el);
-            if (el.type === 'hidden' || el.disabled || el.readOnly || style.display === 'none' || style.visibility === 'hidden') {
+            if (el.disabled || el.readOnly || style.display === 'none' || style.visibility === 'hidden') {
                 continue;
             }
 
             const elType = el.tagName.toLowerCase();
-            if ( (elType === 'input' || elType === 'textarea') && el.value.trim() !== '' && el.type !== 'radio' && el.type !== 'checkbox' ) continue;
+            if ( (elType === 'input' || elType === 'textarea' || el.isContentEditable) && (el.value?.trim() !== '' || el.textContent?.trim() !== '') && el.type !== 'radio' && el.type !== 'checkbox' ) continue;
             if (elType === 'select' && el.selectedIndex !== 0 && el.value !== '') continue;
-            if ((el.type === 'radio' || el.type === 'checkbox') && document.querySelector(`input[name="${el.name}"]:checked`)) continue;
+            if ((el.type === 'radio' || el.type === 'checkbox') && mainForm.querySelector(`input[name="${el.name}"]:checked`)) continue;
 
             el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
             await new Promise(resolve => setTimeout(resolve, 200));
@@ -311,8 +328,11 @@ async function autofillPage() {
                 }
                 continue;
             }
+            
+            const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question} ${el.innerText}`.toLowerCase();
+            const isResumeField = combinedText.includes('resume') || combinedText.includes('cv') || combinedText.includes('attach');
 
-            if (el.type === 'file') {
+            if (el.type === 'file' || (elType === 'a' && isResumeField)) {
                 el.style.border = '2px solid #8B5CF6';
                 let notice = el.parentElement.querySelector('p.autofill-notice');
                 if (!notice) {
@@ -325,7 +345,6 @@ async function autofillPage() {
                 continue;
             }
 
-            const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question}`.toLowerCase();
             if (combinedText.includes('experience') || (workHistory[experienceIndex] && (combinedText.includes(workHistory[experienceIndex].company.toLowerCase()) || combinedText.includes(workHistory[experienceIndex].jobTitle.toLowerCase())))) {
                 if (experienceIndex < workHistory.length) {
                     const currentJob = workHistory[experienceIndex];
@@ -388,14 +407,12 @@ async function autofillPage() {
                                 await simulateTyping(el, aiChoice);
                             }
                         }
-                    } else {
-                        console.warn(`AI Autofill: AI did not provide a choice for "${cleanQuestion}".`);
                     }
                 }
                 continue;
             }
             
-            if (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea') {
+            if (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea' || el.isContentEditable) {
                 let valueToType = '';
                 if (combinedText.includes('first') && combinedText.includes('name')) valueToType = userData.firstName || '';
                 else if (combinedText.includes('last') && combinedText.includes('name')) valueToType = userData.lastName || '';
