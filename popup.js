@@ -1,45 +1,45 @@
 // This top-level try...catch block prevents the entire script from failing if an unexpected error occurs during setup.
 try {
-    document.addEventListener('DOMContentLoaded', function () {
+    document.addEventListener('DOMContentLoaded', function() {
         const statusEl = document.getElementById('status');
         const resumeFileNameEl = document.getElementById('resumeFileName');
-        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'company', 'currentJobTitle', 'additionalInfo', 'apiKey'];
+        const resumeFileInput = document.getElementById('resumeFile');
+        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'apiKey', 'additionalInfo'];
 
         // Load saved data when the popup opens
-        chrome.storage.local.get([...textFields, 'resumeFileName'], function (result) {
-            if (chrome.runtime.lastError) {
-                console.error("Error loading data:", chrome.runtime.lastError.message);
-                return;
-            }
+        chrome.storage.local.get([...textFields, 'resumeFileName'], function(result) {
+            if (chrome.runtime.lastError) { return console.error("Error loading data:", chrome.runtime.lastError.message); }
             textFields.forEach(field => {
                 const el = document.getElementById(field);
-                if (el && result[field]) {
-                    el.value = result[field];
-                }
+                if (el && result[field]) el.value = result[field];
             });
-            if (result.resumeFileName && resumeFileNameEl) {
-                resumeFileNameEl.textContent = `Saved file: ${result.resumeFileName}`;
-            }
+            if (result.resumeFileName && resumeFileNameEl) resumeFileNameEl.textContent = `Saved file: ${result.resumeFileName}`;
         });
 
+        if (resumeFileInput) {
+            resumeFileInput.addEventListener('change', function() {
+                if (this.files && this.files[0]) {
+                    if (resumeFileNameEl) {
+                        resumeFileNameEl.textContent = `Selected: ${this.files[0].name} (click Save)`;
+                        resumeFileNameEl.style.color = '#D97706';
+                    }
+                }
+            });
+        }
+
         // Save data when the save button is clicked
-        document.getElementById('save').addEventListener('click', function () {
+        document.getElementById('save').addEventListener('click', function() {
             try {
                 let dataToSave = {};
                 textFields.forEach(field => {
                     const el = document.getElementById(field);
-                    if (el) {
-                        dataToSave[field] = el.value;
-                    } else {
-                        // This warning helps debug if the HTML is missing an element.
-                        console.warn(`Element with ID "${field}" not found in popup.html.`);
-                    }
+                    if (el) dataToSave[field] = el.value;
                 });
 
-                const resumeFile = document.getElementById('resumeFile')?.files[0];
+                const newResumeFile = resumeFileInput?.files[0];
 
                 const saveDataToStorage = (data) => {
-                    chrome.storage.local.set(data, function () {
+                    chrome.storage.local.set(data, function() {
                         if (chrome.runtime.lastError) {
                             statusEl.textContent = `Error: ${chrome.runtime.lastError.message}`;
                             console.error("Save error:", chrome.runtime.lastError);
@@ -47,24 +47,25 @@ try {
                             statusEl.textContent = 'Information saved!';
                             if (data.resumeFileName && resumeFileNameEl) {
                                 resumeFileNameEl.textContent = `Saved file: ${data.resumeFileName}`;
+                                resumeFileNameEl.style.color = '';
                             }
                         }
-                        setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2500);
+                        setTimeout(() => { if(statusEl) statusEl.textContent = ''; }, 2500);
                     });
                 };
 
-                if (resumeFile) {
+                if (newResumeFile) {
                     const reader = new FileReader();
-                    reader.onload = function (e) {
+                    reader.onload = function(e) {
                         dataToSave.resume = e.target.result; // The Base64 string
-                        dataToSave.resumeFileName = resumeFile.name;
+                        dataToSave.resumeFileName = newResumeFile.name;
                         saveDataToStorage(dataToSave);
                     };
-                    reader.onerror = function (err) {
+                    reader.onerror = function(err) {
                         statusEl.textContent = 'Error reading file.';
                         console.error("File reading error:", err);
                     };
-                    reader.readAsDataURL(resumeFile);
+                    reader.readAsDataURL(newResumeFile);
                 } else {
                     saveDataToStorage(dataToSave);
                 }
@@ -75,24 +76,23 @@ try {
         });
 
         // Autofill button logic
-        document.getElementById('autofill').addEventListener('click', function () {
+        document.getElementById('autofill').addEventListener('click', function() {
             statusEl.textContent = 'Autofilling...';
-            chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-                // Check if we have a valid tab to inject into
+            chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
                 if (tabs.length === 0 || !tabs[0].id) {
                     statusEl.textContent = 'Could not find active tab.';
                     return;
                 }
                 chrome.scripting.executeScript({
-                    target: { tabId: tabs[0].id },
+                    target: {tabId: tabs[0].id},
                     function: autofillPage,
                 }).then(() => {
-                    statusEl.textContent = 'Autofill complete!';
-                    setTimeout(() => statusEl.textContent = '', 3000);
+                     statusEl.textContent = 'Autofill complete!';
+                     setTimeout(() => statusEl.textContent = '', 3000);
                 }).catch(err => {
-                    statusEl.textContent = 'Autofill failed on this page.';
-                    console.error('Autofill script injection failed:', err);
-                    setTimeout(() => statusEl.textContent = '', 3000);
+                     statusEl.textContent = 'Autofill failed on this page.';
+                     console.error('Autofill script injection failed:', err);
+                     setTimeout(() => statusEl.textContent = '', 3000);
                 });
             });
         });
@@ -106,7 +106,30 @@ try {
 async function autofillPage() {
     console.log("AI Autofill: Starting process...");
 
-    // --- Enhanced Question Finder ---
+    // --- HELPER FUNCTIONS ---
+    async function simulateClick(element) {
+        element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
+    async function simulateTyping(element, text) {
+        if (typeof text !== 'string') return;
+        await simulateClick(element);
+        element.focus();
+        element.value = '';
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+
+        for (const char of text) {
+            element.value += char;
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            await new Promise(resolve => setTimeout(resolve, Math.random() * 40 + 20));
+        }
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        element.blur();
+    }
+
     function findQuestionForInput(element) {
         const checks = [
             element.getAttribute('aria-label'),
@@ -132,6 +155,69 @@ async function autofillPage() {
         }
         return ''; // Return empty if no question is found
     }
+    
+    async function findOptionsForInput(element) {
+        let options = [];
+        if (element.tagName.toLowerCase() === 'select') {
+            options = Array.from(element.options).map(opt => opt.text).filter(t => t.trim() !== '' && !t.toLowerCase().includes('select'));
+        } else if (element.getAttribute('list')) {
+            const dataList = document.getElementById(element.getAttribute('list'));
+            if (dataList) options = Array.from(dataList.options).map(opt => opt.value);
+        } else if (element.type === 'radio' || element.type === 'checkbox') {
+            const groupName = element.name;
+            if (groupName) {
+                options = Array.from(document.querySelectorAll(`input[name="${groupName}"]`))
+                    .map(radio => document.querySelector(`label[for="${radio.id}"]`)?.innerText.trim())
+                    .filter(Boolean);
+            }
+        }
+        if (options.length > 0) return { options, source: element };
+
+        const isComboBox = element.getAttribute('role') === 'combobox' || element.hasAttribute('aria-controls') || element.getAttribute('aria-haspopup') === 'listbox';
+        if (isComboBox) {
+            await simulateClick(element);
+            await new Promise(resolve => setTimeout(resolve, 750));
+            
+            const ariaControlsId = element.getAttribute('aria-controls');
+            let controlledEl = ariaControlsId ? document.getElementById(ariaControlsId) : document.querySelector('[role="listbox"]:not([style*="display: none"])');
+            
+            if (controlledEl) {
+                const optionElements = Array.from(controlledEl.querySelectorAll('[role="option"]'));
+                if (optionElements.length > 0) {
+                    return { options: optionElements.map(opt => opt.innerText.trim()), source: controlledEl };
+                }
+            }
+            await simulateClick(document.body); // Click away to close
+        }
+        return { options: [] };
+    }
+
+    async function getAIResponse(prompt, userData) {
+        const parts = [{ text: prompt }];
+        let mimeType = '';
+        if (userData.resumeFileName?.endsWith('.pdf')) {
+            mimeType = 'application/pdf';
+        } else if (userData.resumeFileName?.endsWith('.docx')) {
+            mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        }
+
+        if (userData.resume && mimeType) {
+            const base64Data = userData.resume.split(',')[1];
+            parts.push({ inlineData: { mimeType, data: base64Data } });
+        }
+
+        const payload = { contents: [{ role: "user", parts: parts }] };
+        const apiKey = userData.apiKey || "";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+        const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!response.ok) throw new Error(`API Error: ${response.status}`);
+        const result = await response.json();
+        return result.candidates?.[0]?.content?.parts?.[0]?.text.trim();
+    }
+
+
+    // --- MAIN SCRIPT LOGIC ---
 
     // --- Page Context Scraping ---
     const jobTitle = document.querySelector('h1')?.innerText || document.querySelector('h2')?.innerText || '';
@@ -150,15 +236,11 @@ async function autofillPage() {
             const descDiv = document.querySelector('#job-description, [class*="job-description"], [class*="jobdescription"]');
             if (descDiv) jobDescription = descDiv.innerText;
         }
-        console.log("AI Autofill: Found job title:", jobTitle);
-    } catch (e) {
-        console.error("AI Autofill: Could not parse page context:", e);
-    }
+    } catch(e) { console.error("AI Autofill: Could not parse page context:", e); }
 
     // --- Load User Data ---
     const userData = await new Promise(resolve => {
-        // Added apiKey to the list of fields to retrieve
-        const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'company', 'currentJobTitle', 'resume', 'additionalInfo', 'apiKey'];
+        const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'resume', 'resumeFileName', 'additionalInfo', 'apiKey'];
         chrome.storage.local.get(fields, (result) => {
             if (chrome.runtime.lastError) {
                 console.error("AI Autofill: Error getting user data from storage.");
@@ -180,198 +262,188 @@ async function autofillPage() {
         return;
     }
 
-    // --- Main Processing Logic ---
-    const elements = document.querySelectorAll('input, textarea, select');
-    console.log(`AI Autofill: Found ${elements.length} form elements to process.`);
-    const demographicKeywords = ['race', 'ethnicity', 'gender', 'disability', 'veteran', 'sexual orientation', 'lgbtq'];
+    const workHistoryPrompt = "Analyze the attached resume and extract the work experience. Return a JSON array where each object has 'jobTitle', 'company', 'startDate', 'endDate', and 'responsibilities' keys. The responsibilities should be a single string with key achievements separated by newlines.";
+    let workHistory = [];
+    try {
+        const historyJson = await getAIResponse(workHistoryPrompt, userData);
+        if (historyJson) {
+            const cleanedJson = historyJson.replace(/```json/g, '').replace(/```/g, '').trim();
+            workHistory = JSON.parse(cleanedJson);
+        }
+    } catch(e) { console.error("AI Autofill: Could not parse work history from resume.", e); }
 
-    for (const el of elements) {
-        try { // Wrap each element processing in a try-catch block
-            if (el.type === 'hidden' || el.disabled || el.readOnly || (el.value && el.type !== 'radio' && el.type !== 'checkbox')) {
+    await new Promise(resolve => setTimeout(resolve, 500)); // Wait for the page to finish loading dynamic content
+
+    const demographicKeywords = ['race', 'ethnicity', 'gender', 'disability', 'veteran', 'sexual orientation'];
+    let usedAnswers = new Set();
+    let experienceIndex = 0;
+    
+    const allElements = Array.from(document.querySelectorAll('input, textarea, select'));
+
+    for (const el of allElements) {
+        try {
+            const style = window.getComputedStyle(el);
+            if (el.type === 'hidden' || el.disabled || el.readOnly || style.display === 'none' || style.visibility === 'hidden') {
                 continue;
             }
 
+            const elType = el.tagName.toLowerCase();
+            if ( (elType === 'input' || elType === 'textarea') && el.value.trim() !== '' && el.type !== 'radio' && el.type !== 'checkbox' ) continue;
+            if (elType === 'select' && el.selectedIndex !== 0 && el.value !== '') continue;
+            if ((el.type === 'radio' || el.type === 'checkbox') && document.querySelector(`input[name="${el.name}"]:checked`)) continue;
+
+            el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+            await new Promise(resolve => setTimeout(resolve, 200));
+
             const question = findQuestionForInput(el);
-            const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question}`.toLowerCase();
-            console.log(`AI Autofill: Processing element -> NAME: ${el.name}, ID: ${el.id}, Q: "${question}"`);
+            const isDemographic = demographicKeywords.some(keyword => question.toLowerCase().includes(keyword));
 
-
-            // --- Demographic Questions ---
-            const isDemographic = demographicKeywords.some(keyword => combinedText.includes(keyword));
             if (isDemographic) {
-                console.log(`AI Autofill: Detected demographic question for ${el.name || el.id}.`);
                 if (el.tagName.toLowerCase() === 'select') {
                     for (let option of el.options) {
                         if (option.text.toLowerCase().includes('decline') || option.text.toLowerCase().includes('prefer not')) {
-                            el.value = option.value;
-                            break;
+                            el.value = option.value; el.dispatchEvent(new Event('change', { bubbles: true })); break;
                         }
                     }
                 } else if (el.type === 'radio' || el.type === 'checkbox') {
                     const labelText = (document.querySelector(`label[for="${el.id}"]`)?.innerText || '').toLowerCase();
-                    if (labelText.includes('decline') || labelText.includes('prefer not')) {
-                        el.checked = true;
-                    }
+                    if (labelText.includes('decline') || labelText.includes('prefer not')) await simulateClick(el);
                 }
-                continue; // Skip to next element
+                continue;
             }
 
-            // --- File Input ---
             if (el.type === 'file') {
                 el.style.border = '2px solid #8B5CF6';
-                let notice = document.createElement('p');
-                notice.textContent = 'Please attach your resume PDF here.';
-                notice.style.color = '#8B5CF6';
-                notice.style.fontSize = '12px';
-                notice.style.marginTop = '4px';
-                if (!el.parentElement.querySelector('p[style*="color: #8B5CF6"]')) {
+                let notice = el.parentElement.querySelector('p.autofill-notice');
+                if (!notice) {
+                    notice = document.createElement('p');
+                    notice.className = 'autofill-notice';
+                    notice.textContent = 'Please attach your resume file here.';
+                    notice.style.cssText = 'color: #8B5CF6; font-size: 12px; margin-top: 4px;';
                     el.parentElement.insertBefore(notice, el.nextSibling);
                 }
                 continue;
             }
 
-            // --- Standard Input Fields ---
-            if (el.tagName.toLowerCase() === 'input' && el.type !== 'radio' && el.type !== 'checkbox') {
-                let filled = true;
-                if (combinedText.includes('first') && combinedText.includes('name')) el.value = userData.firstName || '';
-                else if (combinedText.includes('last') && combinedText.includes('name')) el.value = userData.lastName || '';
-                else if (combinedText.includes('preferred') && combinedText.includes('name')) el.value = userData.firstName || '';
-                else if (combinedText.includes('full') && combinedText.includes('name')) el.value = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
-                else if (combinedText.includes('email')) el.value = userData.email || '';
-                else if (combinedText.includes('phone') || combinedText.includes('tel')) el.value = userData.phone || '';
-                else if (combinedText.includes('pronouns')) el.value = userData.pronouns || '';
-                else if (combinedText.includes('address')) el.value = userData.address || '';
-                else if (combinedText.includes('city')) el.value = userData.city || '';
-                else if (combinedText.includes('state') || combinedText.includes('province')) el.value = userData.state || '';
-                else if (combinedText.includes('zip') || combinedText.includes('postal')) el.value = userData.zipCode || '';
-                else if (combinedText.includes('country')) el.value = userData.country || '';
-                else if (combinedText.includes('linkedin')) el.value = userData.linkedinUrl || '';
-                else if (combinedText.includes('website') || combinedText.includes('portfolio')) el.value = userData.portfolioUrl || '';
-                else if (combinedText.includes('company')) el.value = userData.company || '';
-                else if (combinedText.includes('title')) el.value = userData.currentJobTitle || '';
-                else filled = false;
-                if (filled) continue;
-            }
-
-            // --- AI-Powered Selection (Radio/Select) ---
-            if (el.tagName.toLowerCase() === 'select' || el.type === 'radio' || el.type === 'checkbox') {
-                const cleanQuestion = question.replace(/[*:]$/, '').trim();
-                let options = [];
-                if (el.tagName.toLowerCase() === 'select') {
-                    options = Array.from(el.options).map(opt => opt.text).filter(t => t.trim() !== '' && !t.toLowerCase().includes('select'));
-                } else {
-                    const groupName = el.name;
-                    options = Array.from(document.querySelectorAll(`input[name="${groupName}"]`)).map(radio => document.querySelector(`label[for="${radio.id}"]`)?.innerText.trim()).filter(Boolean);
-                }
-
-                if (cleanQuestion.length > 5 && options.length > 0) {
-                    console.log(`AI Autofill: Calling AI for selection question: "${cleanQuestion}"`);
-                    const prompt = `You are an expert career assistant. Your task is to select the best option from a list to answer an application question, based on my profile and the job description.\n---\n**CONTEXT: THE JOB DESCRIPTION**\n${jobDescription || 'Not found on page.'}\n---\n**CONTEXT: MY PROFILE**\n- **Additional Info/Skills:** ${userData.additionalInfo || 'Not provided.'}\n- **Current/Last Company:** ${userData.company || 'Not provided'}\n- **Current/Last Job Title:** ${userData.currentJobTitle || 'Not provided'}\n---\n**TASK: From the list below, choose the single most appropriate option to answer the question. I will provide my resume separately.**\n**Question:** "${cleanQuestion}"\n**Options:**\n- ${options.join("\n- ")}\n---\n**INSTRUCTIONS:**\n- Analyze my profile and the job description to make the most logical choice.\n- If the question is about experience, choose the option that best reflects the skills in my profile.\n- If the question is about work style, choose the option that sounds most proactive, collaborative, and positive.\n- For "How did you hear about us?", prefer "LinkedIn" or "Company Website".\n- For authorization/sponsorship, choose "Yes" for authorization and "No" for sponsorship.\n- For opting out of texts, choose the option that opts out or says no.\n- Return ONLY the exact text of the best option from the list. Do not add any other words, explanation, or punctuation.\n---\n**BEST OPTION:**`;
-                    const parts = [{
-                        text: prompt
-                    }];
-                    if (userData.resume && userData.resume.startsWith('data:application/pdf;base64,')) {
-                        const base64Data = userData.resume.split(',')[1];
-                        parts.push({
-                            inlineData: {
-                                mimeType: "application/pdf",
-                                data: base64Data
-                            }
-                        });
+            const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question}`.toLowerCase();
+            if (combinedText.includes('experience') || (workHistory[experienceIndex] && (combinedText.includes(workHistory[experienceIndex].company.toLowerCase()) || combinedText.includes(workHistory[experienceIndex].jobTitle.toLowerCase())))) {
+                if (experienceIndex < workHistory.length) {
+                    const currentJob = workHistory[experienceIndex];
+                    if (combinedText.includes('title')) await simulateTyping(el, currentJob.jobTitle);
+                    else if (combinedText.includes('company')) await simulateTyping(el, currentJob.company);
+                    else if (combinedText.includes('start')) await simulateTyping(el, currentJob.startDate);
+                    else if (combinedText.includes('end')) await simulateTyping(el, currentJob.endDate);
+                    else if (combinedText.includes('responsibilities') || combinedText.includes('description')) {
+                        await simulateTyping(el, currentJob.responsibilities);
+                        experienceIndex++;
+                        const addButton = Array.from(document.querySelectorAll('button, a, [role="button"]')).find(b => b.innerText.toLowerCase().includes('add') && b.innerText.toLowerCase().includes('experience'));
+                        if (addButton) {
+                            await simulateClick(addButton);
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                        }
                     }
-                    const payload = {
-                        contents: [{
-                            parts: parts
-                        }]
-                    };
-                    const apiKey = userData.apiKey;
-                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
+                    continue;
+                }
+            }
+            
+            const { options, source } = await findOptionsForInput(el);
 
-                    const response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(payload)
-                    });
-                    if (!response.ok) throw new Error(`API Error: ${response.status}`);
-                    const result = await response.json();
-                    const aiChoice = result.candidates?.[0]?.content?.parts?.[0]?.text.trim();
-
+            if (options.length > 0) {
+                const cleanQuestion = question.replace(/[*:]$/, '').trim();
+                if (cleanQuestion.length > 5) {
+                    const prompt = `You are an expert career assistant. Your task is to select the best option from a list to answer an application question.
+---
+**CONTEXT:**
+- **Job Description:** ${jobDescription || 'Not found on page.'}
+- **My Profile:** ${userData.additionalInfo || 'Not provided.'}
+- **Answers Already Used on This Page:** ${Array.from(usedAnswers).join(", ")}
+---
+**TASK: From the list below, choose the single most appropriate and unique option to answer the question. I will provide my resume separately.**
+**Question:** "${cleanQuestion}"
+**Options:**
+- ${options.join("\n- ")}
+---
+**INSTRUCTIONS:** Return ONLY the exact text of the best option from the list. Do not repeat an answer that has already been used.
+---
+**BEST OPTION:**`;
+                    const aiChoice = await getAIResponse(prompt, userData);
                     if (aiChoice) {
-                        console.log(`AI Autofill: AI choice for "${cleanQuestion}" -> "${aiChoice}"`);
+                        usedAnswers.add(aiChoice);
                         if (el.tagName.toLowerCase() === 'select') {
                             for (let option of el.options) {
-                                if (option.text.trim() === aiChoice) {
-                                    el.value = option.value;
-                                    break;
-                                }
+                                if (option.text.trim() === aiChoice) { await simulateClick(el); el.value = option.value; el.dispatchEvent(new Event('change', { bubbles: true })); el.blur(); break; }
                             }
                         } else if (el.type === 'radio' || el.type === 'checkbox') {
-                            const groupName = el.name;
-                            const inputs = document.querySelectorAll(`input[name="${groupName}"]`);
+                            const inputs = document.querySelectorAll(`input[name="${el.name}"]`);
                             for (const input of inputs) {
                                 const label = document.querySelector(`label[for="${input.id}"]`);
-                                if (label && label.innerText.trim() === aiChoice) {
-                                    input.checked = true;
-                                    break;
-                                }
+                                if (label && label.innerText.trim() === aiChoice) { await simulateClick(input); break; }
+                            }
+                        } else {
+                            const optionElements = Array.from(source.querySelectorAll('[role="option"]'));
+                            const targetOption = optionElements.find(opt => opt.innerText.trim() === aiChoice);
+                            if (targetOption) {
+                                await simulateClick(targetOption);
+                            } else {
+                                await simulateTyping(el, aiChoice);
                             }
                         }
                     } else {
                         console.warn(`AI Autofill: AI did not provide a choice for "${cleanQuestion}".`);
                     }
                 }
+                continue;
             }
-
-            // --- AI-Powered Text Generation (Textarea/Input) ---
-            if ((el.tagName.toLowerCase() === 'textarea' || el.type === 'text') && !el.value) {
-                const cleanQuestion = question.replace(/[*:]$/, '').trim();
-                if (cleanQuestion.length > 10 && !isDemographic) {
-                    console.log(`AI Autofill: Calling AI for text question: "${cleanQuestion}"`);
-                    const prompt = `You are an expert career assistant. Your primary goal is to align my profile with the role by analyzing the provided Job Description. I will provide my resume separately.\n---\n**CONTEXT: THE JOB DESCRIPTION**\n${jobDescription || 'Not found on page.'}\n---\n**CONTEXT: MY PROFILE**\n- **Additional Info/Skills:** ${userData.additionalInfo || 'Not provided.'}\n---\n**TASK: Answer the following application question.**\n**Question:** "${cleanQuestion}"\n---\n**INSTRUCTIONS:**\n1. Analyze the Job Description and my profile to formulate a concise, professional answer.\n2. For salary questions, state my expectations are negotiable and competitive.\n3. Write only the answer itself, with no preamble.\n---\n**ANSWER:**`;
-                    const parts = [{
-                        text: prompt
-                    }];
-                    if (userData.resume && userData.resume.startsWith('data:application/pdf;base64,')) {
-                        const base64Data = userData.resume.split(',')[1];
-                        parts.push({
-                            inlineData: {
-                                mimeType: "application/pdf",
-                                data: base64Data
-                            }
-                        });
-                    }
-                    const payload = {
-                        contents: [{
-                            parts: parts
-                        }]
-                    };
-                    const apiKey = userData.apiKey;
-                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
-
-                    const response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(payload)
-                    });
-                    if (!response.ok) throw new Error(`API Error: ${response.status}`);
-                    const result = await response.json();
-                    if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-                        const answer = result.candidates[0].content.parts[0].text.trim();
-                        console.log(`AI Autofill: AI answer for "${cleanQuestion}" -> "${answer}"`);
-                        el.value = answer;
-                    } else {
-                        console.warn(`AI Autofill: AI did not provide an answer for "${cleanQuestion}".`);
+            
+            if (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea') {
+                let valueToType = '';
+                if (combinedText.includes('first') && combinedText.includes('name')) valueToType = userData.firstName || '';
+                else if (combinedText.includes('last') && combinedText.includes('name')) valueToType = userData.lastName || '';
+                else if (combinedText.includes('preferred') && combinedText.includes('name')) valueToType = userData.firstName || '';
+                else if (combinedText.includes('full') && combinedText.includes('name')) valueToType = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                else if (combinedText.includes('email')) valueToType = userData.email || '';
+                else if (combinedText.includes('phone') || combinedText.includes('tel')) valueToType = userData.phone || '';
+                else if (combinedText.includes('pronouns')) valueToType = userData.pronouns || '';
+                else if (combinedText.includes('address')) valueToType = userData.address || '';
+                else if (combinedText.includes('city')) valueToType = userData.city || '';
+                else if (combinedText.includes('state') || combinedText.includes('province')) valueToType = userData.state || '';
+                else if (combinedText.includes('zip') || combinedText.includes('postal')) valueToType = userData.zipCode || '';
+                else if (combinedText.includes('country')) valueToType = userData.country || '';
+                else if (combinedText.includes('linkedin')) valueToType = userData.linkedinUrl || '';
+                else if (combinedText.includes('website') || combinedText.includes('portfolio')) valueToType = userData.portfolioUrl || '';
+                
+                if (valueToType) {
+                     await simulateTyping(el, valueToType);
+                } else {
+                    const cleanQuestion = question.replace(/[*:]$/, '').trim();
+                    if (cleanQuestion.length > 10 && !isDemographic) {
+                        const prompt = `You are an expert career assistant. Your primary goal is to align my profile with the role by analyzing the provided Job Description. I will provide my resume separately.
+---
+**CONTEXT:**
+- **Job Description:** ${jobDescription || 'Not found on page.'}
+- **My Profile:** ${userData.additionalInfo || 'Not provided.'}
+- **Answers Already Used on This Page:** ${Array.from(usedAnswers).join(", ")}
+---
+**TASK: Answer the following application question concisely and uniquely.**
+**Question:** "${cleanQuestion}"
+---
+**INSTRUCTIONS:**
+1. Formulate a professional answer that has not been used before on this page.
+2. For salary questions, state my expectations are negotiable and competitive.
+3. Write only the answer itself, with no preamble.
+---
+**ANSWER:**`;
+                        const aiAnswer = await getAIResponse(prompt, userData);
+                        if (aiAnswer) {
+                            usedAnswers.add(aiAnswer);
+                            await simulateTyping(el, aiAnswer);
+                        }
                     }
                 }
             }
         } catch (error) {
-            console.error(`AI Autofill: Failed to process element ${el.name || el.id}.`, error);
+            console.error("AI Autofill: Error processing element:", el, error);
         }
     }
     console.log("AI Autofill: Process finished.");
-    alert("AI Autofill has finished running!");
 }

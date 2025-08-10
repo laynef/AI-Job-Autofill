@@ -11,15 +11,15 @@
     "action": {
         "default_popup": "popup.html",
         "default_icon": {
-            "16": "images/icon16.svg",
-            "48": "images/icon48.svg",
-            "128": "images/icon128.svg"
+            "16": "images/icon16.png",
+            "48": "images/icon48.png",
+            "128": "images/icon128.png"
         }
     },
     "icons": {
-        "16": "images/icon16.svg",
-        "48": "images/icon48.svg",
-        "128": "images/icon128.svg"
+        "16": "images/icon16.png",
+        "48": "images/icon48.png",
+        "128": "images/icon128.png"
     },
     "content_scripts": [
         {
@@ -34,9 +34,9 @@
     "web_accessible_resources": [
         {
             "resources": [
-                "images/icon16.svg",
-                "images/icon48.svg",
-                "images/icon128.svg"
+                "images/icon16.png",
+                "images/icon48.png",
+                "images/icon128.png"
             ],
             "matches": [
                 "<all_urls>"
