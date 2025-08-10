@@ -214,9 +214,11 @@ async function autofillPage() {
             mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
         }
 
-        if (userData.resume && mimeType) {
+        if (userData.resume && mimeType && userData.resume.startsWith('data:')) {
             const base64Data = userData.resume.split(',')[1];
-            parts.push({ inlineData: { mimeType, data: base64Data } });
+            if(base64Data) {
+                parts.push({ inlineData: { mimeType, data: base64Data } });
+            }
         }
 
         const payload = { contents: [{ role: "user", parts: parts }] };
@@ -278,26 +280,40 @@ async function autofillPage() {
     } catch(e) { console.error("AI Autofill: Could not parse work history from resume.", e); }
 
     await new Promise(resolve => setTimeout(resolve, 500)); // Wait for the page to finish loading dynamic content
-
-    // Find the main form on the page
-    const forms = Array.from(document.querySelectorAll('form'));
-    const mainForm = forms.sort((a, b) => b.querySelectorAll('input, textarea, select').length - a.querySelectorAll('input, textarea, select').length)[0];
-
-    if (!mainForm) {
-        console.error("AI Autofill: Could not find a suitable form on the page. Aborting.");
-        return;
-    }
-     console.log("AI Autofill: Targeting the following form:", mainForm);
-
+    await simulateClick(document.body); // Click the page to activate it
 
     const demographicKeywords = ['race', 'ethnicity', 'gender', 'disability', 'veteran', 'sexual orientation'];
     let usedAnswers = new Set();
     let experienceIndex = 0;
-    
-    // Expanded selector to include links and other interactive elements, but constrained to the main form
-    const allElements = Array.from(mainForm.querySelectorAll('input, textarea, select, a[href], [role="textbox"], [role="combobox"], [contenteditable="true"]'));
+    let lastScrollY = -1;
+    let stallCounter = 0;
 
-    for (const el of allElements) {
+    while (true) {
+        // Find the next element to process. Re-query the DOM in each iteration to find dynamically added elements.
+        const el = Array.from(document.querySelectorAll('input, textarea, select, a[href], [role="textbox"], [role="combobox"], [contenteditable="true"]')).find(e => !e.hasAttribute('data-autofilled'));
+
+        if (!el) {
+            // No more unprocessed elements found. Try scrolling to load more.
+            lastScrollY = window.scrollY;
+            window.scrollBy(0, window.innerHeight * 0.8);
+            await new Promise(resolve => setTimeout(resolve, 500)); // Wait for lazy load
+
+            // If scrolling didn't change position, we're likely at the bottom or on a non-scrolling page.
+            if (window.scrollY === lastScrollY) {
+                stallCounter++;
+                if (stallCounter > 2) {
+                    console.log("AI Autofill: Page seems to be fully scrolled. Finishing process.");
+                    break; // Exit the while loop
+                }
+            } else {
+                stallCounter = 0; // Reset counter if we successfully scrolled
+            }
+            continue; // Re-run the loop to find new elements after scrolling.
+        }
+
+        stallCounter = 0; // Reset stall counter since we found an element to process.
+        el.setAttribute('data-autofilled', 'true'); // Mark as processed to avoid re-processing.
+
         try {
             const style = window.getComputedStyle(el);
             if (el.disabled || el.readOnly || style.display === 'none' || style.visibility === 'hidden') {
@@ -307,7 +323,7 @@ async function autofillPage() {
             const elType = el.tagName.toLowerCase();
             if ( (elType === 'input' || elType === 'textarea' || el.isContentEditable) && (el.value?.trim() !== '' || el.textContent?.trim() !== '') && el.type !== 'radio' && el.type !== 'checkbox' ) continue;
             if (elType === 'select' && el.selectedIndex !== 0 && el.value !== '') continue;
-            if ((el.type === 'radio' || el.type === 'checkbox') && mainForm.querySelector(`input[name="${el.name}"]:checked`)) continue;
+            if ((el.type === 'radio' || el.type === 'checkbox') && document.querySelector(`input[name="${el.name}"]:checked`)) continue;
 
             el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
             await new Promise(resolve => setTimeout(resolve, 200));
