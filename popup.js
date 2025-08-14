@@ -207,17 +207,18 @@ async function autofillPage() {
 
     async function getAIResponse(prompt, userData) {
         const parts = [{ text: prompt }];
-        let mimeType = '';
-        if (userData.resumeFileName?.endsWith('.pdf')) {
-            mimeType = 'application/pdf';
-        } else if (userData.resumeFileName?.endsWith('.docx')) {
-            mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-        }
-
-        if (userData.resume && mimeType && userData.resume.startsWith('data:')) {
-            const base64Data = userData.resume.split(',')[1];
-            if(base64Data) {
-                parts.push({ inlineData: { mimeType, data: base64Data } });
+        
+        if (userData.resume && userData.resume.startsWith('data:')) {
+            const resumeParts = userData.resume.split(',');
+            const meta = resumeParts[0];
+            const base64Data = resumeParts[1];
+            const mimeTypeMatch = meta.match(/:(.*?);/);
+            
+            if (mimeTypeMatch && mimeTypeMatch[1] && base64Data) {
+                const mimeType = mimeTypeMatch[1];
+                if (mimeType === 'application/pdf' || mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+                    parts.push({ inlineData: { mimeType, data: base64Data } });
+                }
             }
         }
 
