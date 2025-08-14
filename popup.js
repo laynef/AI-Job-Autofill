@@ -207,18 +207,17 @@ async function autofillPage() {
 
     async function getAIResponse(prompt, userData) {
         const parts = [{ text: prompt }];
-        
-        if (userData.resume && userData.resume.startsWith('data:')) {
-            const resumeParts = userData.resume.split(',');
-            const meta = resumeParts[0];
-            const base64Data = resumeParts[1];
-            const mimeTypeMatch = meta.match(/:(.*?);/);
-            
-            if (mimeTypeMatch && mimeTypeMatch[1] && base64Data) {
-                const mimeType = mimeTypeMatch[1];
-                if (mimeType === 'application/pdf' || mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-                    parts.push({ inlineData: { mimeType, data: base64Data } });
-                }
+        let mimeType = '';
+        if (userData.resumeFileName?.endsWith('.pdf')) {
+            mimeType = 'application/pdf';
+        } else if (userData.resumeFileName?.endsWith('.docx')) {
+            mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        }
+
+        if (userData.resume && mimeType && userData.resume.startsWith('data:')) {
+            const base64Data = userData.resume.split(',')[1];
+            if(base64Data) {
+                parts.push({ inlineData: { mimeType, data: base64Data } });
             }
         }
 
@@ -291,7 +290,7 @@ async function autofillPage() {
 
     while (true) {
         // Find the next element to process. Re-query the DOM in each iteration to find dynamically added elements.
-        const el = Array.from(document.querySelectorAll('input, textarea, select, a[href], [role="textbox"], [role="combobox"], [contenteditable="true"]')).find(e => !e.hasAttribute('data-autofilled'));
+        const el = Array.from(document.querySelectorAll('input, textarea, select, [role="textbox"], [role="combobox"], [contenteditable="true"]')).find(e => !e.hasAttribute('data-autofilled'));
 
         if (!el) {
             // No more unprocessed elements found. Try scrolling to load more.
@@ -349,7 +348,7 @@ async function autofillPage() {
             const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question} ${el.innerText}`.toLowerCase();
             const isResumeField = combinedText.includes('resume') || combinedText.includes('cv') || combinedText.includes('attach');
 
-            if (el.type === 'file' || (elType === 'a' && isResumeField)) {
+            if (el.type === 'file') {
                 el.style.border = '2px solid #8B5CF6';
                 let notice = el.parentElement.querySelector('p.autofill-notice');
                 if (!notice) {
@@ -462,9 +461,9 @@ async function autofillPage() {
 **Question:** "${cleanQuestion}"
 ---
 **INSTRUCTIONS:**
-1. Formulate a professional answer that has not been used before on this page.
+1. Formulate a professional answer that has not been used before on this page. Keep it short and to the point.
 2. For salary questions, state my expectations are negotiable and competitive.
-3. Write only the answer itself, with no preamble.
+3. Write only the answer itself, with no preamble. Keep the answer short and to the point.
 ---
 **ANSWER:**`;
                         const aiAnswer = await getAIResponse(prompt, userData);
