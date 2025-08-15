@@ -290,7 +290,7 @@ async function autofillPage() {
 
     while (true) {
         // Find the next element to process. Re-query the DOM in each iteration to find dynamically added elements.
-        const el = Array.from(document.querySelectorAll('input, textarea, select, [role="textbox"], [role="combobox"], [contenteditable="true"]')).find(e => !e.hasAttribute('data-autofilled'));
+        const el = Array.from(document.querySelectorAll('input, textarea, select, a[href], [role="textbox"], [role="combobox"], [contenteditable="true"]')).find(e => !e.hasAttribute('data-autofilled'));
 
         if (!el) {
             // No more unprocessed elements found. Try scrolling to load more.
@@ -348,7 +348,7 @@ async function autofillPage() {
             const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question} ${el.innerText}`.toLowerCase();
             const isResumeField = combinedText.includes('resume') || combinedText.includes('cv') || combinedText.includes('attach');
 
-            if (el.type === 'file') {
+            if (el.type === 'file' || (elType === 'a' && isResumeField)) {
                 el.style.border = '2px solid #8B5CF6';
                 let notice = el.parentElement.querySelector('p.autofill-notice');
                 if (!notice) {
@@ -461,9 +461,9 @@ async function autofillPage() {
 **Question:** "${cleanQuestion}"
 ---
 **INSTRUCTIONS:**
-1. Formulate a professional answer that has not been used before on this page. Keep it short and to the point.
+1. Formulate a professional answer that has not been used before on this page.
 2. For salary questions, state my expectations are negotiable and competitive.
-3. Write only the answer itself, with no preamble. Keep the answer short and to the point.
+3. Write only the answer itself, with no preamble.
 ---
 **ANSWER:**`;
                         const aiAnswer = await getAIResponse(prompt, userData);
