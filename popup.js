@@ -205,6 +205,18 @@ async function autofillPage() {
         return { options: [] };
     }
 
+    function parseJsonFromAiResponse(text) {
+        if (!text) return null;
+        const match = text.match(/```(json)?\n?([\s\S]+?)\n?```/);
+        const jsonString = match ? match[2] : text;
+        try {
+            return JSON.parse(jsonString.trim());
+        } catch (e) {
+            console.error("AI Autofill: Failed to parse JSON from AI response.", e, "Raw text:", text);
+            return null;
+        }
+    }
+
     async function getAIResponse(prompt, userData) {
         const parts = [{ text: prompt }];
         let mimeType = '';
@@ -216,19 +228,46 @@ async function autofillPage() {
 
         if (userData.resume && mimeType && userData.resume.startsWith('data:')) {
             const base64Data = userData.resume.split(',')[1];
-            if(base64Data) {
+            if (base64Data) {
                 parts.push({ inlineData: { mimeType, data: base64Data } });
             }
         }
 
         const payload = { contents: [{ role: "user", parts: parts }] };
         const apiKey = userData.apiKey || "";
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+        if (!apiKey) {
+            console.error("AI Autofill: API Key is missing.");
+            throw new Error("API Key is missing.");
+        }
 
-        const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        if (!response.ok) throw new Error(`API Error: ${response.status}`);
+        const model = 'gemini-1.5-flash-latest';
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': apiKey
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errorBody = await response.text();
+            console.error("AI Autofill: API Error Response:", errorBody);
+            throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        }
+
         const result = await response.json();
-        return result.candidates?.[0]?.content?.parts?.[0]?.text.trim();
+        if (!result.candidates || result.candidates.length === 0 || !result.candidates[0].content || !result.candidates[0].content.parts || result.candidates[0].content.parts.length === 0) {
+            console.warn("AI Autofill: Received an empty or invalid response from the AI.", result);
+            if (result.candidates?.[0]?.finishReason === 'SAFETY') {
+                console.error("AI Autofill: The request was blocked due to safety settings.", result.candidates[0].safetyRatings);
+                throw new Error("The content was blocked by the API's safety filters.");
+            }
+            return '';
+        }
+        return result.candidates[0].content.parts[0].text.trim();
     }
 
 
@@ -250,7 +289,7 @@ async function autofillPage() {
             const descDiv = document.querySelector('#job-description, [class*="job-description"], [class*="jobdescription"]');
             if (descDiv) jobDescription = descDiv.innerText;
         }
-    } catch(e) { console.error("AI Autofill: Could not parse page context:", e); }
+    } catch (e) { console.error("AI Autofill: Could not parse page context:", e); }
 
     const userData = await new Promise(resolve => {
         const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'resume', 'resumeFileName', 'additionalInfo', 'apiKey'];
@@ -272,12 +311,13 @@ async function autofillPage() {
     const workHistoryPrompt = "Analyze the attached resume and extract the work experience. Return a JSON array where each object has 'jobTitle', 'company', 'startDate', 'endDate', and 'responsibilities' keys. The responsibilities should be a single string with key achievements separated by newlines.";
     let workHistory = [];
     try {
-        const historyJson = await getAIResponse(workHistoryPrompt, userData);
-        if (historyJson) {
-            const cleanedJson = historyJson.replace(/```json/g, '').replace(/```/g, '').trim();
-            workHistory = JSON.parse(cleanedJson);
+        const historyJsonText = await getAIResponse(workHistoryPrompt, userData);
+        const parsedHistory = parseJsonFromAiResponse(historyJsonText);
+        if (Array.isArray(parsedHistory)) {
+            workHistory = parsedHistory;
         }
-    } catch(e) { console.error("AI Autofill: Could not parse work history from resume.", e); }
+    } catch (e) { console.error("AI Autofill: Could not get work history from resume.", e); }
+
 
     await new Promise(resolve => setTimeout(resolve, 500)); // Wait for the page to finish loading dynamic content
     await simulateClick(document.body); // Click the page to activate it
@@ -290,7 +330,7 @@ async function autofillPage() {
 
     while (true) {
         // Find the next element to process. Re-query the DOM in each iteration to find dynamically added elements.
-        const el = Array.from(document.querySelectorAll('input, textarea, select, a[href], [role="textbox"], [role="combobox"], [contenteditable="true"]')).find(e => !e.hasAttribute('data-autofilled'));
+        const el = Array.from(document.querySelectorAll('input, textarea, select, [role="textbox"], [role="combobox"], [contenteditable="true"]')).find(e => !e.hasAttribute('data-autofilled'));
 
         if (!el) {
             // No more unprocessed elements found. Try scrolling to load more.
@@ -321,7 +361,7 @@ async function autofillPage() {
             }
 
             const elType = el.tagName.toLowerCase();
-            if ( (elType === 'input' || elType === 'textarea' || el.isContentEditable) && (el.value?.trim() !== '' || el.textContent?.trim() !== '') && el.type !== 'radio' && el.type !== 'checkbox' ) continue;
+            if ((elType === 'input' || elType === 'textarea' || el.isContentEditable) && (el.value?.trim() !== '' || el.textContent?.trim() !== '') && el.type !== 'radio' && el.type !== 'checkbox') continue;
             if (elType === 'select' && el.selectedIndex !== 0 && el.value !== '') continue;
             if ((el.type === 'radio' || el.type === 'checkbox') && document.querySelector(`input[name="${el.name}"]:checked`)) continue;
 
@@ -348,7 +388,7 @@ async function autofillPage() {
             const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question} ${el.innerText}`.toLowerCase();
             const isResumeField = combinedText.includes('resume') || combinedText.includes('cv') || combinedText.includes('attach');
 
-            if (el.type === 'file' || (elType === 'a' && isResumeField)) {
+            if (el.type === 'file') {
                 el.style.border = '2px solid #8B5CF6';
                 let notice = el.parentElement.querySelector('p.autofill-notice');
                 if (!notice) {
@@ -480,3 +520,4 @@ async function autofillPage() {
     }
     console.log("AI Autofill: Process finished.");
 }
+
