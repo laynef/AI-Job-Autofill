@@ -67,7 +67,18 @@ try {
                     };
                     reader.readAsDataURL(newResumeFile);
                 } else {
-                    saveDataToStorage(dataToSave);
+                    // Preserve existing resume data if no new file is uploaded
+                    chrome.storage.local.get(['resume', 'resumeFileName'], function(result) {
+                        if (chrome.runtime.lastError) {
+                            console.error("Error getting existing resume data:", chrome.runtime.lastError.message);
+                            saveDataToStorage(dataToSave); // Save other fields even if resume fetch fails
+                            return;
+                        }
+                        // Add existing resume data to the save object
+                        if (result.resume) dataToSave.resume = result.resume;
+                        if (result.resumeFileName) dataToSave.resumeFileName = result.resumeFileName;
+                        saveDataToStorage(dataToSave);
+                    });
                 }
             } catch (error) {
                 statusEl.textContent = 'A critical error occurred during save.';
