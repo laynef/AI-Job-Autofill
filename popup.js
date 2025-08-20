@@ -129,30 +129,29 @@ async function autofillPage() {
         if (typeof text !== 'string') return;
         await simulateClick(element);
         element.focus();
-        
-        if (element.isContentEditable) {
-            element.textContent = '';
-        } else {
-            element.value = '';
-        }
-        element.dispatchEvent(new Event('input', { bubbles: true }));
 
-        for (const char of text) {
-            if (element.isContentEditable) {
-                element.textContent += char;
-            } else {
-                element.value += char;
-            }
+        if (element.isContentEditable) {
+            // For contenteditable, set content directly to better support rich text and newlines
+            element.innerHTML = '';
             element.dispatchEvent(new Event('input', { bubbles: true }));
-            await new Promise(resolve => setTimeout(resolve, Math.random() * 40 + 20));
+            element.innerHTML = text.replace(/\n/g, '<br>');
+        } else {
+            // For standard inputs, simulate typing character by character
+            element.value = '';
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            for (const char of text) {
+                element.value += char;
+                element.dispatchEvent(new Event('input', { bubbles: true }));
+                await new Promise(resolve => setTimeout(resolve, Math.random() * 40 + 20));
+            }
         }
-        
+
         // Fallback: If simulation fails, directly set the value.
         if (element.value === '' && !element.isContentEditable) {
             element.value = text;
         }
-        if (element.textContent === '' && element.isContentEditable) {
-            element.textContent = text;
+        if (element.innerText.trim() === '' && element.isContentEditable) {
+            element.innerHTML = text.replace(/\n/g, '<br>');
         }
 
         element.dispatchEvent(new Event('change', { bubbles: true }));
@@ -372,7 +371,7 @@ async function autofillPage() {
             }
 
             const elType = el.tagName.toLowerCase();
-            if ((elType === 'input' || elType === 'textarea' || el.isContentEditable) && (el.value?.trim() !== '' || el.textContent?.trim() !== '') && el.type !== 'radio' && el.type !== 'checkbox') continue;
+            if ((elType === 'input' || elType === 'textarea' || el.isContentEditable) && (el.value?.trim() !== '' || el.innerText?.trim() !== '') && el.type !== 'radio' && el.type !== 'checkbox') continue;
             if (elType === 'select' && el.selectedIndex !== 0 && el.value !== '') continue;
             if ((el.type === 'radio' || el.type === 'checkbox') && document.querySelector(`input[name="${el.name}"]:checked`)) continue;
 
