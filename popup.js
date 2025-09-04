@@ -4,7 +4,7 @@ try {
         const statusEl = document.getElementById('status');
         const resumeFileNameEl = document.getElementById('resumeFileName');
         const resumeFileInput = document.getElementById('resumeFile');
-        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'apiKey', 'additionalInfo'];
+        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'apiKey', 'additionalInfo', 'gender', 'race', 'veteranStatus', 'disabilityStatus'];
 
         // Load saved data when the popup opens
         chrome.storage.local.get([...textFields, 'resumeFileName'], function(result) {
