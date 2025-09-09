@@ -2,7 +2,7 @@
 
 ## 🚀 Overview
 
-This Chrome extension is designed to streamline the job application process by automatically filling out forms. It uses your saved personal and professional information, combined with the power of Google's Gemini AI, to intelligently answer a wide variety of questions, from standard text inputs to complex dropdown menus. The extension reads your PDF resume to provide contextually aware answers, saving you time and effort.
+This Chrome extension is designed to streamline the job application process by automatically filling out forms. It uses your saved personal and professional information, combined with the power of Google's Gemini AI, to intelligently answer a wide variety of questions, from standard text inputs to complex dropdown menus. The extension reads your PDF resume to provide contextually aware answers, saving you time and effort. It also uses a `MutationObserver` to handle dynamically loaded content, ensuring that it can autofill even the most modern and complex job application forms.
 
 ## ✨ Features
 
@@ -13,6 +13,7 @@ This Chrome extension is designed to streamline the job application process by a
 - Context-Aware: Scans the job application page to find the job description, giving the AI crucial context about the role.
 - Handles Demographic Questions: Automatically and discreetly selects "Prefer not to answer" or "Decline to self-identify" for sensitive demographic questions (race, gender, disability, etc.).
 - User-Friendly Interface: A simple popup allows you to easily save and update your information.
+- Improved Performance and Reliability: Uses a `MutationObserver` to efficiently handle dynamic content, making the extension more reliable and performant on modern websites.
 
 ## 🛠️ Setup & Installation
 
@@ -28,20 +29,8 @@ This Chrome extension is designed to streamline the job application process by a
 
 ## ⚙️ How to Use
 
-Save Your Information:
-
-- Click the extension's icon in the Chrome toolbar to open the popup.
-- Fill in all your personal and professional details, including your name, address, contact info, and links.
-- Upload your resume in PDF format.
-- Add any key skills or cover letter points to the "Additional Info" section.
-- Click the "Save Information" button.
-
-Autofill an Application:
-
-- Navigate to a job application webpage.
-- Click the extension's icon in the toolbar.
-- Click the "Autofill Page" button.
-- The extension will automatically fill in all recognized fields. File input fields will be highlighted, prompting you to attach your resume manually.
+- Save Your Information: Click the extension's icon, fill in your details, upload your resume, and click "Save Information".
+- Autofill an Application: Navigate to a job application, click the extension's icon, and click "Autofill Page".
 
 ## 📂 File Structure
 
@@ -53,7 +42,7 @@ Autofill an Application:
 
 ## 💻 Tech Stack
 
-- Frontend: HTML, Tailwind CSS
+- Frontend: HTML
 - Logic: JavaScript
 - AI: Google Gemini API
 - Platform: Chrome Extension Manifest V3

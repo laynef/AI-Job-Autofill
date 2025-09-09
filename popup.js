@@ -253,31 +253,36 @@ async function autofillPage() {
         const model = 'gemini-1.5-flash-latest';
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': apiKey
-            },
-            body: JSON.stringify(payload)
-        });
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': apiKey
+                },
+                body: JSON.stringify(payload)
+            });
 
-        if (!response.ok) {
-            const errorBody = await response.text();
-            console.error("AI Autofill: API Error Response:", errorBody);
-            throw new Error(`API Error: ${response.status} ${response.statusText}`);
-        }
-
-        const result = await response.json();
-        if (!result.candidates || result.candidates.length === 0 || !result.candidates[0].content || !result.candidates[0].content.parts || result.candidates[0].content.parts.length === 0) {
-            console.warn("AI Autofill: Received an empty or invalid response from the AI.", result);
-            if (result.candidates?.[0]?.finishReason === 'SAFETY') {
-                console.error("AI Autofill: The request was blocked due to safety settings.", result.candidates[0].safetyRatings);
-                throw new Error("The content was blocked by the API's safety filters.");
+            if (!response.ok) {
+                const errorBody = await response.text();
+                console.error("AI Autofill: API Error Response:", errorBody);
+                throw new Error(`API Error: ${response.status} ${response.statusText}`);
             }
-            return '';
+
+            const result = await response.json();
+            if (!result.candidates || result.candidates.length === 0 || !result.candidates[0].content || !result.candidates[0].content.parts || result.candidates[0].content.parts.length === 0) {
+                console.warn("AI Autofill: Received an empty or invalid response from the AI.", result);
+                if (result.candidates?.[0]?.finishReason === 'SAFETY') {
+                    console.error("AI Autofill: The request was blocked due to safety settings.", result.candidates[0].safetyRatings);
+                    throw new Error("The content was blocked by the API's safety filters.");
+                }
+                return '';
+            }
+            return result.candidates[0].content.parts[0].text.trim();
+        } catch (error) {
+            console.error("AI Autofill: Error calling AI API:", error);
+            throw error;
         }
-        return result.candidates[0].content.parts[0].text.trim();
     }
 
 
@@ -335,45 +340,43 @@ async function autofillPage() {
     const demographicKeywords = ['race', 'ethnicity', 'gender', 'disability', 'veteran', 'sexual orientation'];
     let usedAnswers = new Set();
     let experienceIndex = 0;
-    let lastScrollY = -1;
-    let stallCounter = 0;
-
-    while (true) {
-        // Find the next element to process. Re-query the DOM in each iteration to find dynamically added elements.
-        const el = Array.from(document.querySelectorAll('input, textarea, select, [role="textbox"], [role="combobox"], [contenteditable="true"]')).find(e => !e.hasAttribute('data-autofilled'));
-
-        if (!el) {
-            // No more unprocessed elements found. Try scrolling to load more.
-            lastScrollY = window.scrollY;
-            window.scrollBy(0, window.innerHeight * 0.8);
-            await new Promise(resolve => setTimeout(resolve, 500)); // Wait for lazy load
-
-            // If scrolling didn't change position, we're likely at the bottom or on a non-scrolling page.
-            if (window.scrollY === lastScrollY) {
-                stallCounter++;
-                if (stallCounter > 2) {
-                    console.log("AI Autofill: Page seems to be fully scrolled. Finishing process.");
-                    break; // Exit the while loop
-                }
-            } else {
-                stallCounter = 0; // Reset counter if we successfully scrolled
+    
+    const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            if (mutation.addedNodes.length > 0) {
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType === 1) { // ELEMENT_NODE
+                        processNode(node);
+                    }
+                });
             }
-            continue; // Re-run the loop to find new elements after scrolling.
+        }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    function processNode(node) {
+        const elements = node.querySelectorAll('input, textarea, select, [role="textbox"], [role="combobox"], [contenteditable="true"]');
+        elements.forEach(el => processElement(el));
+    }
+    
+    async function processElement(el) {
+        if (el.hasAttribute('data-autofilled')) {
+            return;
         }
 
-        stallCounter = 0; // Reset stall counter since we found an element to process.
         el.setAttribute('data-autofilled', 'true'); // Mark as processed to avoid re-processing.
 
         try {
             const style = window.getComputedStyle(el);
             if (el.disabled || el.readOnly || style.display === 'none' || style.visibility === 'hidden') {
-                continue;
+                return;
             }
 
             const elType = el.tagName.toLowerCase();
-            if ((elType === 'input' || elType === 'textarea' || el.isContentEditable) && (el.value?.trim() !== '' || el.innerText?.trim() !== '') && el.type !== 'radio' && el.type !== 'checkbox') continue;
-            if (elType === 'select' && el.selectedIndex !== 0 && el.value !== '') continue;
-            if ((el.type === 'radio' || el.type === 'checkbox') && document.querySelector(`input[name="${el.name}"]:checked`)) continue;
+            if ((elType === 'input' || elType === 'textarea' || el.isContentEditable) && (el.value?.trim() !== '' || el.innerText?.trim() !== '') && el.type !== 'radio' && el.type !== 'checkbox') return;
+            if (elType === 'select' && el.selectedIndex !== 0 && el.value !== '') return;
+            if ((el.type === 'radio' || el.type === 'checkbox') && document.querySelector(`input[name="${el.name}"]:checked`)) return;
 
             el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
             await new Promise(resolve => setTimeout(resolve, 200));
@@ -392,7 +395,7 @@ async function autofillPage() {
                     const labelText = (document.querySelector(`label[for="${el.id}"]`)?.innerText || '').toLowerCase();
                     if (labelText.includes('decline') || labelText.includes('prefer not')) await simulateClick(el);
                 }
-                continue;
+                return;
             }
             
             const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question} ${el.innerText}`.toLowerCase();
@@ -408,10 +411,10 @@ async function autofillPage() {
                     notice.style.cssText = 'color: #8B5CF6; font-size: 12px; margin-top: 4px;';
                     el.parentElement.insertBefore(notice, el.nextSibling);
                 }
-                continue;
+                return;
             }
 
-            if (combinedText.includes('experience') || (workHistory[experienceIndex] && (combinedText.includes(workHistory[experienceIndex].company.toLowerCase()) || combinedText.includes(workHistory[experienceIndex].jobTitle.toLowerCase())))) {
+            if (combinedText.includes('experience') && !combinedText.includes('years')) {
                 if (experienceIndex < workHistory.length) {
                     const currentJob = workHistory[experienceIndex];
                     if (combinedText.includes('title')) await simulateTyping(el, currentJob.jobTitle);
@@ -427,7 +430,7 @@ async function autofillPage() {
                             await new Promise(resolve => setTimeout(resolve, 500));
                         }
                     }
-                    continue;
+                    return;
                 }
             }
             
@@ -448,34 +451,38 @@ async function autofillPage() {
 **Options:**
 - ${options.join("\n- ")}
 ---
-**INSTRUCTIONS:** Return ONLY the exact text of the best option from the list. Do not repeat an answer that has already been used.
+**INSTRUCTIONS:** Return ONLY the exact text of the best option from the list. Do not repeat an answer that has already been used. If no option is suitable, return "NO_OPTION".
 ---
 **BEST OPTION:**`;
-                    const aiChoice = await getAIResponse(prompt, userData);
-                    if (aiChoice) {
-                        usedAnswers.add(aiChoice);
-                        if (el.tagName.toLowerCase() === 'select') {
-                            for (let option of el.options) {
-                                if (option.text.trim() === aiChoice) { await simulateClick(el); el.value = option.value; el.dispatchEvent(new Event('change', { bubbles: true })); el.blur(); break; }
-                            }
-                        } else if (el.type === 'radio' || el.type === 'checkbox') {
-                            const inputs = document.querySelectorAll(`input[name="${el.name}"]`);
-                            for (const input of inputs) {
-                                const label = document.querySelector(`label[for="${input.id}"]`);
-                                if (label && label.innerText.trim() === aiChoice) { await simulateClick(input); break; }
-                            }
-                        } else {
-                            const optionElements = Array.from(source.querySelectorAll('[role="option"]'));
-                            const targetOption = optionElements.find(opt => opt.innerText.trim() === aiChoice);
-                            if (targetOption) {
-                                await simulateClick(targetOption);
+                    try {
+                        const aiChoice = await getAIResponse(prompt, userData);
+                        if (aiChoice && aiChoice !== "NO_OPTION") {
+                            usedAnswers.add(aiChoice);
+                            if (el.tagName.toLowerCase() === 'select') {
+                                for (let option of el.options) {
+                                    if (option.text.trim() === aiChoice) { await simulateClick(el); el.value = option.value; el.dispatchEvent(new Event('change', { bubbles: true })); el.blur(); break; }
+                                }
+                            } else if (el.type === 'radio' || el.type === 'checkbox') {
+                                const inputs = document.querySelectorAll(`input[name="${el.name}"]`);
+                                for (const input of inputs) {
+                                    const label = document.querySelector(`label[for="${input.id}"]`);
+                                    if (label && label.innerText.trim() === aiChoice) { await simulateClick(input); break; }
+                                }
                             } else {
-                                await simulateTyping(el, aiChoice);
+                                const optionElements = Array.from(source.querySelectorAll('[role="option"]'));
+                                const targetOption = optionElements.find(opt => opt.innerText.trim() === aiChoice);
+                                if (targetOption) {
+                                    await simulateClick(targetOption);
+                                } else {
+                                    await simulateTyping(el, aiChoice);
+                                }
                             }
                         }
+                    } catch (error) {
+                        console.error("AI Autofill: Error getting AI choice for options:", error);
                     }
                 }
-                continue;
+                return;
             }
             
             if (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea' || el.isContentEditable) {
@@ -513,13 +520,18 @@ async function autofillPage() {
 **INSTRUCTIONS:**
 1. Formulate a professional answer that has not been used before on this page.
 2. For salary questions, state my expectations are negotiable and competitive.
-3. Write only the answer itself, with no preamble.
+3. For questions about years of experience, answer with a number only, based on the resume.
+4. Write only the answer itself, with no preamble.
 ---
 **ANSWER:**`;
-                        const aiAnswer = await getAIResponse(prompt, userData);
-                        if (aiAnswer) {
-                            usedAnswers.add(aiAnswer);
-                            await simulateTyping(el, aiAnswer);
+                        try {
+                            const aiAnswer = await getAIResponse(prompt, userData);
+                            if (aiAnswer) {
+                                usedAnswers.add(aiAnswer);
+                                await simulateTyping(el, aiAnswer);
+                            }
+                        } catch (error) {
+                            console.error("AI Autofill: Error getting AI answer for text input:", error);
                         }
                     }
                 }
@@ -528,6 +540,9 @@ async function autofillPage() {
             console.error("AI Autofill: Error processing element:", el, error);
         }
     }
-    console.log("AI Autofill: Process finished.");
-}
 
+    // Initial processing of existing elements
+    processNode(document.body);
+    
+    console.log("AI Autofill: Process finished observing.");
+}
