@@ -142,7 +142,11 @@
     filled += validateAndSweep();
     return { filled };
   }
-  chrome.runtime.onMessage.addListener((msg, sender, sendResponse)=>{ if(!msg) return; if(msg.type==="AUTOFILL_NOW"){ const opts=msg.opts||{}; autofillAll(opts).then(res=>sendResponse({ok:true,...res})); return true; } });
+  
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg && msg.type === "PING_AUTOFILL") { try { sendResponse({ ok: true }); } catch(e) {} return true; }
+});
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse)=>{ if(!msg) return; if(msg.type==="AUTOFILL_NOW"){ const opts=msg.opts||{}; autofillAll(opts).then(res=>sendResponse({ok:true,...res})); return true; } });
   try{ chrome.storage.local.get(["autoFillOnLoad","aggressiveMode"], v=>{ if(v && v.autoFillOnLoad) autofillAll({aggressive:!!v.aggressiveMode}); }); }catch{}
   const obs=new MutationObserver(muts=>{ for(const m of muts){ for(const n of Array.from(m.addedNodes||[])){ if(!(n instanceof Element)) continue; for(const el of n.querySelectorAll?.("input,textarea,select")||[]){ chrome.storage.local.get(["autoFillOnLoad","aggressiveMode"], v=>{ if(v && v.autoFillOnLoad) loadProfile().then(p=> fillElement(el,p,{aggressive:!!v.aggressiveMode, allowFallbacks:true})); }); } } } }); obs.observe(document.documentElement,{childList:true,subtree:true});
 })();

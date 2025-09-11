@@ -1,7 +1,33 @@
 
 // This top-level try...catch block prevents the entire script from failing if an unexpected error occurs during setup.
 try {
-    document.addEventListener('DOMContentLoaded', function() {
+    
+// === Injected helpers (added by fix) ===
+async function getActiveTab() {
+  const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  return tabs && tabs[0];
+}
+async function ensureInjected(tabId) {
+  try {
+    // Ping the content script; if it responds, it's already injected.
+    const probe = await chrome.tabs.sendMessage(tabId, { type: "PING_AUTOFILL" });
+    if (probe && probe.ok) return true;
+  } catch (e) {
+    // Likely not injected yet; fall through to inject
+  }
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      files: ["content.js"]
+    });
+    return true;
+  } catch (e) {
+    console.error("Failed to inject content.js:", e);
+    throw e;
+  }
+}
+// === End injected helpers ===
+document.addEventListener('DOMContentLoaded', function() {
         const statusEl = document.getElementById('status');
         const resumeFileNameEl = document.getElementById('resumeFileName');
         const resumeFileInput = document.getElementById('resumeFile');
