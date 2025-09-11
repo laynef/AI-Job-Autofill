@@ -1,4 +1,88 @@
 
+document.addEventListener('DOMContentLoaded', function() {
+  // Graceful helpers for lookup
+  const $ = (id) => document.getElementById(id);
+  const on = (el, evt, fn) => { if (el) try{ el.addEventListener(evt, fn); } catch(_){} };
+
+  // Elements that may or may not exist depending on popup.html
+  const statusEl = $('status');
+  const resumeFileNameEl = $('resumeFileName');
+  const resumeFileInput = $('resumeFile');
+  const saveBtn = $('save');
+  const runBtn = $('run');
+  const aggressiveEl = $('aggressive');
+  const autorunEl = $('autorun');
+  const filledCountEl = $('filledCount');
+  const frameCountEl = $('frameCount');
+  const logEl = $('log');
+
+  // Utility setters that no-op if element is missing
+  window.__popupSetStatus = (s)=>{ if(statusEl) statusEl.textContent = s; };
+  window.__popupSetBadges = (filled, frames)=>{
+    if (filledCountEl) filledCountEl.textContent = `${filled ?? 0} filled`;
+    if (frameCountEl) frameCountEl.textContent = `frames: ${frames ?? 0}`;
+  };
+  window.__popupAppendLog = (s)=>{
+    if (logEl) logEl.value = (new Date().toLocaleTimeString() + " — " + s + "\n" + logEl.value).slice(0, 8000);
+  };
+
+  // File input listener (only if present)
+  on(resumeFileInput, 'change', function(){
+    if (this.files && this.files[0] && resumeFileNameEl){
+      resumeFileNameEl.textContent = `Selected: ${this.files[0].name} (click Save)`;
+      resumeFileNameEl.style.color = '#D97706';
+    }
+  });
+
+  // Save button (only if present)
+  on(saveBtn, 'click', function(){
+    try {
+      const textFields = ['firstName','lastName','email','phone','pronouns','address','city','state','zipCode','country','linkedinUrl','portfolioUrl','apiKey','additionalInfo','gender','race','veteranStatus','disabilityStatus'];
+      const dataToSave = {};
+      textFields.forEach(id => { const el = $(id); if (el) dataToSave[id] = el.value; });
+      const newResumeFile = resumeFileInput?.files?.[0];
+      const finish = (payload)=> chrome.storage.local.set(payload, ()=>{});
+      if (newResumeFile) {
+        const reader = new FileReader();
+        reader.onload = (e)=> finish({ ...dataToSave, resume: e.target.result, resumeFileName: newResumeFile.name });
+        reader.readAsArrayBuffer(newResumeFile);
+      } else {
+        finish(dataToSave);
+      }
+    } catch(e){ console.error("Save failed:", e); }
+  });
+
+  // Run button (always optional)
+  on(runBtn, 'click', async ()=>{
+    try{
+      const aggressive = !!(aggressiveEl && aggressiveEl.checked);
+      __popupSetStatus("Answering everything…");
+      const res = await (window.broadcastAutofill ? window.broadcastAutofill({ aggressive }) : Promise.resolve({ ok:false, error:"broadcast unavailable" }));
+      if (res?.ok){
+        __popupSetBadges(res.filled, res.frames?.length);
+        __popupSetStatus(`Completed. Filled/clicked across ${res.frames?.length ?? 1} frame(s).`);
+      } else {
+        __popupSetStatus("Failed: " + (res?.error || "Unknown error"));
+      }
+    }catch(e){
+      __popupSetStatus("Error: " + e?.message);
+    }
+  });
+
+  // Autorun/flags load/save if the controls exist
+  (async function(){
+    try{
+      const v = await new Promise(r=> chrome.storage.local.get(["autoFillOnLoad","aggressiveMode"], r));
+      if (autorunEl) autorunEl.checked = !!v.autoFillOnLoad;
+      if (aggressiveEl) aggressiveEl.checked = !!v.aggressiveMode;
+    }catch{}
+  })();
+  on(autorunEl, 'change', ()=> chrome.storage.local.set({ autoFillOnLoad: !!autorunEl.checked }));
+  on(aggressiveEl, 'change', ()=> chrome.storage.local.set({ aggressiveMode: !!aggressiveEl.checked }));
+});
+
+
+
 // This top-level try...catch block prevents the entire script from failing if an unexpected error occurs during setup.
 try {
     
@@ -27,59 +111,7 @@ async function ensureInjected(tabId) {
   }
 }
 // === End injected helpers ===
-document.addEventListener('DOMContentLoaded', function() {
-        const statusEl = document.getElementById('status');
-        const resumeFileNameEl = document.getElementById('resumeFileName');
-        const resumeFileInput = document.getElementById('resumeFile');
-        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'apiKey', 'additionalInfo', 'gender', 'race', 'veteranStatus', 'disabilityStatus'];
-
-        // Load saved data when the popup opens
-        chrome.storage.local.get([...textFields, 'resumeFileName'], function(result) {
-            if (chrome.runtime.lastError) { return console.error("Error loading data:", chrome.runtime.lastError.message); }
-            textFields.forEach(field => {
-                const el = document.getElementById(field);
-                if (el && result[field]) el.value = result[field];
-            });
-            if (result.resumeFileName && resumeFileNameEl) resumeFileNameEl.textContent = `Saved file: ${result.resumeFileName}`;
-        });
-
-        if (resumeFileInput) {
-            resumeFileInput.addEventListener('change', function() {
-                if (this.files && this.files[0]) {
-                    if (resumeFileNameEl) {
-                        resumeFileNameEl.textContent = `Selected: ${this.files[0].name} (click Save)`;
-                        resumeFileNameEl.style.color = '#D97706';
-                    }
-                }
-            });
-        }
-
-        // Save data when the save button is clicked
-        document.getElementById('save').addEventListener('click', function() {
-            try {
-                let dataToSave = {};
-                textFields.forEach(field => {
-                    const el = document.getElementById(field);
-                    if (el) dataToSave[field] = el.value;
-                });
-
-                const newResumeFile = resumeFileInput?.files[0];
-
-                const saveDataToStorage = (data) => {
-                    chrome.storage.local.set(data, function() {
-                        if (chrome.runtime.lastError) {
-                            statusEl.textContent = `Error: ${chrome.runtime.lastError.message}`;
-                            console.error("Save error:", chrome.runtime.lastError);
-                        } else {
-                            statusEl.textContent = 'Information saved!';
-                            if (data.resumeFileName && resumeFileNameEl) {
-                                resumeFileNameEl.textContent = `Saved file: ${data.resumeFileName}`;
-                                resumeFileNameEl.style.color = '';
-                            }
-                        }
-                        setTimeout(() => { if(statusEl) statusEl.textContent = ''; }, 2500);
-                    });
-                };
+};
 
                 if (newResumeFile) {
                     const reader = new FileReader();
