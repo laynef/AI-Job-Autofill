@@ -1,6 +1,21 @@
 
 // content.js — v6 AI-powered: answer every question using Options profile + LLM
 (function(){
+  // --- Safety wrappers for MV3 SPA pages (e.g., Gmail) ---
+function hasRuntime(){ try { return !!(chrome && chrome.runtime && chrome.runtime.id); } catch(_) { return false; } }
+async function safeSendMessage(msg){
+  if (!hasRuntime()) throw new Error("Extension context invalidated");
+  return await safeSendMessage(msg);
+}
+async function safeGet(keys){
+  return await new Promise((res) => {
+    try {
+      if (!hasRuntime()) return res({});
+      chrome.storage.local.get(keys, (v)=> res(v || {}));
+    } catch(_) { res({}); }
+  });
+}
+
   const DBG = false;
   const norm = (s)=> (s||"").toString().replace(/\s+/g," ").trim().toLowerCase();
   const fire = (el, type)=>{ try{ el.dispatchEvent(new Event(type,{bubbles:true})); }catch{} };
@@ -62,7 +77,7 @@
         "desiredSalary","relocation","sponsorship","startDate","graduationDate","university","degree","major","gpa",
         "workAuthorization","remotePreference","likertPreference","starRating","coverLetter"
       ];
-      return await new Promise(r => chrome.storage.local.get(keys, r));
+      return await safeGet(keys);
     } catch { return {}; }
   }
 
@@ -128,7 +143,7 @@
         fields
       };
       try{
-        const ai = await chrome.runtime.sendMessage({ type: "AI_SOLVE", payload });
+        const ai = await safeSendMessage({ type: "AI_SOLVE", payload });
         if (ai?.ok && ai.result?.answers){
           for (const ans of ai.result.answers){
             answersMap[ans.fieldId] = ans.value;
@@ -178,7 +193,7 @@
   });
 
   try{
-    chrome.storage.local.get(["autoFillOnLoad","aggressiveMode"], v => {
+    safeGet(["autoFillOnLoad","aggressiveMode"]).then(v => {
       if (v?.autoFillOnLoad) autofillAll({ ai: true });
     });
   }catch{}
