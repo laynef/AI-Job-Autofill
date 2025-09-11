@@ -37,7 +37,8 @@ try {
     p,
     new Promise((_, rej) => setTimeout(()=> rej(new Error("Timed out talking to background (service worker).")), 8000))
   ]);
-  return res ?? { ok:false, error:"No response from background (is the extension reloaded?)." };
+  if (!res || res.ok !== true) { return await directBroadcastFromPopup(tab.id, opts); }
+      return res;
 } catch (e) {
   return { ok:false, error: e?.message || String(e) };
 }
