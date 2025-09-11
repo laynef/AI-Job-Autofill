@@ -1,3 +1,4 @@
+
 // This top-level try...catch block prevents the entire script from failing if an unexpected error occurs during setup.
 try {
     document.addEventListener('DOMContentLoaded', function() {
@@ -546,3 +547,41 @@ async function autofillPage() {
     
     console.log("AI Autofill: Process finished observing.");
 }
+async function broadcastAutofill(opts) {
+  const tab = await getActiveTab();
+  if (!tab?.id) return { ok:false, error:"No active tab" };
+  await ensureInjected(tab.id);
+  return await chrome.runtime.sendMessage({ type: "BROADCAST_AUTOFILL", tabId: tab.id, opts });
+}
+function setStatus(s) {
+  const el = document.getElementById("status"); el.textContent = s;
+  const log = document.getElementById("log");
+  log.value = (new Date().toLocaleTimeString() + " — " + s + "\n" + log.value).slice(0, 8000);
+}
+function setBadges(filled, frames) {
+  document.getElementById("filledCount").textContent = `${filled ?? 0} filled`;
+  document.getElementById("frameCount").textContent = `frames: ${frames ?? 0}`;
+}
+async function loadFlags() {
+  const v = await chrome.storage.local.get(["aggressiveMode","autoFillOnLoad"]);
+  document.getElementById("aggressive").checked = !!v.aggressiveMode;
+  document.getElementById("autorun").checked = !!v.autoFillOnLoad;
+}
+async function saveFlags() {
+  const aggressive = document.getElementById("aggressive").checked;
+  const autorun = document.getElementById("autorun").checked;
+  await chrome.storage.local.set({ aggressiveMode: aggressive, autoFillOnLoad: autorun });
+}
+document.getElementById("run").addEventListener("click", async () => {
+  await saveFlags();
+  const aggressive = document.getElementById("aggressive").checked;
+  setStatus("Answering everything…");
+  const res = await broadcastAutofill({ aggressive });
+  if (res?.ok) {
+    setBadges(res.filled, res.frames?.length);
+    setStatus(`Completed. Filled/clicked across ${res.frames?.length ?? 1} frame(s).`);
+  } else {
+    setStatus("Failed: " + (res?.error || "Unknown error"));
+  }
+});
+loadFlags();

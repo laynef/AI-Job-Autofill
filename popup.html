@@ -1,61 +1,31 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
 <head>
-    <title>AI Job Application Autofill</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <style>
-        body {
-            width: 400px;
-            background-color: #f9fafb;
-        }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 12px; width: 340px; }
+    .row { display:flex; align-items:center; justify-content:space-between; margin:6px 0; }
+    button { padding:8px 12px; border-radius:10px; border:1px solid #ccc; background:#111; color:#fff; cursor:pointer; }
+    label { font-size: 13px; }
+    textarea { width:100%; height:120px; }
+    .small { font-size: 12px; color:#666; }
+    .badge { padding:2px 6px; border-radius:8px; background:#eee; font-size:12px; }
+  </style>
 </head>
-<body class="p-4">
-
-    <div class="flex justify-between items-center mb-4">
-        <h1 class="text-xl font-bold text-gray-800">Your Information</h1>
-        <img src="images/icon48.png" class="w-8 h-8 rounded-lg">
-    </div>
-
-    <div class="space-y-4 max-h-96 overflow-y-auto pr-2">
-        <!-- Personal Info -->
-        <div class="grid grid-cols-2 gap-4">
-            <div>
-                <label for="firstName" class="block text-sm font-medium text-gray-700">First Name</label>
-                <input type="text" id="firstName" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
-            </div>
-            <div>
-                <label for="lastName" class="block text-sm font-medium text-gray-700">Last Name</label>
-                <input type="text" id="lastName" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
-            </div>
-        </div>
-        <input type="text" id="pronouns" placeholder="Pronouns (e.g., she/her)" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
-        <input type="email" id="email" placeholder="Email" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
-        <input type="tel" id="phone" placeholder="Phone" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
-        <input type="text" id="address" placeholder="Address" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
-        <div class="grid grid-cols-3 gap-4">
-             <input type="text" id="city" placeholder="City" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
-             <input type="text" id="state" placeholder="State" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
-             <input type="text" id="zipCode" placeholder="Zip Code" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
-        </div>
-        <input type="text" id="country" placeholder="Country" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
-        <input type="url" id="linkedinUrl" placeholder="LinkedIn URL" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
-        <input type="url" id="portfolioUrl" placeholder="Portfolio/Website URL" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
-        
-        <!-- Other Info -->
-        <h2 class="text-lg font-semibold text-gray-700 pt-2">Other Information</h2>
-        <input type="password" id="apiKey" placeholder="Optional: Google Genimi Studio AI API Key" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm">
-        <div>
-            <label for="resumeFile" class="block text-sm font-medium text-gray-700">Resume/CV (.pdf, .docx)</label>
-            <input type="file" id="resumeFile" accept=".pdf,.docx" class="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"/>
-            <p id="resumeFileName" class="text-xs text-gray-500 mt-1"></p>
-        </div>
-    </div>
-
-    <button id="save" class="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Save Information</button>
-    <button id="autofill" class="mt-2 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">Autofill Page</button>
-    <p id="status" class="text-center text-sm mt-2 text-gray-500"></p>
-
-    <script src="popup.js"></script>
+<body>
+  <h3>AI Autofill</h3>
+  <div class="row">
+    <button id="run">Answer everything</button>
+    <label><input type="checkbox" id="aggressive"> Aggressive</label>
+  </div>
+  <div class="row">
+    <label><input type="checkbox" id="autorun"> Auto-fill on load</label>
+    <a href="options.html" target="_blank">Profile →</a>
+  </div>
+  <p id="status" class="small"></p>
+  <div class="row"><span class="badge" id="filledCount">0 filled</span><span class="badge" id="frameCount">frames: 0</span></div>
+  <textarea id="log" placeholder="Run log…" readonly></textarea>
+  <script src="popup.js"></script>
 </body>
 </html>

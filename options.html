@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 16px; max-width: 720px; }
+    h2 { margin: 4px 0 12px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    label { display:block; font-size: 12px; color:#555; margin-bottom:4px; }
+    input, textarea, select { width:100%; padding:8px; border:1px solid #ccc; border-radius:8px; }
+    textarea { height: 120px; }
+    .row { display:flex; gap: 8px; align-items:center; margin-top: 12px; }
+    button { padding:8px 14px; border-radius:10px; border:1px solid #ccc; background:#111; color:#fff; cursor:pointer; }
+    .note { color:#666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h2>AI Autofill — Profile</h2>
+  <p class="note">The extension will answer every field. Provide values for better accuracy; fallbacks used if unmapped.</p>
+  <div class="grid" id="grid"></div>
+  <div class="row">
+    <button id="save">Save</button>
+    <span id="status" class="note"></span>
+  </div>
+  <h3>Cover Letter</h3>
+  <textarea id="coverLetter"></textarea>
+  <script src="options.js"></script>
+</body>
+</html>
