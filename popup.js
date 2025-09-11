@@ -48,7 +48,7 @@ if (res?.ok){
   const msg = res?.error || (Array.isArray(res?.results) && res.results.find(r=>!r.ok)?.error) || ("Unknown error. Raw: " + JSON.stringify(res));
   setStatus("Failed: " + msg);
 }
-"Failed: " + (res?.error || "Unknown error"));
+
     }catch(e){ setStatus("Failed: " + (e?.message || String(e))); }
   });
   loadFlags();
