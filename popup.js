@@ -4,7 +4,7 @@ try {
         const statusEl = document.getElementById('status');
         const resumeFileNameEl = document.getElementById('resumeFileName');
         const resumeFileInput = document.getElementById('resumeFile');
-        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'apiKey', 'additionalInfo'];
+        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'apiKey', 'additionalInfo', 'gender', 'race', 'veteranStatus', 'disabilityStatus'];
 
         // Load saved data when the popup opens
         chrome.storage.local.get([...textFields, 'resumeFileName'], function(result) {
@@ -67,7 +67,18 @@ try {
                     };
                     reader.readAsDataURL(newResumeFile);
                 } else {
-                    saveDataToStorage(dataToSave);
+                    // Preserve existing resume data if no new file is uploaded
+                    chrome.storage.local.get(['resume', 'resumeFileName'], function(result) {
+                        if (chrome.runtime.lastError) {
+                            console.error("Error getting existing resume data:", chrome.runtime.lastError.message);
+                            saveDataToStorage(dataToSave); // Save other fields even if resume fetch fails
+                            return;
+                        }
+                        // Add existing resume data to the save object
+                        if (result.resume) dataToSave.resume = result.resume;
+                        if (result.resumeFileName) dataToSave.resumeFileName = result.resumeFileName;
+                        saveDataToStorage(dataToSave);
+                    });
                 }
             } catch (error) {
                 statusEl.textContent = 'A critical error occurred during save.';
@@ -118,14 +129,31 @@ async function autofillPage() {
         if (typeof text !== 'string') return;
         await simulateClick(element);
         element.focus();
-        element.value = '';
-        element.dispatchEvent(new Event('input', { bubbles: true }));
 
-        for (const char of text) {
-            element.value += char;
+        if (element.isContentEditable) {
+            // For contenteditable, set content directly to better support rich text and newlines
+            element.innerHTML = '';
             element.dispatchEvent(new Event('input', { bubbles: true }));
-            await new Promise(resolve => setTimeout(resolve, Math.random() * 40 + 20));
+            element.innerHTML = text.replace(/\n/g, '<br>');
+        } else {
+            // For standard inputs, simulate typing character by character
+            element.value = '';
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            for (const char of text) {
+                element.value += char;
+                element.dispatchEvent(new Event('input', { bubbles: true }));
+                await new Promise(resolve => setTimeout(resolve, Math.random() * 40 + 20));
+            }
         }
+
+        // Fallback: If simulation fails, directly set the value.
+        if (element.value === '' && !element.isContentEditable) {
+            element.value = text;
+        }
+        if (element.innerText.trim() === '' && element.isContentEditable) {
+            element.innerHTML = text.replace(/\n/g, '<br>');
+        }
+
         element.dispatchEvent(new Event('change', { bubbles: true }));
         element.blur();
     }
@@ -187,6 +215,18 @@ async function autofillPage() {
         return { options: [] };
     }
 
+    function parseJsonFromAiResponse(text) {
+        if (!text) return null;
+        const match = text.match(/```(json)?\n?([\s\S]+?)\n?```/);
+        const jsonString = match ? match[2] : text;
+        try {
+            return JSON.parse(jsonString.trim());
+        } catch (e) {
+            console.error("AI Autofill: Failed to parse JSON from AI response.", e, "Raw text:", text);
+            return null;
+        }
+    }
+
     async function getAIResponse(prompt, userData) {
         const parts = [{ text: prompt }];
         let mimeType = '';
@@ -196,19 +236,53 @@ async function autofillPage() {
             mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
         }
 
-        if (userData.resume && mimeType) {
+        if (userData.resume && mimeType && userData.resume.startsWith('data:')) {
             const base64Data = userData.resume.split(',')[1];
-            parts.push({ inlineData: { mimeType, data: base64Data } });
+            if (base64Data) {
+                parts.push({ inlineData: { mimeType, data: base64Data } });
+            }
         }
 
         const payload = { contents: [{ role: "user", parts: parts }] };
         const apiKey = userData.apiKey || "";
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+        if (!apiKey) {
+            console.error("AI Autofill: API Key is missing.");
+            throw new Error("API Key is missing.");
+        }
 
-        const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        if (!response.ok) throw new Error(`API Error: ${response.status}`);
-        const result = await response.json();
-        return result.candidates?.[0]?.content?.parts?.[0]?.text.trim();
+        const model = 'gemini-1.5-flash-latest';
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': apiKey
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const errorBody = await response.text();
+                console.error("AI Autofill: API Error Response:", errorBody);
+                throw new Error(`API Error: ${response.status} ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            if (!result.candidates || result.candidates.length === 0 || !result.candidates[0].content || !result.candidates[0].content.parts || result.candidates[0].content.parts.length === 0) {
+                console.warn("AI Autofill: Received an empty or invalid response from the AI.", result);
+                if (result.candidates?.[0]?.finishReason === 'SAFETY') {
+                    console.error("AI Autofill: The request was blocked due to safety settings.", result.candidates[0].safetyRatings);
+                    throw new Error("The content was blocked by the API's safety filters.");
+                }
+                return '';
+            }
+            return result.candidates[0].content.parts[0].text.trim();
+        } catch (error) {
+            console.error("AI Autofill: Error calling AI API:", error);
+            throw error;
+        }
     }
 
 
@@ -230,7 +304,7 @@ async function autofillPage() {
             const descDiv = document.querySelector('#job-description, [class*="job-description"], [class*="jobdescription"]');
             if (descDiv) jobDescription = descDiv.innerText;
         }
-    } catch(e) { console.error("AI Autofill: Could not parse page context:", e); }
+    } catch (e) { console.error("AI Autofill: Could not parse page context:", e); }
 
     const userData = await new Promise(resolve => {
         const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'resume', 'resumeFileName', 'additionalInfo', 'apiKey'];
@@ -252,32 +326,57 @@ async function autofillPage() {
     const workHistoryPrompt = "Analyze the attached resume and extract the work experience. Return a JSON array where each object has 'jobTitle', 'company', 'startDate', 'endDate', and 'responsibilities' keys. The responsibilities should be a single string with key achievements separated by newlines.";
     let workHistory = [];
     try {
-        const historyJson = await getAIResponse(workHistoryPrompt, userData);
-        if (historyJson) {
-            const cleanedJson = historyJson.replace(/```json/g, '').replace(/```/g, '').trim();
-            workHistory = JSON.parse(cleanedJson);
+        const historyJsonText = await getAIResponse(workHistoryPrompt, userData);
+        const parsedHistory = parseJsonFromAiResponse(historyJsonText);
+        if (Array.isArray(parsedHistory)) {
+            workHistory = parsedHistory;
         }
-    } catch(e) { console.error("AI Autofill: Could not parse work history from resume.", e); }
+    } catch (e) { console.error("AI Autofill: Could not get work history from resume.", e); }
+
 
     await new Promise(resolve => setTimeout(resolve, 500)); // Wait for the page to finish loading dynamic content
+    await simulateClick(document.body); // Click the page to activate it
 
     const demographicKeywords = ['race', 'ethnicity', 'gender', 'disability', 'veteran', 'sexual orientation'];
     let usedAnswers = new Set();
     let experienceIndex = 0;
     
-    const allElements = Array.from(document.querySelectorAll('input, textarea, select'));
+    const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            if (mutation.addedNodes.length > 0) {
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType === 1) { // ELEMENT_NODE
+                        processNode(node);
+                    }
+                });
+            }
+        }
+    });
 
-    for (const el of allElements) {
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    function processNode(node) {
+        const elements = node.querySelectorAll('input, textarea, select, [role="textbox"], [role="combobox"], [contenteditable="true"]');
+        elements.forEach(el => processElement(el));
+    }
+    
+    async function processElement(el) {
+        if (el.hasAttribute('data-autofilled')) {
+            return;
+        }
+
+        el.setAttribute('data-autofilled', 'true'); // Mark as processed to avoid re-processing.
+
         try {
             const style = window.getComputedStyle(el);
-            if (el.type === 'hidden' || el.disabled || el.readOnly || style.display === 'none' || style.visibility === 'hidden') {
-                continue;
+            if (el.disabled || el.readOnly || style.display === 'none' || style.visibility === 'hidden') {
+                return;
             }
 
             const elType = el.tagName.toLowerCase();
-            if ( (elType === 'input' || elType === 'textarea') && el.value.trim() !== '' && el.type !== 'radio' && el.type !== 'checkbox' ) continue;
-            if (elType === 'select' && el.selectedIndex !== 0 && el.value !== '') continue;
-            if ((el.type === 'radio' || el.type === 'checkbox') && document.querySelector(`input[name="${el.name}"]:checked`)) continue;
+            if ((elType === 'input' || elType === 'textarea' || el.isContentEditable) && (el.value?.trim() !== '' || el.innerText?.trim() !== '') && el.type !== 'radio' && el.type !== 'checkbox') return;
+            if (elType === 'select' && el.selectedIndex !== 0 && el.value !== '') return;
+            if ((el.type === 'radio' || el.type === 'checkbox') && document.querySelector(`input[name="${el.name}"]:checked`)) return;
 
             el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
             await new Promise(resolve => setTimeout(resolve, 200));
@@ -296,8 +395,11 @@ async function autofillPage() {
                     const labelText = (document.querySelector(`label[for="${el.id}"]`)?.innerText || '').toLowerCase();
                     if (labelText.includes('decline') || labelText.includes('prefer not')) await simulateClick(el);
                 }
-                continue;
+                return;
             }
+            
+            const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question} ${el.innerText}`.toLowerCase();
+            const isResumeField = combinedText.includes('resume') || combinedText.includes('cv') || combinedText.includes('attach');
 
             if (el.type === 'file') {
                 el.style.border = '2px solid #8B5CF6';
@@ -309,11 +411,10 @@ async function autofillPage() {
                     notice.style.cssText = 'color: #8B5CF6; font-size: 12px; margin-top: 4px;';
                     el.parentElement.insertBefore(notice, el.nextSibling);
                 }
-                continue;
+                return;
             }
 
-            const combinedText = `${el.name} ${el.id} ${el.placeholder} ${question}`.toLowerCase();
-            if (combinedText.includes('experience') || (workHistory[experienceIndex] && (combinedText.includes(workHistory[experienceIndex].company.toLowerCase()) || combinedText.includes(workHistory[experienceIndex].jobTitle.toLowerCase())))) {
+            if (combinedText.includes('experience') && !combinedText.includes('years')) {
                 if (experienceIndex < workHistory.length) {
                     const currentJob = workHistory[experienceIndex];
                     if (combinedText.includes('title')) await simulateTyping(el, currentJob.jobTitle);
@@ -329,7 +430,7 @@ async function autofillPage() {
                             await new Promise(resolve => setTimeout(resolve, 500));
                         }
                     }
-                    continue;
+                    return;
                 }
             }
             
@@ -350,37 +451,41 @@ async function autofillPage() {
 **Options:**
 - ${options.join("\n- ")}
 ---
-**INSTRUCTIONS:** Return ONLY the exact text of the best option from the list. Do not repeat an answer that has already been used.
+**INSTRUCTIONS:** Return ONLY the exact text of the best option from the list. Do not repeat an answer that has already been used. If no option is suitable, return "NO_OPTION".
 ---
 **BEST OPTION:**`;
-                    const aiChoice = await getAIResponse(prompt, userData);
-                    if (aiChoice) {
-                        usedAnswers.add(aiChoice);
-                        if (el.tagName.toLowerCase() === 'select') {
-                            for (let option of el.options) {
-                                if (option.text.trim() === aiChoice) { await simulateClick(el); el.value = option.value; el.dispatchEvent(new Event('change', { bubbles: true })); el.blur(); break; }
-                            }
-                        } else if (el.type === 'radio' || el.type === 'checkbox') {
-                            const inputs = document.querySelectorAll(`input[name="${el.name}"]`);
-                            for (const input of inputs) {
-                                const label = document.querySelector(`label[for="${input.id}"]`);
-                                if (label && label.innerText.trim() === aiChoice) { await simulateClick(input); break; }
-                            }
-                        } else {
-                            const optionElements = Array.from(source.querySelectorAll('[role="option"]'));
-                            const targetOption = optionElements.find(opt => opt.innerText.trim() === aiChoice);
-                            if (targetOption) {
-                                await simulateClick(targetOption);
+                    try {
+                        const aiChoice = await getAIResponse(prompt, userData);
+                        if (aiChoice && aiChoice !== "NO_OPTION") {
+                            usedAnswers.add(aiChoice);
+                            if (el.tagName.toLowerCase() === 'select') {
+                                for (let option of el.options) {
+                                    if (option.text.trim() === aiChoice) { await simulateClick(el); el.value = option.value; el.dispatchEvent(new Event('change', { bubbles: true })); el.blur(); break; }
+                                }
+                            } else if (el.type === 'radio' || el.type === 'checkbox') {
+                                const inputs = document.querySelectorAll(`input[name="${el.name}"]`);
+                                for (const input of inputs) {
+                                    const label = document.querySelector(`label[for="${input.id}"]`);
+                                    if (label && label.innerText.trim() === aiChoice) { await simulateClick(input); break; }
+                                }
                             } else {
-                                await simulateTyping(el, aiChoice);
+                                const optionElements = Array.from(source.querySelectorAll('[role="option"]'));
+                                const targetOption = optionElements.find(opt => opt.innerText.trim() === aiChoice);
+                                if (targetOption) {
+                                    await simulateClick(targetOption);
+                                } else {
+                                    await simulateTyping(el, aiChoice);
+                                }
                             }
                         }
+                    } catch (error) {
+                        console.error("AI Autofill: Error getting AI choice for options:", error);
                     }
                 }
-                continue;
+                return;
             }
             
-            if (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea') {
+            if (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea' || el.isContentEditable) {
                 let valueToType = '';
                 if (combinedText.includes('first') && combinedText.includes('name')) valueToType = userData.firstName || '';
                 else if (combinedText.includes('last') && combinedText.includes('name')) valueToType = userData.lastName || '';
@@ -415,13 +520,18 @@ async function autofillPage() {
 **INSTRUCTIONS:**
 1. Formulate a professional answer that has not been used before on this page.
 2. For salary questions, state my expectations are negotiable and competitive.
-3. Write only the answer itself, with no preamble.
+3. For questions about years of experience, answer with a number only, based on the resume.
+4. Write only the answer itself, with no preamble.
 ---
 **ANSWER:**`;
-                        const aiAnswer = await getAIResponse(prompt, userData);
-                        if (aiAnswer) {
-                            usedAnswers.add(aiAnswer);
-                            await simulateTyping(el, aiAnswer);
+                        try {
+                            const aiAnswer = await getAIResponse(prompt, userData);
+                            if (aiAnswer) {
+                                usedAnswers.add(aiAnswer);
+                                await simulateTyping(el, aiAnswer);
+                            }
+                        } catch (error) {
+                            console.error("AI Autofill: Error getting AI answer for text input:", error);
                         }
                     }
                 }
@@ -430,5 +540,9 @@ async function autofillPage() {
             console.error("AI Autofill: Error processing element:", el, error);
         }
     }
-    console.log("AI Autofill: Process finished.");
+
+    // Initial processing of existing elements
+    processNode(document.body);
+    
+    console.log("AI Autofill: Process finished observing.");
 }
