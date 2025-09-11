@@ -6,6 +6,27 @@ async function ensureInjected(tabId){
   try{ const probe = await chrome.tabs.sendMessage(tabId, { type:"PING_AUTOFILL" }); if (probe?.ok) return; }catch{}
   await chrome.scripting.executeScript({ target: { tabId, allFrames:true }, files: ["content.js"] });
 }
+
+async function directBroadcastFromPopup(tabId, opts){
+  // Fallback path: enumerate frames and message them from the popup itself
+  try{
+    const frames = await chrome.webNavigation.getAllFrames({ tabId });
+    const results = [];
+    for (const f of frames){
+      try{
+        const res = await chrome.tabs.sendMessage(tabId, { type:"AUTOFILL_NOW", opts }, { frameId: f.frameId });
+        results.push({ frameId: f.frameId, ok: !!res?.ok, filled: res?.filled ?? 0, error: res?.error });
+      }catch(e){
+        results.push({ frameId: f.frameId, ok: false, filled: 0, error: e?.message || String(e) });
+      }
+    }
+    const totalFilled = results.reduce((a,b)=> a + (b.filled||0), 0);
+    return { ok:true, frames: results.map(r=>r.frameId), results, filled: totalFilled, bypass:true };
+  }catch(e){
+    return { ok:false, error: e?.message || String(e) };
+  }
+}
+
 async function broadcastAutofill(opts){
   const tab = await getActiveTab(); if (!tab?.id) return { ok:false, error:"No active tab" };
   await ensureInjected(tab.id);
