@@ -9,7 +9,18 @@ async function ensureInjected(tabId){
 async function broadcastAutofill(opts){
   const tab = await getActiveTab(); if (!tab?.id) return { ok:false, error:"No active tab" };
   await ensureInjected(tab.id);
-  return await chrome.runtime.sendMessage({ type:"BROADCAST_AUTOFILL", tabId: tab.id, opts });
+
+try {
+  const p = chrome.runtime.sendMessage({ type:"BROADCAST_AUTOFILL", tabId: tab.id, opts });
+  const res = await Promise.race([
+    p,
+    new Promise((_, rej) => setTimeout(()=> rej(new Error("Timed out talking to background (service worker).")), 8000))
+  ]);
+  return res ?? { ok:false, error:"No response from background (is the extension reloaded?)." };
+} catch (e) {
+  return { ok:false, error: e?.message || String(e) };
+}
+
 }
 function setStatus(s){ const el=$("status"); if (el) el.textContent=s; const log=$("log"); if (log) log.value = (new Date().toLocaleTimeString()+" — "+s+"\n"+log.value).slice(0,8000); }
 function setBadges(filled, frames){ const f=$("filledCount"); const fr=$("frameCount"); if (f) f.textContent = `${filled ?? 0} filled`; if (fr) fr.textContent = `frames: ${frames ?? 0}`; }
@@ -25,8 +36,19 @@ document.addEventListener("DOMContentLoaded", () => {
     setStatus("Answering with AI…");
     try{
       const res = await broadcastAutofill({ ai: true });
-      if (res?.ok){ setBadges(res.filled, res.frames?.length); setStatus(`Completed across ${res.frames?.length ?? 1} frame(s).`); }
-      else setStatus("Failed: " + (res?.error || "Unknown error"));
+      
+if (res?.ok){
+  setBadges(res.filled, res.frames?.length);
+  setStatus(`Completed across ${res.frames?.length ?? 1} frame(s). Filled: ${res.filled ?? 0}`);
+  if (Array.isArray(res.results)) {
+    const errs = res.results.filter(r=>!r.ok && r.error).map(r=>`frame ${r.frameId}: ${r.error}`);
+    if (errs.length) setStatus("Partial errors — " + errs[0]);
+  }
+} else {
+  const msg = res?.error || (Array.isArray(res?.results) && res.results.find(r=>!r.ok)?.error) || ("Unknown error. Raw: " + JSON.stringify(res));
+  setStatus("Failed: " + msg);
+}
+"Failed: " + (res?.error || "Unknown error"));
     }catch(e){ setStatus("Failed: " + (e?.message || String(e))); }
   });
   loadFlags();

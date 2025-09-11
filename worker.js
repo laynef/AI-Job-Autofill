@@ -32,23 +32,29 @@ async function callOpenAI(apiKey, model, systemPrompt, userPayload) {
 }
 
 chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
-  if (msg?.type === "BROADCAST_AUTOFILL") {
-    try {
-      const tabId = msg.tabId;
-      const frames = await chrome.webNavigation.getAllFrames({ tabId });
-      for (const f of frames) {
-        try {
-          await chrome.tabs.sendMessage(tabId, { type: "AUTOFILL_NOW", opts: msg.opts || {} }, { frameId: f.frameId });
-        } catch (e) {}
+  
+if (msg?.type === "BROADCAST_AUTOFILL") { console.debug('[autofill] BROADCAST_AUTOFILL', msg);
+  try {
+    const tabId = msg.tabId;
+    const frames = await chrome.webNavigation.getAllFrames({ tabId });
+    const results = [];
+    for (const f of frames) {
+      try {
+        const res = await chrome.tabs.sendMessage(tabId, { type: "AUTOFILL_NOW", opts: msg.opts || {} }, { frameId: f.frameId });
+        results.push({ frameId: f.frameId, ok: !!res?.ok, filled: res?.filled ?? 0, error: res?.error });
+      } catch (e) {
+        results.push({ frameId: f.frameId, ok: false, filled: 0, error: e?.message || String(e) });
       }
-      sendResponse({ ok: true, frames: frames.map(f=>f.frameId), filled: undefined });
-    } catch (e) {
-      sendResponse({ ok: false, error: e?.message || String(e) });
     }
-    return true;
+    const totalFilled = results.reduce((a,b)=> a + (b.filled||0), 0);
+    sendResponse({ ok: true, frames: results.map(r=>r.frameId), results, filled: totalFilled });
+  } catch (e) {
+    sendResponse({ ok: false, error: e?.message || String(e) });
   }
+  return true;
+}
 
-  if (msg?.type === "AI_SOLVE") {
+  if (msg?.type === "AI_SOLVE") { console.debug('[autofill] AI_SOLVE', msg?.payload?.page);
     try {
       const cfg = await new Promise(r => chrome.storage.local.get(["apiKey","model"], r));
       if (!cfg?.apiKey) throw new Error("Missing API key in Options (apiKey).");
