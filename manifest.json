@@ -1,41 +1,53 @@
 {
   "manifest_version": 3,
-  "name": "Free AI Job Application Autofill",
-  "version": "1.4+fix",
-  "description": "Autofills job applications using your saved information and AI. Improved selects & buttons.",
+  "name": "AI Autofill \u2014 All Inputs (v1.7)",
+  "version": "1.7",
+  "description": "Aggressively fills ALL input types: text, selects, radios, custom dropdowns, and button groups. Works across iframes & SPA UIs.",
   "permissions": [
     "storage",
     "activeTab",
-    "scripting"
+    "scripting",
+    "tabs",
+    "webNavigation"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "http://*/*",
+    "https://*/*",
+    "file:///*"
   ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "content_scripts": [
     {
       "matches": [
-        "<all_urls>"
+        "http://*/*",
+        "https://*/*",
+        "file:///*"
       ],
       "js": [
         "content.js"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ],
-  "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "images/icon16.png",
-      "48": "images/icon48.png",
-      "128": "images/icon128.png"
-    }
+  "background": {
+    "service_worker": "worker.js",
+    "type": "module"
   },
+  "options_page": "options.html",
   "web_accessible_resources": [
     {
       "resources": [
-        "images/icon16.png",
-        "images/icon48.png",
-        "images/icon128.png"
+        "icons/icon16.png",
+        "icons/icon48.png",
+        "icons/icon128.png"
       ],
       "matches": [
         "<all_urls>"
