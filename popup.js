@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 // === Popup-local AI fallback (no service worker required) ===
 async function getProfile(){
   return await new Promise(res => chrome.storage.local.get([
@@ -695,6 +696,9 @@ async function autofillPage() {
 >>>>>>> parent of a212aeb (1.3)
 =======
 
+=======
+
+>>>>>>> parent of ab60b0c (1.3)
 // Augments existing popup to trigger autofill on the active tab.
 // Call sendAutofill() on your "Fill" button's click handler.
 async function sendAutofill() {
@@ -711,6 +715,9 @@ async function sendAutofill() {
     const res = await chrome.tabs.sendMessage(tab.id, { type: "AUTOFILL_NOW" });
     console.log("Autofill result after inject:", res);
   }
+<<<<<<< HEAD
+>>>>>>> parent of ab60b0c (1.3)
+=======
 >>>>>>> parent of ab60b0c (1.3)
 }
 function setStatus(s){ const el=$("status"); if (el) el.textContent=s; const log=$("log"); if (log) log.value = (new Date().toLocaleTimeString()+" — "+s+"\n"+log.value).slice(0,8000); }
