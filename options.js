@@ -47,6 +47,12 @@ async function load() {
   }
   const cl = document.getElementById("coverLetter");
   if (cl && data.coverLetter != null) cl.value = data.coverLetter;
+
+  const apiKeyInput = document.getElementById("apiKey");
+  if (apiKeyInput && !apiKeyInput.value) {
+    const warning = el("span", { text: "API Key is required for the extension to work.", style: "color: red; font-size: 12px;" });
+    apiKeyInput.parentElement.appendChild(warning);
+  }
 }
 
 async function save() {
@@ -57,9 +63,17 @@ async function save() {
   }
   const cl = document.getElementById("coverLetter");
   if (cl) payload.coverLetter = cl.value;
+
+  const apiKeyInput = document.getElementById("apiKey");
+  if (apiKeyInput && !apiKeyInput.value) {
+    const s = document.getElementById("status");
+    if (s) { s.textContent = "API Key is missing!"; s.style.color = "red"; }
+    return;
+  }
+
   await chrome.storage.local.set(payload);
   const s = document.getElementById("status");
-  if (s) { s.textContent = "Saved ✓"; setTimeout(()=> s.textContent = "", 1200); }
+  if (s) { s.textContent = "Saved ✓"; s.style.color = ""; setTimeout(()=> s.textContent = "", 1200); }
 }
 
 document.getElementById("save").addEventListener("click", save);

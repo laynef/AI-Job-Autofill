@@ -1,11 +1,10 @@
-
 // content.js — v6 AI-powered: answer every question using Options profile + LLM
 (function(){
   // --- Safety wrappers for MV3 SPA pages (e.g., Gmail) ---
 function hasRuntime(){ try { return !!(chrome && chrome.runtime && chrome.runtime.id); } catch(_) { return false; } }
 async function safeSendMessage(msg){
   if (!hasRuntime()) throw new Error("Extension context invalidated");
-  return await safeSendMessage(msg);
+  return await chrome.runtime.sendMessage(msg);
 }
 async function safeGet(keys){
   return await new Promise((res) => {
@@ -71,13 +70,7 @@ async function safeGet(keys){
 
   async function loadProfile(){
     try {
-      const keys = [
-        "firstName","lastName","fullName","email","phone","address","city","state","zip","country",
-        "linkedin","website","github","gender","race","veteranStatus","disabilityStatus",
-        "desiredSalary","relocation","sponsorship","startDate","graduationDate","university","degree","major","gpa",
-        "workAuthorization","remotePreference","likertPreference","starRating","coverLetter"
-      ];
-      return await safeGet(keys);
+      return await safeGet(null); // Get all items from storage
     } catch { return {}; }
   }
 
@@ -131,8 +124,11 @@ async function safeGet(keys){
   }
 
   async function autofillAll(opts={}){
+    const logs = [];
+    logs.push('[AI-AUTOFILL] Starting autofill process.');
     const profile = await loadProfile();
     const fields = collectFields();
+    logs.push(`[AI-AUTOFILL] Collected ${fields.length} fields.`);
     let answersMap = {};
 
     if (opts.ai){
@@ -144,12 +140,16 @@ async function safeGet(keys){
       };
       try{
         const ai = await safeSendMessage({ type: "AI_SOLVE", payload });
+        logs.push(`[AI-AUTOFILL] AI response received: ${ai?.ok ? 'OK' : 'Error'}`);
         if (ai?.ok && ai.result?.answers){
           for (const ans of ai.result.answers){
             answersMap[ans.fieldId] = ans.value;
           }
         }
-      }catch(e){ if (DBG) console.warn("AI_SOLVE failed", e); }
+        logs.push(`[AI-AUTOFILL] Mapped ${Object.keys(answersMap).length} answers.`);
+      }catch(e){
+        logs.push(`[AI-AUTOFILL] AI_SOLVE failed: ${e.message}`);
+      }
     }
 
     // Apply answers
@@ -179,7 +179,8 @@ async function safeGet(keys){
       }
       if (setByType(n, val)) filled++;
     }
-    return { filled };
+    logs.push(`[AI-AUTOFILL] Filled ${filled} fields.`);
+    return { filled, logs };
   }
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse)=>{

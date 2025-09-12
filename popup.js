@@ -1,4 +1,3 @@
-
 // === Popup-local AI fallback (no service worker required) ===
 async function getProfile(){
   return await new Promise(res => chrome.storage.local.get([
@@ -32,7 +31,11 @@ async function collectFieldsInTab(tabId){
   const [{ result }] = await chrome.scripting.executeScript({
     target: { tabId, allFrames: false },
     func: () => {
-      const visible = (el)=>{ const r=el.getBoundingClientRect(); const cs=getComputedStyle(el); return r.width>0 && r.height>0 && cs.visibility!=="hidden" && cs.display!=="none"; };
+      const visible = (el)=>{
+        const r=el.getBoundingClientRect();
+        const cs=getComputedStyle(el);
+        return r.width>0 && r.height>0 && cs.visibility!=="hidden" && cs.display!=="none";
+      };
       const getLabel = (el)=>{
         if (el.id){ const l=document.querySelector(`label[for="${CSS.escape(el.id)}"]`); if (l?.innerText) return l.innerText; }
         for (const a of ["aria-label","placeholder","name","id","title"]){ const v=el.getAttribute?.(a); if (v) return v; }
@@ -71,41 +74,103 @@ async function applyAnswersInTab(tabId, answers){
     args: [answers],
     func: (answers) => {
       const norm = (s)=> (s||"").toString().replace(/\s+/g," ").trim().toLowerCase();
-      const visible = (el)=>{ const r=el.getBoundingClientRect(); const cs=getComputedStyle(el); return r.width>0 && r.height>0 && cs.visibility!=="hidden" && cs.display!=="none"; };
-      const fire = (el, type)=>{ try{ el.dispatchEvent(new Event(type,{bubbles:true})); }catch{} };
-      const similarity=(a,b)=>{ if(a===b) return 1; if(!a||!b) return 0; if(a.includes(b)||b.includes(a)) return Math.max(0.66, Math.min(a.length,b.length)/Math.max(a.length,b.length)); const as=new Set(a.split(/\W+/).filter(Boolean)), bs=new Set(b.split(/\W+/).filter(Boolean)); let inter=0; for(const x of as) if(bs.has(x)) inter++; return inter/Math.max(1, Math.min(as.size, bs.size)); };
+      const visible = (el)=>{
+        const r=el.getBoundingClientRect();
+        const cs=getComputedStyle(el);
+        return r.width>0 && r.height>0 && cs.visibility!=="hidden" && cs.display!=="none";
+      };
+      const fire = (el, type)=>{
+        try{
+          el.dispatchEvent(new Event(type,{bubbles:true}));
+        }catch{}
+      };
+      const similarity=(a,b)=>{
+        if(a===b) return 1;
+        if(!a||!b) return 0;
+        if(a.includes(b)||b.includes(a)) return Math.max(0.66, Math.min(a.length,b.length)/Math.max(a.length,b.length));
+        const as=new Set(a.split(/\W+/).filter(Boolean)), bs=new Set(b.split(/\W+/).filter(Boolean));
+        let inter=0;
+        for(const x of as) if(bs.has(x)) inter++;
+        return inter/Math.max(1, Math.min(as.size, bs.size));
+      };
       function setByType(el, val){
         if (el.matches("select")){
-          const target = norm(String(val)); let best=null, bestScore=0;
-          for (const opt of Array.from(el.options||[])){ const t=norm(opt.text||""); const v=norm(opt.value||""); const s=Math.max(similarity(t,target), similarity(v,target)); if (s>bestScore){ best=opt; bestScore=s; } }
-          if (best){ el.value=best.value; fire(el,"input"); fire(el,"change"); return true; } return false;
+          const target = norm(String(val));
+          let best=null, bestScore=0;
+          for (const opt of Array.from(el.options||[])){
+            const t=norm(opt.text||"");
+            const v=norm(opt.value||"");
+            const s=Math.max(similarity(t,target), similarity(v,target));
+            if (s>bestScore){ best=opt; bestScore=s; }
+          }
+          if (best){ el.value=best.value; fire(el,"input"); fire(el,"change"); return true; }
+          return false;
         }
         if (el.type==="checkbox"){
-          const truthy=new Set(["true","yes","y","1","on","checked"]); const falsy=new Set(["false","no","n","0","off","unchecked"]); const v=norm(String(val));
-          if (truthy.has(v)){ if(!el.checked){ el.click?.(); el.checked=true; } fire(el,"change"); return true; }
-          if (falsy.has(v)){ if(el.checked){ el.click?.(); el.checked=false; } fire(el,"change"); return true; }
+          const truthy=new Set(["true","yes","y","1","on","checked"]);
+          const falsy=new Set(["false","no","n","0","off","unchecked"]);
+          const v=norm(String(val));
+          if (truthy.has(v)){
+            if(!el.checked){ el.click?.(); el.checked=true; }
+            fire(el,"change");
+            return true;
+          }
+          if (falsy.has(v)){
+            if (el.checked){
+              el.click?.();
+              el.checked=false;
+            }
+            fire(el,"change");
+            return true;
+          }
           return false;
         }
         if (el.type==="date"){
-          const s=String(val).trim(); let out=null;
-          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) out=s; else { const d=new Date(s); if(!isNaN(d)){ const yyyy=d.getFullYear(); const mm=String(d.getMonth()+1).padStart(2,"0"); const dd=String(d.getDate()).padStart(2,"0"); out=`${yyyy}-${mm}-${dd}`; } }
-          if (!out) return false; el.value=out; fire(el,"input"); fire(el,"change"); return true;
+          const s=String(val).trim();
+          let out=null;
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) out=s;
+          else {
+            const d=new Date(s);
+            if(!isNaN(d)){
+              const yyyy=d.getFullYear();
+              const mm=String(d.getMonth()+1).padStart(2,"0");
+              const dd=String(d.getDate()).padStart(2,"0");
+              out=`${yyyy}-${mm}-${dd}`;
+            }
+          }
+          if (!out) return false;
+          el.value=out;
+          fire(el,"input");
+          fire(el,"change");
+          return true;
         }
-        el.value = String(val); fire(el,"input"); fire(el,"change"); return true;
+        el.value = String(val);
+        fire(el,"input");
+        fire(el,"change");
+        return true;
       }
-      const map = Object.create(null); for (const a of answers||[]) map[a.fieldId] = a.value;
-      let filled=0; const it=document.createNodeIterator(document, NodeFilter.SHOW_ELEMENT, {
+      const map = Object.create(null);
+      for (const a of answers||[]) map[a.fieldId] = a.value;
+      let filled=0;
+      const it=document.createNodeIterator(document, NodeFilter.SHOW_ELEMENT, {
         acceptNode(n){ if (!(n instanceof HTMLElement)) return NodeFilter.FILTER_SKIP; if (!visible(n)) return NodeFilter.FILTER_SKIP; if (n.matches("input,textarea,select")) return NodeFilter.FILTER_ACCEPT; return NodeFilter.FILTER_SKIP; }
       });
       let n, idx=0;
       while(n = it.nextNode()){
         let fid = n.id ? `id:${n.id}` : `idx:${idx++}`;
-        if (n instanceof HTMLInputElement && n.type==="radio"){ fid = `radio:${n.name}`; }
-        const val = map[fid]; if (val == null) continue;
+        if (n instanceof HTMLInputElement && n.type==="radio"){
+          fid = `radio:${n.name}`;
+        }
+        const val = map[fid];
+        if (val == null) continue;
         if (n instanceof HTMLInputElement && n.type==="radio"){
           const group = document.querySelectorAll(`input[type="radio"][name="${CSS.escape(n.name)}"]`);
           let best=null, bestScore=0, target=norm(String(val));
-          for (const r of group){ const lbl=document.querySelector(`label[for="${CSS.escape(r.id)}"]`)?.innerText || r.value || r.id || ""; const s=similarity(norm(lbl), target); if (s>bestScore){ best=r; bestScore=s; } }
+          for (const r of group){
+            const lbl=document.querySelector(`label[for="${CSS.escape(r.id)}"]`)?.innerText || r.value || r.id || "";
+            const s=similarity(norm(lbl), target);
+            if (s>bestScore){ best=r; bestScore=s; }
+          }
           if (best){ if (!best.checked){ best.click?.(); best.checked=true; } fire(best,"change"); filled++; }
           continue;
         }
@@ -118,9 +183,15 @@ async function applyAnswersInTab(tabId, answers){
 }
 
 async function runPopupLocalAI(tabId, opts){
+  const logs = [];
+  logs.push('[AI-AUTOFILL] Starting popup-local AI autofill.');
   const profile = await getProfile();
-  if (!profile?.apiKey) throw new Error("Missing API key in Options (apiKey).");
+  if (!profile?.apiKey) {
+    logs.push('[AI-AUTOFILL] Missing API key.');
+    throw new Error("Missing API key in Options (apiKey).");
+  }
   const { page, fields } = await collectFieldsInTab(tabId);
+  logs.push(`[AI-AUTOFILL] Collected ${fields.length} fields.`);
   const systemPrompt = [
     "You are a precise autofill engine for web forms.",
     "Return strict JSON: { answers: [{ fieldId: string, value: string | number | boolean }] }.",
@@ -130,9 +201,12 @@ async function runPopupLocalAI(tabId, opts){
     "Never include commentary or extra keys."
   ].join(" ");
   const ai = await callOpenAIFromPopup(profile.apiKey, profile.model || "gpt-4o-mini", systemPrompt, { page, profile, fields });
+  logs.push(`[AI-AUTOFILL] AI response received.`);
   const answers = ai?.answers || [];
+  logs.push(`[AI-AUTOFILL] Mapped ${answers.length} answers.`);
   const applied = await applyAnswersInTab(tabId, answers);
-  return { ok:true, frames: [0], results: [{frameId:0, ok:true, filled: applied.filled}], filled: applied.filled, bypass:true, aiLocal:true };
+  logs.push(`[AI-AUTOFILL] Filled ${applied.filled} fields.`);
+  return { ok:true, frames: [0], results: [{frameId:0, ok:true, filled: applied.filled, logs}], filled: applied.filled, bypass:true, aiLocal:true };
 }
 // === End popup-local AI fallback ===
 
@@ -153,7 +227,7 @@ async function directBroadcastFromPopup(tabId, opts){
     for (const f of frames){
       try{
         const res = await chrome.tabs.sendMessage(tabId, { type:"AUTOFILL_NOW", opts }, { frameId: f.frameId });
-        results.push({ frameId: f.frameId, ok: !!res?.ok, filled: res?.filled ?? 0, error: res?.error });
+        results.push({ frameId: f.frameId, ok: !!res?.ok, filled: res?.filled ?? 0, error: res?.error, logs: res?.logs });
       }catch(e){
         results.push({ frameId: f.frameId, ok: false, filled: 0, error: e?.message || String(e) });
       }
@@ -201,17 +275,21 @@ document.addEventListener("DOMContentLoaded", () => {
     try{
       const res = await broadcastAutofill({ ai: true });
       
-if (res?.ok){
-  setBadges(res.filled, res.frames?.length);
-  setStatus(`Completed across ${res.frames?.length ?? 1} frame(s). Filled: ${res.filled ?? 0}`);
-  if (Array.isArray(res.results)) {
-    const errs = res.results.filter(r=>!r.ok && r.error).map(r=>`frame ${r.frameId}: ${r.error}`);
-    if (errs.length) setStatus("Partial errors — " + errs[0]);
-  }
-} else {
-  const msg = res?.error || (Array.isArray(res?.results) && res.results.find(r=>!r.ok)?.error) || ("Unknown error. Raw: " + JSON.stringify(res));
-  setStatus("Failed: " + msg);
-}
+      if (res?.ok){
+        setBadges(res.filled, res.frames?.length);
+        setStatus(`Completed across ${res.frames?.length ?? 1} frame(s). Filled: ${res.filled ?? 0}`);
+        if (Array.isArray(res.results)) {
+          const errs = res.results.filter(r=>!r.ok && r.error).map(r=>`frame ${r.frameId}: ${r.error}`);
+          if (errs.length) setStatus("Partial errors — " + errs[0]);
+
+          const allLogs = res.results.flatMap(r => r.logs || []);
+          const logArea = $("log");
+          if (logArea) logArea.value = allLogs.join('\n');
+        }
+      } else {
+        const msg = res?.error || (Array.isArray(res?.results) && res.results.find(r=>!r.ok)?.error) || ("Unknown error. Raw: " + JSON.stringify(res));
+        setStatus("Failed: " + msg);
+      }
 
     }catch(e){ setStatus("Failed: " + (e?.message || String(e))); }
   });

@@ -41,7 +41,7 @@ if (msg?.type === "BROADCAST_AUTOFILL") { console.debug('[autofill] BROADCAST_AU
     for (const f of frames) {
       try {
         const res = await chrome.tabs.sendMessage(tabId, { type: "AUTOFILL_NOW", opts: msg.opts || {} }, { frameId: f.frameId });
-        results.push({ frameId: f.frameId, ok: !!res?.ok, filled: res?.filled ?? 0, error: res?.error });
+        results.push({ frameId: f.frameId, ok: !!res?.ok, filled: res?.filled ?? 0, error: res?.error, logs: res?.logs });
       } catch (e) {
         results.push({ frameId: f.frameId, ok: false, filled: 0, error: e?.message || String(e) });
       }
