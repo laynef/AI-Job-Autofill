@@ -261,12 +261,12 @@ try {
 =======
     document.addEventListener('DOMContentLoaded', function() {
         const statusEl = document.getElementById('status');
-        const resumeFileNameEl = document.getElementById('resumeFileName');
-        const resumeFileInput = document.getElementById('resumeFile');
-        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'apiKey', 'additionalInfo'];
+        const resumeFileNameEl = document.getElementById('resume');
+        const resumeFileInput = document.getElementById('resume');
+        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'apiKey', 'additionalInfo', 'gender', 'race', 'veteranStatus', 'disabilityStatus'];
 
         // Load saved data when the popup opens
-        chrome.storage.local.get([...textFields, 'resumeFileName'], function(result) {
+        chrome.storage.local.get([...textFields, 'resume'], function(result) {
             if (chrome.runtime.lastError) { return console.error("Error loading data:", chrome.runtime.lastError.message); }
             textFields.forEach(field => {
                 const el = document.getElementById(field);
