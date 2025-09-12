@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // === Popup-local AI fallback (no service worker required) ===
 async function getProfile(){
   return await new Promise(res => chrome.storage.local.get([
@@ -692,6 +693,25 @@ async function autofillPage() {
     }
     console.log("AI Autofill: Process finished.");
 >>>>>>> parent of a212aeb (1.3)
+=======
+
+// Augments existing popup to trigger autofill on the active tab.
+// Call sendAutofill() on your "Fill" button's click handler.
+async function sendAutofill() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) return;
+    const res = await chrome.tabs.sendMessage(tab.id, { type: "AUTOFILL_NOW" });
+    console.log("Autofill result:", res);
+  } catch (e) {
+    console.warn("Could not send autofill message (content script not loaded). Attempting to inject...");
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) return;
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
+    const res = await chrome.tabs.sendMessage(tab.id, { type: "AUTOFILL_NOW" });
+    console.log("Autofill result after inject:", res);
+  }
+>>>>>>> parent of ab60b0c (1.3)
 }
 function setStatus(s){ const el=$("status"); if (el) el.textContent=s; const log=$("log"); if (log) log.value = (new Date().toLocaleTimeString()+" — "+s+"\n"+log.value).slice(0,8000); }
 function setBadges(filled, frames){ const f=$("filledCount"); const fr=$("frameCount"); if (f) f.textContent = `${filled ?? 0} filled`; if (fr) fr.textContent = `frames: ${frames ?? 0}`; }
