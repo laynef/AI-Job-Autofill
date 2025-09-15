@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Job Application Autofill</title>
+    <style>
+        /* General Styles */
+        body {
+            width: 400px;
+            background-color: #f9fafb;
+            padding: 1rem;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+        }
+        .space-y-3 > :not([hidden]) ~ :not([hidden]) {
+            margin-top: 0.75rem;
+        }
+        /* Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* Header */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .header h1 { font-size: 1.25rem; font-weight: 700; color: #1f2937; }
+        .header img { width: 2rem; height: 2rem; border-radius: 0.5rem; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06); }
+
+        /* Form Elements */
+        .form-container { max-height: 24rem; overflow-y: auto; padding-right: 0.5rem; }
+        .section-header { font-size: 1.125rem; font-weight: 600; color: #374151; padding-top: 0.5rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.25rem; }
+        .grid-cols-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+        .grid-cols-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
+
+        label { display: block; font-size: 0.875rem; font-weight: 500; color: #4b5563; }
+        input[type="text"], input[type="email"], input[type="tel"], input[type="url"], input[type="password"], textarea {
+            margin-top: 0.25rem;
+            display: block;
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            background-color: #fff;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+        input:focus, textarea:focus { outline: 2px solid transparent; outline-offset: 2px; --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color); --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(3px + var(--tw-ring-offset-width)) var(--tw-ring-color); box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000); border-color: #4f46e5; }
+
+        input[type="file"] {
+             margin-top: 0.25rem; display: block; width: 100%; font-size: 0.875rem; color: #6b7280;
+        }
+        input[type="file"]::file-selector-button {
+            margin-right: 1rem; padding: 0.5rem 1rem; border-radius: 0.375rem; border-width: 0; font-size: 0.875rem; font-weight: 600; background-color: #eef2ff; color: #4338ca;
+        }
+         input[type="file"]::file-selector-button:hover {
+            background-color: #e0e7ff;
+         }
+
+        #resumeFileName { font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem; }
+
+        /* Footer & Buttons */
+        .footer { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; }
+        #status { text-align: center; margin-bottom: 0.5rem; height: 1.25rem; font-size: 0.875rem; font-weight: 500; color: #16a34a; }
+        .button-container { display: flex; gap: 0.75rem; }
+        button { flex: 1; font-weight: 700; padding: 0.5rem 1rem; border-radius: 0.375rem; transition: background-color 0.15s ease-in-out; }
+        button:focus { outline: 2px solid transparent; outline-offset: 2px; --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color); --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(3px + var(--tw-ring-offset-width)) var(--tw-ring-color); box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000); }
+        
+        #save { background-color: #4f46e5; color: white; }
+        #save:hover { background-color: #4338ca; }
+        
+        #autofill { background-color: #374151; color: white; }
+        #autofill:hover { background-color: #1f2937; }
+
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>AI Autofill Profile</h1>
+        <img src="images/icon48.png">
+    </div>
+
+    <div class="form-container space-y-3 custom-scrollbar">
+        <h2 class="section-header">Personal Information</h2>
+        <div class="grid-cols-2">
+            <div>
+                <label for="firstName">First Name</label>
+                <input type="text" id="firstName">
+            </div>
+            <div>
+                <label for="lastName">Last Name</label>
+                <input type="text" id="lastName">
+            </div>
+        </div>
+        <input type="text" id="pronouns" placeholder="Pronouns (e.g., she/her)">
+        <input type="email" id="email" placeholder="Email">
+        <input type="tel" id="phone" placeholder="Phone">
+        <input type="text" id="address" placeholder="Address">
+        <div class="grid-cols-3">
+             <input type="text" id="city" placeholder="City">
+             <input type="text" id="state" placeholder="State/Province">
+             <input type="text" id="zipCode" placeholder="Zip/Postal Code">
+        </div>
+        <input type="text" id="country" placeholder="Country">
+        <input type="url" id="linkedinUrl" placeholder="LinkedIn URL">
+        <input type="url" id="portfolioUrl" placeholder="Portfolio/Website URL">
+        
+        <h2 class="section-header">AI & Resume</h2>
+        <input type="password" id="apiKey" placeholder="Google AI API Key (Required)">
+        <div>
+            <label for="resumeFile">Upload Resume/CV (.pdf, .docx)</label>
+            <input type="file" id="resumeFile" accept=".pdf,.docx">
+            <p id="resumeFileName"></p>
+        </div>
+        <div>
+            <label for="additionalInfo">Key Skills / Cover Letter Points</label>
+            <textarea id="additionalInfo" rows="3" placeholder="e.g., Expert in Python, 10+ years of experience in project management..."></textarea>
+        </div>
+    </div>
+
+    <div class="footer">
+        <div id="status"></div>
+        <div class="button-container">
+            <button id="save">Save Information</button>
+            <button id="autofill">Autofill Page</button>
+        </div>
+    </div>
+    
+    <script src="popup.js"></script>
+</body>
+</html>
+
