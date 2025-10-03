@@ -156,6 +156,17 @@ async function autofillPage() {
         element.blur();
     }
 
+    async function base64ToFile(base64, filename, mimeType) {
+        try {
+            const res = await fetch(base64);
+            const blob = await res.blob();
+            return new File([blob], filename, { type: mimeType });
+        } catch (e) {
+            console.error("Error converting base64 to File:", e);
+            return null;
+        }
+    }
+
     function findQuestionForInput(element) {
         const checks = [
             element.getAttribute('aria-label'),
@@ -337,10 +348,33 @@ async function autofillPage() {
             
             // --- Check if already filled ---
             const isRadioOrCheckbox = el.type === 'radio' || el.type === 'checkbox';
-            if (isRadioOrCheckbox && el.name && document.querySelector(`input[name="${el.name}"]:checked`)) continue;
-            if (el.value?.trim() && !isRadioOrCheckbox) continue;
-            if (el.isContentEditable && el.textContent?.trim()) continue;
-            if (elType === 'select' && el.selectedIndex > 0) continue;
+            let isFilled = false;
+
+            if (isRadioOrCheckbox) {
+                if (el.name && document.querySelector(`input[name="${el.name}"]:checked`)) {
+                    isFilled = true;
+                }
+            } else if (elType === 'select') {
+                const selectedOption = el.options[el.selectedIndex];
+                if (el.selectedIndex > 0 || (selectedOption && selectedOption.value && selectedOption.value.trim() !== '')) {
+                    isFilled = true;
+                }
+            } else if (el.isContentEditable) {
+                if (el.textContent?.trim()) {
+                    isFilled = true;
+                }
+            } else if (typeof el.value === 'string' && el.value.trim()) {
+                if (el.placeholder && el.value === el.placeholder) {
+                    // Value is just a placeholder, not filled.
+                    isFilled = false;
+                } else {
+                    isFilled = true;
+                }
+            }
+
+            if (isFilled) {
+                continue;
+            }
 
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             await new Promise(resolve => setTimeout(resolve, 200));
@@ -373,6 +407,35 @@ async function autofillPage() {
                     if (resumeText) await simulateTyping(el, resumeText);
                     continue;
                 }
+            }
+
+            // --- Cover Letter ---
+            if (el.dataset.testid === 'cover_letter-text') {
+                await simulateClick(el);
+                await new Promise(resolve => setTimeout(resolve, 500)); // Wait for textarea to appear
+
+                const coverLetterTextArea = document.getElementById('cover_letter_text');
+                if (coverLetterTextArea) {
+                    const coverLetterPrompt = `You are a helpful career assistant. Based on the provided resume, user profile, and job description, write a compelling cover letter.
+                        ---
+                        **CONTEXT:**
+                        - Job Title: ${jobTitle || 'Not found.'}
+                        - Job Description: ${jobDescription || 'Not found.'}
+                        - My Profile & Skills: ${userData.additionalInfo || 'Not provided.'}
+                        ---
+                        **INSTRUCTIONS:**
+                        - The cover letter should be professional, concise, and tailored to the job.
+                        - Highlight relevant skills and experiences from my profile.
+                        - Address it to the hiring manager if possible, otherwise use a generic salutation.
+                        - Keep it to 3-4 paragraphs.
+                        - Return only the cover letter text.
+                        **COVER LETTER:**`;
+                    const coverLetterText = await getAIResponse(coverLetterPrompt, userData);
+                    if (coverLetterText) {
+                        await simulateTyping(coverLetterTextArea, coverLetterText);
+                    }
+                }
+                continue; // Move to the next element
             }
             
             // --- Work Experience ---
