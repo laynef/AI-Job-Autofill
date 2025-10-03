@@ -356,7 +356,7 @@ async function autofillPage() {
                 }
             } else if (elType === 'select') {
                 const selectedOption = el.options[el.selectedIndex];
-                if (el.selectedIndex > 0 || (selectedOption && selectedOption.value && selectedOption.value.trim() !== '')) {
+                if (el.selectedIndex > 0 || (selectedOption && selectedOption.value && selectedOption.text.toLowerCase().trim() !== 'select' && selectedOption.value.trim() !== '')) {
                     isFilled = true;
                 }
             } else if (el.isContentEditable) {
@@ -364,8 +364,7 @@ async function autofillPage() {
                     isFilled = true;
                 }
             } else if (typeof el.value === 'string' && el.value.trim()) {
-                if (el.placeholder && el.value === el.placeholder) {
-                    // Value is just a placeholder, not filled.
+                if (el.placeholder && el.value.trim() === el.placeholder.trim()) {
                     isFilled = false;
                 } else {
                     isFilled = true;
@@ -373,6 +372,7 @@ async function autofillPage() {
             }
 
             if (isFilled) {
+                console.log("AI Autofill: Skipping already filled element:", el);
                 continue;
             }
 
