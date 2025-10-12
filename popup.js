@@ -325,11 +325,22 @@ async function autofillPage() {
         }
     } catch(e) { console.error("AI Autofill: Could not parse work history from resume.", e); }
 
+    const educationPrompt = "Analyze the attached resume and extract education history. Return a JSON array where each object has 'degree', 'school', 'fieldOfStudy', 'startDate', 'endDate', and 'gpa' keys. If GPA is not mentioned, use an empty string.";
+    let educationHistory = [];
+    try {
+        const educationJson = await getAIResponse(educationPrompt, userData);
+        if (educationJson) {
+            const cleanedJson = educationJson.replace(/```json/g, '').replace(/```/g, '').trim();
+            educationHistory = JSON.parse(cleanedJson);
+        }
+    } catch(e) { console.error("AI Autofill: Could not parse education from resume.", e); }
+
     await new Promise(resolve => setTimeout(resolve, 500)); // Wait for the page to finish loading dynamic content
     
     const demographicKeywords = ['race', 'ethnicity', 'gender', 'disability', 'veteran', 'sexual orientation'];
     let usedAnswers = new Set();
     let experienceIndex = 0;
+    let educationIndex = 0;
     
     const allElements = Array.from(document.querySelectorAll('input, textarea, select, [role="textbox"], [role="combobox"], [contenteditable="true"], button'));
 
@@ -439,62 +450,241 @@ async function autofillPage() {
             }
             
             // --- Work Experience ---
-            if (combinedText.includes('experience') || (workHistory[experienceIndex] && (combinedText.includes(workHistory[experienceIndex].company.toLowerCase()) || combinedText.includes(workHistory[experienceIndex].jobTitle.toLowerCase())))) {
-                 if (experienceIndex < workHistory.length) {
-                    const currentJob = workHistory[experienceIndex];
-                    if (combinedText.includes('title')) await simulateTyping(el, currentJob.jobTitle);
-                    else if (combinedText.includes('company')) await simulateTyping(el, currentJob.company);
-                    else if (combinedText.includes('start')) await simulateTyping(el, currentJob.startDate);
-                    else if (combinedText.includes('end')) await simulateTyping(el, currentJob.endDate);
-                    else if (combinedText.includes('responsibilit')) {
-                        await simulateTyping(el, currentJob.responsibilities);
-                        experienceIndex++; 
-                        const addButton = Array.from(document.querySelectorAll('button, [role="button"]')).find(b => b.innerText.toLowerCase().includes('add') && b.innerText.toLowerCase().includes('experience'));
+            const isWorkExperienceField = combinedText.includes('experience') || combinedText.includes('employment') ||
+                                         combinedText.includes('work history') || combinedText.includes('job history') ||
+                                         (workHistory[experienceIndex] && (combinedText.includes(workHistory[experienceIndex].company.toLowerCase()) ||
+                                          combinedText.includes(workHistory[experienceIndex].jobTitle.toLowerCase())));
+
+            if (isWorkExperienceField && experienceIndex < workHistory.length) {
+                const currentJob = workHistory[experienceIndex];
+                let filled = false;
+
+                // Job title
+                if (combinedText.includes('title') || combinedText.includes('position') || combinedText.includes('role')) {
+                    await simulateTyping(el, currentJob.jobTitle);
+                    filled = true;
+                }
+                // Company/Employer
+                else if (combinedText.includes('company') || combinedText.includes('employer') || combinedText.includes('organization')) {
+                    await simulateTyping(el, currentJob.company);
+                    filled = true;
+                }
+                // Start date
+                else if (combinedText.includes('start') && (combinedText.includes('date') || combinedText.includes('from'))) {
+                    await simulateTyping(el, currentJob.startDate);
+                    filled = true;
+                }
+                // End date
+                else if (combinedText.includes('end') && (combinedText.includes('date') || combinedText.includes('to'))) {
+                    await simulateTyping(el, currentJob.endDate || 'Present');
+                    filled = true;
+                }
+                // Responsibilities/Description
+                else if (combinedText.includes('responsibilit') || combinedText.includes('dut') ||
+                         combinedText.includes('description') || combinedText.includes('achievement')) {
+                    await simulateTyping(el, currentJob.responsibilities);
+                    filled = true;
+
+                    // Move to next job and look for "Add Another" button
+                    experienceIndex++;
+                    await new Promise(resolve => setTimeout(resolve, 300));
+
+                    // Find and click "Add" button for next experience if more jobs exist
+                    if (experienceIndex < workHistory.length) {
+                        const addButton = Array.from(document.querySelectorAll('button, [role="button"]')).find(b => {
+                            const btnText = b.innerText.toLowerCase();
+                            return (btnText.includes('add') && (btnText.includes('experience') || btnText.includes('another') || btnText.includes('more'))) ||
+                                   btnText.includes('+ experience');
+                        });
                         if (addButton) {
                             await simulateClick(addButton);
-                            await new Promise(resolve => setTimeout(resolve, 500));
+                            await new Promise(resolve => setTimeout(resolve, 800)); // Wait for new fields to appear
                         }
                     }
+                }
+
+                if (filled) continue;
+            }
+
+            // --- Education ---
+            const isEducationField = combinedText.includes('education') || combinedText.includes('school') ||
+                                    combinedText.includes('university') || combinedText.includes('college') ||
+                                    combinedText.includes('degree') || combinedText.includes('academic') ||
+                                    (educationHistory[educationIndex] && (combinedText.includes(educationHistory[educationIndex].school.toLowerCase()) ||
+                                     combinedText.includes(educationHistory[educationIndex].degree.toLowerCase())));
+
+            if (isEducationField && educationIndex < educationHistory.length) {
+                const currentEd = educationHistory[educationIndex];
+                let filled = false;
+
+                // School/University name
+                if (combinedText.includes('school') || combinedText.includes('university') ||
+                    combinedText.includes('college') || combinedText.includes('institution')) {
+                    await simulateTyping(el, currentEd.school);
+                    filled = true;
+                }
+                // Degree
+                else if (combinedText.includes('degree') || combinedText.includes('qualification') ||
+                         combinedText.includes('level of education')) {
+                    await simulateTyping(el, currentEd.degree);
+                    filled = true;
+                }
+                // Field of study/Major
+                else if (combinedText.includes('major') || combinedText.includes('field') ||
+                         combinedText.includes('study') || combinedText.includes('concentration')) {
+                    await simulateTyping(el, currentEd.fieldOfStudy);
+                    filled = true;
+                }
+                // GPA
+                else if (combinedText.includes('gpa') || combinedText.includes('grade point')) {
+                    if (currentEd.gpa) {
+                        await simulateTyping(el, currentEd.gpa);
+                        filled = true;
+                    }
+                }
+                // Start date
+                else if (combinedText.includes('start') && (combinedText.includes('date') || combinedText.includes('from'))) {
+                    await simulateTyping(el, currentEd.startDate);
+                    filled = true;
+                }
+                // End date / Graduation date
+                else if ((combinedText.includes('end') || combinedText.includes('graduation') || combinedText.includes('completion')) &&
+                         (combinedText.includes('date') || combinedText.includes('year'))) {
+                    await simulateTyping(el, currentEd.endDate || 'Expected 2024');
+                    filled = true;
+
+                    // Move to next education entry
+                    educationIndex++;
+                    await new Promise(resolve => setTimeout(resolve, 300));
+
+                    // Find and click "Add" button for next education if more entries exist
+                    if (educationIndex < educationHistory.length) {
+                        const addButton = Array.from(document.querySelectorAll('button, [role="button"]')).find(b => {
+                            const btnText = b.innerText.toLowerCase();
+                            return (btnText.includes('add') && (btnText.includes('education') || btnText.includes('another') || btnText.includes('more'))) ||
+                                   btnText.includes('+ education');
+                        });
+                        if (addButton) {
+                            await simulateClick(addButton);
+                            await new Promise(resolve => setTimeout(resolve, 800));
+                        }
+                    }
+                }
+
+                if (filled) continue;
+            }
+
+            // --- Certifications and Skills ---
+            if ((combinedText.includes('certification') || combinedText.includes('license') ||
+                 combinedText.includes('credential')) && !isDemographic) {
+                const certPrompt = `Based on my resume, list any professional certifications, licenses, or credentials I have. If the question asks for a specific certification like "${question}", respond with whether I have it (Yes/No) or provide the certification details if I have it.
+
+Question: ${question}
+
+Provide a concise answer.`;
+                const certAnswer = await getAIResponse(certPrompt, userData);
+                if (certAnswer) {
+                    await simulateTyping(el, certAnswer);
                     continue;
                 }
             }
-            
+
+            // Technical skills / Programming languages
+            if ((combinedText.includes('programming') || combinedText.includes('language') ||
+                 combinedText.includes('framework') || combinedText.includes('tool')) &&
+                (combinedText.includes('skill') || combinedText.includes('familiar') ||
+                 combinedText.includes('proficien') || combinedText.includes('experience'))) {
+                const techSkillsPrompt = `Based on my resume and profile, list the relevant technical skills, programming languages, frameworks, or tools that match this question: "${question}". Provide a concise, comma-separated list or a brief answer.`;
+                const techAnswer = await getAIResponse(techSkillsPrompt, userData);
+                if (techAnswer) {
+                    await simulateTyping(el, techAnswer);
+                    continue;
+                }
+            }
+
             // --- Options (Dropdowns, Radios, etc.) ---
             const { options, source } = await findOptionsForInput(el);
             if (options.length > 0) {
                 const cleanQuestion = question.replace(/[*:]$/, '').trim();
-                 const prompt = `You are a helpful career assistant. Your task is to select the single best option from a list to answer a job application question.
+
+                // Determine question type for better AI context
+                let questionType = 'general';
+                if (combinedText.includes('willing') || combinedText.includes('relocat')) questionType = 'relocation';
+                else if (combinedText.includes('remote') || combinedText.includes('hybrid')) questionType = 'work-location';
+                else if (combinedText.includes('how') && combinedText.includes('hear')) questionType = 'referral-source';
+                else if (combinedText.includes('status') || combinedText.includes('citizenship')) questionType = 'work-status';
+                else if (combinedText.includes('notice') || combinedText.includes('period')) questionType = 'notice-period';
+
+                const prompt = `You are a helpful career assistant. Your task is to select the single best option from a list to answer a job application question.
                     ---
                     **CONTEXT:**
-                    - Job Description: ${jobDescription || 'Not found.'}
-                    - My Profile: ${userData.additionalInfo || 'Not provided.'}
+                    - Job Title: ${jobTitle || 'Not specified'}
+                    - Job Description: ${jobDescription || 'Not specified'}
+                    - My Profile: ${userData.additionalInfo || 'Not provided'}
+                    - Question Type: ${questionType}
                     - Answers Already Used: ${Array.from(usedAnswers).join(", ") || 'None'}
                     ---
                     **TASK:**
                     - Question: "${cleanQuestion}"
-                    - Options:
-                    - ${options.join("\n- ")}
+                    - Available Options:
+                    ${options.map((opt, idx) => `${idx + 1}. ${opt}`).join('\n')}
                     ---
-                    **INSTRUCTIONS:** Return ONLY the exact text of the best option from the list.
+                    **INSTRUCTIONS:**
+                    - Return ONLY the exact text of the best option from the list above.
+                    - Do not add any explanation or preamble.
+                    - Choose the most professional and appropriate answer.
+                    - For yes/no questions, choose based on what would make me the strongest candidate.
+                    - If unsure, prefer options that show flexibility and willingness.
                     **BEST OPTION:**`;
-                    
-                const aiChoice = await getAIResponse(prompt, userData) || options[0]; // Fallback to first option
-                
-                usedAnswers.add(aiChoice);
+
+                let aiChoice = await getAIResponse(prompt, userData);
+
+                // Clean up the AI response to match an option exactly
+                aiChoice = aiChoice.trim();
+
+                // Try fuzzy matching if exact match fails
+                let bestMatch = options.find(opt => opt.trim().toLowerCase() === aiChoice.toLowerCase());
+                if (!bestMatch) {
+                    // Try partial match
+                    bestMatch = options.find(opt => opt.toLowerCase().includes(aiChoice.toLowerCase()) || aiChoice.toLowerCase().includes(opt.toLowerCase()));
+                }
+                if (!bestMatch) {
+                    // Fallback to first non-empty option
+                    bestMatch = options.find(opt => opt.trim() && opt.toLowerCase() !== 'select' && opt.toLowerCase() !== 'choose') || options[0];
+                }
+
+                usedAnswers.add(bestMatch);
+
+                // Select the option based on element type
                 if (el.tagName.toLowerCase() === 'select') {
                     for (let option of el.options) {
-                        if (option.text.trim() === aiChoice) { el.value = option.value; el.dispatchEvent(new Event('change', { bubbles: true })); break; }
+                        if (option.text.trim() === bestMatch || option.text.trim().toLowerCase() === bestMatch.toLowerCase()) {
+                            el.value = option.value;
+                            el.dispatchEvent(new Event('change', { bubbles: true }));
+                            el.dispatchEvent(new Event('input', { bubbles: true }));
+                            break;
+                        }
                     }
                 } else if (el.type === 'radio' || el.type === 'checkbox') {
                     for (const input of document.querySelectorAll(`input[name="${el.name}"]`)) {
                         const label = document.querySelector(`label[for="${input.id}"]`);
-                        if (label && label.innerText.trim() === aiChoice) { await simulateClick(input); break; }
+                        if (label && (label.innerText.trim() === bestMatch || label.innerText.trim().toLowerCase() === bestMatch.toLowerCase())) {
+                            await simulateClick(input);
+                            break;
+                        }
                     }
                 } else {
+                    // Custom dropdowns and comboboxes
                     const optionElements = Array.from(source.querySelectorAll('[role="option"], button'));
-                    const targetOption = optionElements.find(opt => opt.innerText.trim() === aiChoice);
-                    if (targetOption) await simulateClick(targetOption);
-                    else await simulateTyping(el, aiChoice); // Type if direct match fails
+                    const targetOption = optionElements.find(opt =>
+                        opt.innerText.trim() === bestMatch ||
+                        opt.innerText.trim().toLowerCase() === bestMatch.toLowerCase()
+                    );
+                    if (targetOption) {
+                        await simulateClick(targetOption);
+                    } else {
+                        await simulateTyping(el, bestMatch); // Type if direct match fails
+                    }
                 }
                 continue;
             }
@@ -502,36 +692,189 @@ async function autofillPage() {
             // --- Standard Text Fields ---
             if (elType === 'input' || elType === 'textarea' || el.isContentEditable) {
                 let valueToType = '';
-                if (combinedText.includes('first') && combinedText.includes('name')) valueToType = userData.firstName;
-                else if (combinedText.includes('last') && combinedText.includes('name')) valueToType = userData.lastName;
-                else if (combinedText.includes('full') && combinedText.includes('name')) valueToType = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
-                else if (combinedText.includes('email')) valueToType = userData.email;
-                else if (combinedText.includes('phone')) valueToType = userData.phone;
-                else if (combinedText.includes('pronoun')) valueToType = userData.pronouns;
-                else if (combinedText.includes('address')) valueToType = userData.address;
-                else if (combinedText.includes('city')) valueToType = userData.city;
-                else if (combinedText.includes('state') || combinedText.includes('province')) valueToType = userData.state;
-                else if (combinedText.includes('zip') || combinedText.includes('postal')) valueToType = userData.zipCode;
-                else if (combinedText.includes('country')) valueToType = userData.country;
-                else if (combinedText.includes('linkedin')) valueToType = userData.linkedinUrl;
-                else if (combinedText.includes('website') || combinedText.includes('portfolio')) valueToType = userData.portfolioUrl;
-                
+
+                // Name fields
+                if ((combinedText.includes('first') && combinedText.includes('name')) ||
+                    combinedText.includes('firstname') || combinedText.includes('given name')) {
+                    valueToType = userData.firstName;
+                }
+                else if ((combinedText.includes('last') && combinedText.includes('name')) ||
+                         combinedText.includes('lastname') || combinedText.includes('surname') ||
+                         combinedText.includes('family name')) {
+                    valueToType = userData.lastName;
+                }
+                else if ((combinedText.includes('full') && combinedText.includes('name')) ||
+                         combinedText.includes('fullname') || combinedText.includes('legal name') ||
+                         (combinedText.includes('name') && !combinedText.includes('user') && !combinedText.includes('file'))) {
+                    valueToType = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                }
+                // Contact information
+                else if (combinedText.includes('email') || combinedText.includes('e-mail')) {
+                    valueToType = userData.email;
+                }
+                else if (combinedText.includes('phone') || combinedText.includes('mobile') ||
+                         combinedText.includes('telephone') || combinedText.includes('contact number')) {
+                    valueToType = userData.phone;
+                }
+                else if (combinedText.includes('pronoun')) {
+                    valueToType = userData.pronouns;
+                }
+                // Address fields
+                else if ((combinedText.includes('address') && !combinedText.includes('email')) ||
+                         combinedText.includes('street')) {
+                    valueToType = userData.address;
+                }
+                else if (combinedText.includes('city') || combinedText.includes('town')) {
+                    valueToType = userData.city;
+                }
+                else if (combinedText.includes('state') || combinedText.includes('province') ||
+                         combinedText.includes('region')) {
+                    valueToType = userData.state;
+                }
+                else if (combinedText.includes('zip') || combinedText.includes('postal')) {
+                    valueToType = userData.zipCode;
+                }
+                else if (combinedText.includes('country') || combinedText.includes('nation')) {
+                    valueToType = userData.country;
+                }
+                // Social/Professional links
+                else if (combinedText.includes('linkedin')) {
+                    valueToType = userData.linkedinUrl;
+                }
+                else if (combinedText.includes('website') || combinedText.includes('portfolio') ||
+                         combinedText.includes('personal site') || combinedText.includes('url')) {
+                    valueToType = userData.portfolioUrl;
+                }
+                // Availability and start date
+                else if (combinedText.includes('available') || combinedText.includes('start date') ||
+                         combinedText.includes('availability')) {
+                    const availabilityPrompt = `Based on the job application context, provide a professional availability response. Common options: "Immediately", "2 weeks notice", "1 month", etc. Provide just the answer.`;
+                    valueToType = await getAIResponse(availabilityPrompt, userData) || "Immediately";
+                }
+                // Salary expectations
+                else if (combinedText.includes('salary') || combinedText.includes('compensation') ||
+                         combinedText.includes('expected pay') || combinedText.includes('wage')) {
+                    const salaryPrompt = `Based on the job description and my profile, what would be a reasonable salary expectation? Provide just a number or range (e.g., "$80,000 - $100,000" or "Negotiable").
+
+Job: ${jobTitle || 'Not specified'}
+Description: ${jobDescription || 'Not specified'}`;
+                    valueToType = await getAIResponse(salaryPrompt, userData) || "Negotiable";
+                }
+                // Years of experience
+                else if (combinedText.includes('years') && (combinedText.includes('experience') || combinedText.includes('exp'))) {
+                    const yearsPrompt = `Based on my resume, how many years of relevant experience do I have? Provide just a number.`;
+                    valueToType = await getAIResponse(yearsPrompt, userData) || "5";
+                }
+                // Skills/Technologies
+                else if (combinedText.includes('skills') || combinedText.includes('technologies') ||
+                         combinedText.includes('expertise') || combinedText.includes('proficienc')) {
+                    valueToType = userData.additionalInfo || await getAIResponse("List my key technical skills from my resume in a concise format.", userData);
+                }
+                // References
+                else if (combinedText.includes('reference') && !combinedText.includes('preference')) {
+                    valueToType = "Available upon request";
+                }
+                // Authorization to work
+                else if (combinedText.includes('authorized') || combinedText.includes('authorization') ||
+                         combinedText.includes('eligible to work') || combinedText.includes('work permit')) {
+                    valueToType = "Yes";
+                }
+                // Sponsorship
+                else if (combinedText.includes('sponsor') || combinedText.includes('visa')) {
+                    valueToType = "No";
+                }
+                // Notice period / Current employment
+                else if (combinedText.includes('notice period') || combinedText.includes('notice required')) {
+                    valueToType = "2 weeks";
+                }
+                else if (combinedText.includes('currently employed') || combinedText.includes('current employment')) {
+                    valueToType = "Yes";
+                }
+                // Why are you interested / Why this company
+                else if ((combinedText.includes('why') && (combinedText.includes('interested') || combinedText.includes('applying'))) ||
+                         (combinedText.includes('why') && (combinedText.includes('company') || combinedText.includes('role') || combinedText.includes('position')))) {
+                    const whyPrompt = `Based on the job description and my profile, write a concise 2-3 sentence answer explaining why I'm interested in this role/company.
+
+Job Title: ${jobTitle || 'Not specified'}
+Job Description: ${jobDescription || 'Not specified'}
+My Profile: ${userData.additionalInfo || 'Not provided'}
+
+Be specific and professional. Focus on alignment between my skills and the role.`;
+                    valueToType = await getAIResponse(whyPrompt, userData) || "I am excited about this opportunity because it aligns with my skills and career goals.";
+                }
+                // Cover letter (if not handled earlier)
+                else if (combinedText.includes('cover letter') && (elType === 'textarea' || el.isContentEditable)) {
+                    const coverLetterPrompt = `You are a helpful career assistant. Based on the provided resume, user profile, and job description, write a compelling cover letter.
+                        ---
+                        **CONTEXT:**
+                        - Job Title: ${jobTitle || 'Not found.'}
+                        - Job Description: ${jobDescription || 'Not found.'}
+                        - My Profile & Skills: ${userData.additionalInfo || 'Not provided.'}
+                        ---
+                        **INSTRUCTIONS:**
+                        - The cover letter should be professional, concise, and tailored to the job.
+                        - Highlight relevant skills and experiences from my profile.
+                        - Address it to the hiring manager if possible, otherwise use a generic salutation.
+                        - Keep it to 3-4 paragraphs.
+                        - Return only the cover letter text.
+                        **COVER LETTER:**`;
+                    valueToType = await getAIResponse(coverLetterPrompt, userData);
+                }
+                // LinkedIn profile
+                else if (combinedText.includes('github')) {
+                    valueToType = userData.portfolioUrl; // Assuming portfolio might include GitHub
+                }
+                // Desired job title
+                else if (combinedText.includes('desired') && combinedText.includes('title')) {
+                    valueToType = jobTitle || await getAIResponse("Based on my resume, what job title am I best suited for? Provide just the title.", userData);
+                }
+
                 if (valueToType) {
                      await simulateTyping(el, valueToType);
                 } else {
                     const cleanQuestion = question.replace(/[*:]$/, '').trim();
                     if (cleanQuestion.length > 10 && !isDemographic) {
+                        // Determine question category for better prompting
+                        let questionCategory = 'general';
+                        let maxLength = '2-4 sentences';
+
+                        if (elType === 'textarea' || el.isContentEditable) {
+                            maxLength = '3-5 sentences or a short paragraph';
+                        } else if (elType === 'input' && el.type === 'text') {
+                            maxLength = '1-2 sentences or a brief phrase';
+                        }
+
+                        if (cleanQuestion.toLowerCase().includes('tell me about') || cleanQuestion.toLowerCase().includes('describe yourself')) {
+                            questionCategory = 'self-introduction';
+                        } else if (cleanQuestion.toLowerCase().includes('strength') || cleanQuestion.toLowerCase().includes('weakness')) {
+                            questionCategory = 'strengths-weaknesses';
+                        } else if (cleanQuestion.toLowerCase().includes('challenge') || cleanQuestion.toLowerCase().includes('difficult')) {
+                            questionCategory = 'behavioral-challenge';
+                        } else if (cleanQuestion.toLowerCase().includes('achieve') || cleanQuestion.toLowerCase().includes('accomplishment')) {
+                            questionCategory = 'achievement';
+                        } else if (cleanQuestion.toLowerCase().includes('team') || cleanQuestion.toLowerCase().includes('collaboration')) {
+                            questionCategory = 'teamwork';
+                        }
+
                         const prompt = `You are a helpful career assistant. Answer the following job application question concisely, based on my resume and the job description.
                             ---
                             **CONTEXT:**
+                            - Job Title: ${jobTitle || 'Not found.'}
                             - Job Description: ${jobDescription || 'Not found.'}
                             - My Profile: ${userData.additionalInfo || 'Not provided.'}
+                            - Question Category: ${questionCategory}
                             - Answers Already Used: ${Array.from(usedAnswers).join(", ") || 'None'}
                             ---
                             **TASK:**
                             - Question: "${cleanQuestion}"
                             ---
-                            **INSTRUCTIONS:** Write only the answer itself, with no preamble.
+                            **INSTRUCTIONS:**
+                            - Write only the answer itself, with no preamble or explanation.
+                            - Keep the answer concise and relevant to the job: ${maxLength}.
+                            - If it's a yes/no question, respond with just "Yes" or "No" followed by a brief explanation if needed.
+                            - For behavioral questions, use the STAR method (Situation, Task, Action, Result) if appropriate.
+                            - Be specific and professional.
+                            - Avoid repeating previous answers.
                             **ANSWER:**`;
                         const aiAnswer = await getAIResponse(prompt, userData) || "Based on my experience, I am a strong fit for this role."; // Final fallback
                         usedAnswers.add(aiAnswer);
