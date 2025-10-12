@@ -88,6 +88,10 @@ try {
                     statusEl.textContent = 'Could not find active tab.';
                     return;
                 }
+
+                // Save application to tracker before autofilling
+                saveCurrentApplicationToTracker(tabs[0]);
+
                 chrome.scripting.executeScript({
                     target: {tabId: tabs[0].id},
                     function: autofillPage,
@@ -101,9 +105,104 @@ try {
                 });
             });
         });
+
+        // View Tracker button
+        document.getElementById('viewTracker').addEventListener('click', function() {
+            chrome.tabs.create({ url: chrome.runtime.getURL('tracker.html') });
+        });
     });
 } catch (e) {
     console.error("A fatal error occurred in popup.js:", e);
+}
+
+// Save current job application to tracker
+function saveCurrentApplicationToTracker(tab) {
+    try {
+        // Extract company and job title from page
+        chrome.scripting.executeScript({
+            target: {tabId: tab.id},
+            function: extractJobInfo,
+        }).then((results) => {
+            if (results && results[0] && results[0].result) {
+                const jobInfo = results[0].result;
+
+                chrome.storage.local.get(['jobApplications'], function(result) {
+                    let applications = result.jobApplications || [];
+
+                    // Check if this job was already added (by URL)
+                    const existingApp = applications.find(app => app.jobUrl === tab.url);
+
+                    if (!existingApp && jobInfo.company && jobInfo.position) {
+                        const newApp = {
+                            id: 'app_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                            company: jobInfo.company,
+                            position: jobInfo.position,
+                            location: jobInfo.location || '',
+                            salary: '',
+                            applicationDate: new Date().toISOString().split('T')[0],
+                            status: 'Applied',
+                            jobUrl: tab.url,
+                            contactName: '',
+                            contactEmail: '',
+                            notes: 'Auto-saved from extension',
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                            timeline: [{
+                                status: 'Applied',
+                                date: new Date().toISOString().split('T')[0],
+                                note: 'Application submitted via AI Autofill'
+                            }]
+                        };
+
+                        applications.push(newApp);
+                        chrome.storage.local.set({ jobApplications: applications });
+                    }
+                });
+            }
+        }).catch(err => {
+            console.error('Error extracting job info:', err);
+        });
+    } catch (e) {
+        console.error('Error in saveCurrentApplicationToTracker:', e);
+    }
+}
+
+// Extract job information from page
+function extractJobInfo() {
+    const jobTitle = document.querySelector('h1')?.innerText ||
+                     document.querySelector('h2')?.innerText ||
+                     document.querySelector('[class*="job-title"]')?.innerText ||
+                     document.querySelector('[class*="position"]')?.innerText || '';
+
+    let company = '';
+    const companySelectors = [
+        '[class*="company-name"]',
+        '[class*="employer"]',
+        '[class*="company"]',
+        'h2',
+        'h3'
+    ];
+
+    for (const selector of companySelectors) {
+        const el = document.querySelector(selector);
+        if (el && el.innerText && el.innerText.length < 100 && el.innerText.length > 2) {
+            company = el.innerText.trim();
+            if (company && company !== jobTitle) break;
+        }
+    }
+
+    let location = '';
+    const locationEl = document.querySelector('[class*="location"]') ||
+                       document.querySelector('[class*="city"]');
+    if (locationEl) {
+        location = locationEl.innerText.trim();
+    }
+
+    return {
+        position: jobTitle.trim(),
+        company: company,
+        location: location
+    };
 }
 
 

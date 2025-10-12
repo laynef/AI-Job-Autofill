@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Application Tracker - AI Autofill</title>
+    <link rel="stylesheet" href="tracker.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="header-left">
+                    <img src="images/icon48.png" alt="Logo" class="logo">
+                    <h1>Job Application Tracker</h1>
+                </div>
+                <div class="header-stats">
+                    <div class="stat-card">
+                        <span class="stat-number" id="totalApps">0</span>
+                        <span class="stat-label">Total Applications</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="activeApps">0</span>
+                        <span class="stat-label">In Progress</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="interviewApps">0</span>
+                        <span class="stat-label">Interviews</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="offerApps">0</span>
+                        <span class="stat-label">Offers</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Filters and Add Button -->
+        <div class="controls">
+            <div class="filters">
+                <select id="statusFilter" class="filter-select">
+                    <option value="all">All Statuses</option>
+                    <option value="Applied">Applied</option>
+                    <option value="Screening">Phone Screening</option>
+                    <option value="Interview">Interview Scheduled</option>
+                    <option value="Technical">Technical Round</option>
+                    <option value="Final">Final Round</option>
+                    <option value="Offer">Offer Received</option>
+                    <option value="Rejected">Rejected</option>
+                    <option value="Accepted">Accepted</option>
+                    <option value="Withdrawn">Withdrawn</option>
+                </select>
+                <input type="text" id="searchInput" class="search-input" placeholder="Search by company or position...">
+                <select id="sortBy" class="filter-select">
+                    <option value="date-desc">Newest First</option>
+                    <option value="date-asc">Oldest First</option>
+                    <option value="company">Company A-Z</option>
+                    <option value="status">Status</option>
+                </select>
+            </div>
+            <button id="addJobBtn" class="btn-primary">+ Add Application</button>
+        </div>
+
+        <!-- Applications List -->
+        <div class="applications-container">
+            <div id="applicationsList" class="applications-list">
+                <!-- Applications will be dynamically inserted here -->
+            </div>
+            <div id="emptyState" class="empty-state">
+                <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+                <h2>No Applications Yet</h2>
+                <p>Start applying to jobs and they'll automatically appear here!</p>
+                <button id="addFirstJobBtn" class="btn-primary">Add Your First Application</button>
+            </div>
+        </div>
+
+        <!-- Modal for Add/Edit Application -->
+        <div id="jobModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="modalTitle">Add New Application</h2>
+                    <button class="close-btn" id="closeModal">&times;</button>
+                </div>
+                <form id="jobForm">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="company">Company Name *</label>
+                            <input type="text" id="company" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="position">Position *</label>
+                            <input type="text" id="position" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="location">Location</label>
+                            <input type="text" id="location" placeholder="Remote, City, etc.">
+                        </div>
+                        <div class="form-group">
+                            <label for="salary">Salary Range</label>
+                            <input type="text" id="salary" placeholder="$80k - $100k">
+                        </div>
+                        <div class="form-group">
+                            <label for="applicationDate">Application Date *</label>
+                            <input type="date" id="applicationDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="status">Status *</label>
+                            <select id="status" required>
+                                <option value="Applied">Applied</option>
+                                <option value="Screening">Phone Screening</option>
+                                <option value="Interview">Interview Scheduled</option>
+                                <option value="Technical">Technical Round</option>
+                                <option value="Final">Final Round</option>
+                                <option value="Offer">Offer Received</option>
+                                <option value="Rejected">Rejected</option>
+                                <option value="Accepted">Accepted</option>
+                                <option value="Withdrawn">Withdrawn</option>
+                            </select>
+                        </div>
+                        <div class="form-group full-width">
+                            <label for="jobUrl">Job Posting URL</label>
+                            <input type="url" id="jobUrl" placeholder="https://...">
+                        </div>
+                        <div class="form-group full-width">
+                            <label for="contactName">Contact Name</label>
+                            <input type="text" id="contactName" placeholder="Recruiter or Hiring Manager">
+                        </div>
+                        <div class="form-group full-width">
+                            <label for="contactEmail">Contact Email</label>
+                            <input type="email" id="contactEmail" placeholder="recruiter@company.com">
+                        </div>
+                        <div class="form-group full-width">
+                            <label for="notes">Notes</label>
+                            <textarea id="notes" rows="4" placeholder="Interview details, follow-up dates, requirements, etc."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn-secondary" id="cancelBtn">Cancel</button>
+                        <button type="submit" class="btn-primary">Save Application</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- View Details Modal -->
+        <div id="detailsModal" class="modal">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2 id="detailsCompany">Company Name</h2>
+                    <button class="close-btn" id="closeDetailsModal">&times;</button>
+                </div>
+                <div class="details-content">
+                    <div class="details-header">
+                        <h3 id="detailsPosition">Position Title</h3>
+                        <span id="detailsStatusBadge" class="status-badge">Applied</span>
+                    </div>
+                    <div class="details-grid">
+                        <div class="detail-item">
+                            <span class="detail-label">Location:</span>
+                            <span id="detailsLocation">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Salary:</span>
+                            <span id="detailsSalary">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Applied On:</span>
+                            <span id="detailsDate">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Days Since Applied:</span>
+                            <span id="detailsDays">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Contact:</span>
+                            <span id="detailsContact">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Email:</span>
+                            <span id="detailsEmail">-</span>
+                        </div>
+                    </div>
+                    <div class="detail-item full-width" id="detailsUrlContainer">
+                        <span class="detail-label">Job URL:</span>
+                        <a id="detailsUrl" href="#" target="_blank">View Posting</a>
+                    </div>
+                    <div class="detail-item full-width" id="detailsNotesContainer">
+                        <span class="detail-label">Notes:</span>
+                        <p id="detailsNotes">-</p>
+                    </div>
+                    <div class="timeline-section">
+                        <h4>Application Timeline</h4>
+                        <div id="timeline" class="timeline">
+                            <!-- Timeline items will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn-danger" id="deleteJobBtn">Delete Application</button>
+                    <button class="btn-primary" id="editJobBtn">Edit Application</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="tracker.js"></script>
+</body>
+</html>
