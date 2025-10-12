@@ -201,6 +201,8 @@ function extractJobInfo() {
         '[class*="company"]',
         '[id*="company"]',
         'a[href*="/company/"]',
+        '[class*="CompanyName"]',
+        '[class*="employerName"]',
         'h2',
         'h3'
     ];
@@ -213,6 +215,65 @@ function extractJobInfo() {
             company = company.replace(/\s*\(.*?\)\s*/g, '').trim();
             if (company && company !== jobTitle.trim()) break;
         }
+    }
+
+    // If no company found via selectors, try to extract from meta tags
+    if (!company) {
+        const metaCompany = document.querySelector('meta[property="og:site_name"]') ||
+                           document.querySelector('meta[name="company"]') ||
+                           document.querySelector('meta[property="og:description"]');
+        if (metaCompany && metaCompany.content) {
+            company = metaCompany.content.trim();
+            // If it's the description, try to extract company name from it
+            if (metaCompany.getAttribute('property') === 'og:description') {
+                const companyMatch = company.match(/(?:at|for|with)\s+([A-Z][a-zA-Z0-9\s&]+?)(?:\s+is|\s+in|\s+based|\.|\,)/);
+                if (companyMatch && companyMatch[1]) {
+                    company = companyMatch[1].trim();
+                }
+            }
+        }
+    }
+
+    // Try to extract from job description text if still not found
+    if (!company) {
+        try {
+            // Look for common patterns in the page text
+            const bodyText = document.body.innerText;
+
+            // Pattern: "Company Name is hiring" or "Join Company Name"
+            const hiringPattern = /(?:Join|About)\s+([A-Z][a-zA-Z0-9\s&]{2,50}?)(?:\s+is\s+(?:hiring|looking|seeking)|'s\s+team)/;
+            const hiringMatch = bodyText.match(hiringPattern);
+            if (hiringMatch && hiringMatch[1]) {
+                company = hiringMatch[1].trim();
+            }
+
+            // Pattern: Look in structured data
+            if (!company) {
+                const ldJsonScript = document.querySelector('script[type="application/ld+json"]');
+                if (ldJsonScript) {
+                    try {
+                        const jsonData = JSON.parse(ldJsonScript.textContent);
+                        const jobPosting = Array.isArray(jsonData) ? jsonData.find(j => j['@type'] === 'JobPosting') : jsonData;
+                        if (jobPosting && jobPosting.hiringOrganization) {
+                            company = jobPosting.hiringOrganization.name || jobPosting.hiringOrganization;
+                        }
+                    } catch (e) {
+                        // Ignore JSON parse errors
+                    }
+                }
+            }
+        } catch (e) {
+            // Ignore extraction errors
+        }
+    }
+
+    // Final cleanup
+    if (company) {
+        // Remove common suffixes and clean up
+        company = company.replace(/\s*\|\s*.*/g, '').trim(); // Remove "| Career Page" etc
+        company = company.replace(/\s*-\s*.*/g, '').trim(); // Remove "- Jobs" etc
+        company = company.split('\n')[0].trim(); // Take only first line
+        if (company.length > 100) company = ''; // Too long, probably not a company name
     }
 
     // Extract location with enhanced selectors
