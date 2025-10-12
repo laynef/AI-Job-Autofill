@@ -193,27 +193,52 @@ function extractJobInfo() {
 
     // Extract company name with enhanced selectors
     let company = '';
-    const companySelectors = [
-        '[class*="company-name"]',
-        '[class*="companyName"]',
-        '[class*="employer"]',
-        '[data-testid*="company"]',
-        '[class*="company"]',
-        '[id*="company"]',
-        'a[href*="/company/"]',
-        '[class*="CompanyName"]',
-        '[class*="employerName"]',
-        'h2',
-        'h3'
-    ];
 
-    for (const selector of companySelectors) {
-        const el = document.querySelector(selector);
-        if (el && el.innerText && el.innerText.length < 100 && el.innerText.length > 2) {
-            company = el.innerText.trim();
-            // Clean up common patterns
+    // First, try Greenhouse-specific selectors
+    const greenhouseCompany = document.querySelector('.company-name')?.innerText ||
+                             document.querySelector('[class*="app-title"]')?.innerText ||
+                             document.querySelector('div[class*="application--header"] h2')?.innerText;
+
+    if (greenhouseCompany && greenhouseCompany.length > 2 && greenhouseCompany.length < 100) {
+        company = greenhouseCompany.trim();
+        // Clean up if it says "Apply for this job" or similar
+        if (!company.toLowerCase().includes('apply') && !company.toLowerCase().includes('application')) {
             company = company.replace(/\s*\(.*?\)\s*/g, '').trim();
-            if (company && company !== jobTitle.trim()) break;
+        } else {
+            company = ''; // Reset if it's just a generic header
+        }
+    }
+
+    // Try standard selectors if Greenhouse didn't work
+    if (!company) {
+        const companySelectors = [
+            '[class*="company-name"]',
+            '[class*="companyName"]',
+            '[class*="employer"]',
+            '[data-testid*="company"]',
+            '[class*="company"]',
+            '[id*="company"]',
+            'a[href*="/company/"]',
+            '[class*="CompanyName"]',
+            '[class*="employerName"]',
+            '[class*="organization"]',
+            'h2',
+            'h3'
+        ];
+
+        for (const selector of companySelectors) {
+            const el = document.querySelector(selector);
+            if (el && el.innerText && el.innerText.length < 100 && el.innerText.length > 2) {
+                company = el.innerText.trim();
+                // Clean up common patterns
+                company = company.replace(/\s*\(.*?\)\s*/g, '').trim();
+                if (company && company !== jobTitle.trim() &&
+                    !company.toLowerCase().includes('apply') &&
+                    !company.toLowerCase().includes('application')) {
+                    break;
+                }
+                company = ''; // Reset if invalid
+            }
         }
     }
 
@@ -234,32 +259,104 @@ function extractJobInfo() {
         }
     }
 
+    // Try to extract from page URL (common pattern: company.com/jobs or boards.greenhouse.io/company)
+    if (!company) {
+        try {
+            const url = window.location.href;
+
+            // Greenhouse pattern: boards.greenhouse.io/COMPANY
+            if (url.includes('greenhouse.io/')) {
+                const greenhouseMatch = url.match(/greenhouse\.io\/([^\/\?]+)/);
+                if (greenhouseMatch && greenhouseMatch[1]) {
+                    company = greenhouseMatch[1]
+                        .split('-')
+                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                        .join(' ');
+                }
+            }
+
+            // Lever pattern: jobs.lever.co/COMPANY
+            if (!company && url.includes('lever.co/')) {
+                const leverMatch = url.match(/lever\.co\/([^\/\?]+)/);
+                if (leverMatch && leverMatch[1]) {
+                    company = leverMatch[1]
+                        .split('-')
+                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                        .join(' ');
+                }
+            }
+
+            // Generic careers page: company.com/careers or jobs.company.com
+            if (!company) {
+                const domain = new URL(url).hostname;
+                if (domain.includes('jobs.') || domain.includes('careers.')) {
+                    const domainParts = domain.split('.');
+                    const companyPart = domainParts.find(part => part !== 'jobs' && part !== 'careers' && part !== 'www' && part !== 'com' && part !== 'io' && part !== 'net' && part !== 'org');
+                    if (companyPart) {
+                        company = companyPart.charAt(0).toUpperCase() + companyPart.slice(1);
+                    }
+                }
+            }
+        } catch (e) {
+            // Ignore URL parsing errors
+        }
+    }
+
+    // Try to extract from document title
+    if (!company) {
+        try {
+            const title = document.title;
+            // Pattern: "Job Title - Company Name" or "Job Title at Company Name"
+            const titlePatterns = [
+                /\s+(?:at|-|@)\s+([A-Z][a-zA-Z0-9\s&\.]+?)(?:\s+\||$)/,
+                /^([A-Z][a-zA-Z0-9\s&\.]+?)\s+[-:]\s+/
+            ];
+
+            for (const pattern of titlePatterns) {
+                const titleMatch = title.match(pattern);
+                if (titleMatch && titleMatch[1] && titleMatch[1].trim().length > 2 && titleMatch[1].trim().length < 50) {
+                    const potentialCompany = titleMatch[1].trim();
+                    // Filter out common job board names
+                    if (!potentialCompany.toLowerCase().includes('greenhouse') &&
+                        !potentialCompany.toLowerCase().includes('lever') &&
+                        !potentialCompany.toLowerCase().includes('linkedin') &&
+                        !potentialCompany.toLowerCase().includes('indeed')) {
+                        company = potentialCompany;
+                        break;
+                    }
+                }
+            }
+        } catch (e) {
+            // Ignore title parsing errors
+        }
+    }
+
     // Try to extract from job description text if still not found
     if (!company) {
         try {
-            // Look for common patterns in the page text
-            const bodyText = document.body.innerText;
-
-            // Pattern: "Company Name is hiring" or "Join Company Name"
-            const hiringPattern = /(?:Join|About)\s+([A-Z][a-zA-Z0-9\s&]{2,50}?)(?:\s+is\s+(?:hiring|looking|seeking)|'s\s+team)/;
-            const hiringMatch = bodyText.match(hiringPattern);
-            if (hiringMatch && hiringMatch[1]) {
-                company = hiringMatch[1].trim();
+            // Look in structured data first (most reliable)
+            const ldJsonScript = document.querySelector('script[type="application/ld+json"]');
+            if (ldJsonScript) {
+                try {
+                    const jsonData = JSON.parse(ldJsonScript.textContent);
+                    const jobPosting = Array.isArray(jsonData) ? jsonData.find(j => j['@type'] === 'JobPosting') : jsonData;
+                    if (jobPosting && jobPosting.hiringOrganization) {
+                        company = jobPosting.hiringOrganization.name || jobPosting.hiringOrganization;
+                    }
+                } catch (e) {
+                    // Ignore JSON parse errors
+                }
             }
 
-            // Pattern: Look in structured data
+            // Look for common patterns in the page text
             if (!company) {
-                const ldJsonScript = document.querySelector('script[type="application/ld+json"]');
-                if (ldJsonScript) {
-                    try {
-                        const jsonData = JSON.parse(ldJsonScript.textContent);
-                        const jobPosting = Array.isArray(jsonData) ? jsonData.find(j => j['@type'] === 'JobPosting') : jsonData;
-                        if (jobPosting && jobPosting.hiringOrganization) {
-                            company = jobPosting.hiringOrganization.name || jobPosting.hiringOrganization;
-                        }
-                    } catch (e) {
-                        // Ignore JSON parse errors
-                    }
+                const bodyText = document.body.innerText;
+
+                // Pattern: "Company Name is hiring" or "Join Company Name"
+                const hiringPattern = /(?:Join|About)\s+([A-Z][a-zA-Z0-9\s&]{2,50}?)(?:\s+is\s+(?:hiring|looking|seeking)|'s\s+team)/;
+                const hiringMatch = bodyText.match(hiringPattern);
+                if (hiringMatch && hiringMatch[1]) {
+                    company = hiringMatch[1].trim();
                 }
             }
         } catch (e) {
@@ -358,7 +455,95 @@ async function autofillPage() {
         element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
         element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
         element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        element.focus();
         await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
+    async function selectReactSelectOption(inputElement, optionText) {
+        try {
+            // Click to open dropdown
+            await simulateClick(inputElement);
+            await new Promise(resolve => setTimeout(resolve, 300));
+
+            // Find the listbox
+            const ariaControls = inputElement.getAttribute('aria-controls');
+            let listbox = null;
+
+            if (ariaControls) {
+                listbox = document.getElementById(ariaControls);
+            }
+
+            if (!listbox) {
+                listbox = document.querySelector('[role="listbox"]:not(.iti__hide)');
+            }
+
+            if (listbox) {
+                const options = Array.from(listbox.querySelectorAll('[role="option"]'));
+                const targetOption = options.find(opt =>
+                    opt.innerText.toLowerCase().includes(optionText.toLowerCase()) ||
+                    optionText.toLowerCase().includes(opt.innerText.toLowerCase())
+                );
+
+                if (targetOption) {
+                    await simulateClick(targetOption);
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    return true;
+                }
+            }
+
+            // Fallback: type the option text
+            await simulateTyping(inputElement, optionText);
+            await new Promise(resolve => setTimeout(resolve, 300));
+
+            // Press Enter
+            inputElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+            await new Promise(resolve => setTimeout(resolve, 200));
+            return true;
+        } catch (error) {
+            console.error("Error selecting React Select option:", error);
+            return false;
+        }
+    }
+
+    async function attachResumeFile(resumeBase64, fileName) {
+        try {
+            // Find resume upload button
+            const resumeButtons = Array.from(document.querySelectorAll('button, [role="button"]')).filter(btn => {
+                const text = btn.innerText.toLowerCase();
+                return text.includes('attach') && (text.includes('resume') || text.includes('cv'));
+            });
+
+            if (resumeButtons.length === 0) return false;
+
+            // Find file input
+            const fileInputs = Array.from(document.querySelectorAll('input[type="file"]')).filter(input => {
+                const id = input.id.toLowerCase();
+                return id.includes('resume') || id.includes('cv');
+            });
+
+            if (fileInputs.length === 0) return false;
+
+            const fileInput = fileInputs[0];
+
+            // Convert base64 to file
+            const file = await base64ToFile(resumeBase64, fileName, fileName.endsWith('.pdf') ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+
+            if (!file) return false;
+
+            // Create a DataTransfer object to set files
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            fileInput.files = dataTransfer.files;
+
+            // Trigger change event
+            fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            return true;
+        } catch (error) {
+            console.error("Error attaching resume:", error);
+            return false;
+        }
     }
 
     async function simulateTyping(element, text) {
@@ -634,22 +819,67 @@ async function autofillPage() {
             const combinedText = `${el.id} ${el.name} ${question}`.toLowerCase();
             const isDemographic = demographicKeywords.some(keyword => combinedText.includes(keyword));
 
+            // --- Handle EEOC/Demographic Fields ---
             if (isDemographic) {
-                // Handle demographic questions and move on
+                const inputRole = el.getAttribute('role');
+
+                // Handle race/ethnicity dropdown (React Select)
+                if ((combinedText.includes('race') || combinedText.includes('ethnicity')) &&
+                    inputRole === 'combobox') {
+                    await selectReactSelectOption(el, 'Decline To Self Identify');
+                    continue;
+                }
+
+                // Handle gender dropdown (React Select)
+                if (combinedText.includes('gender') && inputRole === 'combobox') {
+                    await selectReactSelectOption(el, 'Decline to Self-Identify');
+                    continue;
+                }
+
+                // Handle veteran status dropdown (React Select)
+                if (combinedText.includes('veteran') && inputRole === 'combobox') {
+                    await selectReactSelectOption(el, 'I don\'t wish to answer');
+                    continue;
+                }
+
+                // Handle disability status dropdown (React Select)
+                if (combinedText.includes('disability') && inputRole === 'combobox') {
+                    await selectReactSelectOption(el, 'I don\'t wish to answer');
+                    continue;
+                }
+
+                // Handle hispanic/latino dropdown (React Select)
+                if ((combinedText.includes('hispanic') || combinedText.includes('latino')) &&
+                    inputRole === 'combobox') {
+                    await selectReactSelectOption(el, 'I don\'t wish to answer');
+                    continue;
+                }
+
+                // Skip other demographic fields
                 continue;
             }
             
             // --- Resume Field ---
             if (combinedText.includes('resume') || combinedText.includes('cv')) {
-                 if (el.type === 'file' || (isButton && combinedText.includes('attach'))) {
-                    el.style.border = '2px solid #8B5CF6';
-                    let notice = el.parentElement.querySelector('p.autofill-notice');
-                    if (!notice) {
-                        notice = document.createElement('p');
-                        notice.className = 'autofill-notice';
-                        notice.textContent = 'Please attach your resume file here.';
-                        notice.style.cssText = 'color: #8B5CF6; font-size: 12px; margin-top: 4px;';
-                        el.parentElement.insertBefore(notice, el.nextSibling);
+                 if (el.type === 'file') {
+                    // Attempt to attach resume file
+                    if (userData.resume && userData.resumeFileName) {
+                        console.log("AI Autofill: Attempting to attach resume file...");
+                        const attached = await attachResumeFile(userData.resume, userData.resumeFileName);
+                        if (attached) {
+                            console.log("AI Autofill: Resume attached successfully!");
+                        } else {
+                            console.log("AI Autofill: Could not automatically attach resume. User will need to upload manually.");
+                            el.style.border = '2px solid #8B5CF6';
+                            let notice = el.parentElement.querySelector('p.autofill-notice');
+                            if (!notice) {
+                                notice = document.createElement('p');
+                                notice.className = 'autofill-notice';
+                                notice.textContent = 'Please attach your resume file here.';
+                                notice.style.cssText = 'color: #8B5CF6; font-size: 12px; margin-top: 4px;';
+                                el.parentElement.insertBefore(notice, el.nextSibling);
+                            }
+                        }
                     }
                     continue;
                 }
@@ -954,6 +1184,30 @@ Provide a concise answer.`;
                 }
                 else if (combinedText.includes('phone') || combinedText.includes('mobile') ||
                          combinedText.includes('telephone') || combinedText.includes('contact number')) {
+                    // Handle intl-tel-input library if present
+                    if (el.classList.contains('iti__tel-input') || el.hasAttribute('data-intl-tel-input-id')) {
+                        // Find the country dropdown if it exists
+                        const itiContainer = el.closest('.iti');
+                        if (itiContainer && userData.country) {
+                            const countryButton = itiContainer.querySelector('.iti__selected-country');
+                            if (countryButton) {
+                                await simulateClick(countryButton);
+                                await new Promise(resolve => setTimeout(resolve, 300));
+
+                                const countryList = itiContainer.querySelector('.iti__country-list');
+                                if (countryList) {
+                                    const countryOptions = Array.from(countryList.querySelectorAll('.iti__country'));
+                                    const targetCountry = countryOptions.find(opt =>
+                                        opt.querySelector('.iti__country-name')?.innerText.toLowerCase().includes(userData.country.toLowerCase())
+                                    );
+                                    if (targetCountry) {
+                                        await simulateClick(targetCountry);
+                                        await new Promise(resolve => setTimeout(resolve, 300));
+                                    }
+                                }
+                            }
+                        }
+                    }
                     valueToType = userData.phone;
                 }
                 else if (combinedText.includes('pronoun')) {
@@ -964,8 +1218,29 @@ Provide a concise answer.`;
                          combinedText.includes('street')) {
                     valueToType = userData.address;
                 }
-                else if (combinedText.includes('city') || combinedText.includes('town')) {
-                    valueToType = userData.city;
+                else if (combinedText.includes('city') || combinedText.includes('town') ||
+                         (combinedText.includes('location') && !combinedText.includes('work') && !combinedText.includes('job'))) {
+                    // Check if this is a React Select combobox (like Greenhouse's location field)
+                    if (el.getAttribute('role') === 'combobox' && el.hasAttribute('aria-autocomplete')) {
+                        // Type the city and let autocomplete handle it
+                        await simulateTyping(el, userData.city);
+                        await new Promise(resolve => setTimeout(resolve, 500));
+
+                        // Try to select the first option that appears
+                        const ariaControls = el.getAttribute('aria-controls');
+                        if (ariaControls) {
+                            const listbox = document.getElementById(ariaControls);
+                            if (listbox) {
+                                const firstOption = listbox.querySelector('[role="option"]');
+                                if (firstOption) {
+                                    await simulateClick(firstOption);
+                                }
+                            }
+                        }
+                    } else {
+                        valueToType = userData.city;
+                    }
+                    continue;
                 }
                 else if (combinedText.includes('state') || combinedText.includes('province') ||
                          combinedText.includes('region')) {
@@ -975,6 +1250,11 @@ Provide a concise answer.`;
                     valueToType = userData.zipCode;
                 }
                 else if (combinedText.includes('country') || combinedText.includes('nation')) {
+                    // Check if this is a React Select combobox
+                    if (el.getAttribute('role') === 'combobox' && el.hasAttribute('aria-autocomplete')) {
+                        await selectReactSelectOption(el, userData.country || 'United States');
+                        continue;
+                    }
                     valueToType = userData.country;
                 }
                 // Social/Professional links
