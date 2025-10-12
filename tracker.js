@@ -24,10 +24,8 @@ const elements = {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
-    loadApplications();
     setupEventListeners();
-    renderApplications();
-    updateStats();
+    loadApplications();
 });
 
 // Load applications from storage
@@ -36,6 +34,8 @@ function loadApplications() {
         if (result.jobApplications) {
             applications = result.jobApplications;
         }
+        renderApplications();
+        updateStats();
     });
 }
 
