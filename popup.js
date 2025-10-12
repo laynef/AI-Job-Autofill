@@ -133,18 +133,24 @@ function saveCurrentApplicationToTracker(tab) {
                     const existingApp = applications.find(app => app.jobUrl === tab.url);
 
                     if (!existingApp && jobInfo.company && jobInfo.position) {
+                        // Build notes with extracted metadata
+                        let notes = 'Auto-saved from extension';
+                        if (jobInfo.jobType) {
+                            notes += `\nJob Type: ${jobInfo.jobType}`;
+                        }
+
                         const newApp = {
                             id: 'app_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                             company: jobInfo.company,
                             position: jobInfo.position,
                             location: jobInfo.location || '',
-                            salary: '',
+                            salary: jobInfo.salary || '',
                             applicationDate: new Date().toISOString().split('T')[0],
                             status: 'Applied',
                             jobUrl: tab.url,
                             contactName: '',
                             contactEmail: '',
-                            notes: 'Auto-saved from extension',
+                            notes: notes,
                             createdAt: new Date().toISOString(),
                             updatedAt: new Date().toISOString(),
                             timeline: [{
@@ -155,7 +161,13 @@ function saveCurrentApplicationToTracker(tab) {
                         };
 
                         applications.push(newApp);
-                        chrome.storage.local.set({ jobApplications: applications });
+                        chrome.storage.local.set({ jobApplications: applications }, function() {
+                            console.log('Job application saved to tracker:', newApp.company, '-', newApp.position);
+                        });
+                    } else if (existingApp) {
+                        console.log('Job application already exists in tracker');
+                    } else {
+                        console.warn('Could not save job application - missing company or position info');
                     }
                 });
             }
@@ -169,16 +181,26 @@ function saveCurrentApplicationToTracker(tab) {
 
 // Extract job information from page
 function extractJobInfo() {
+    // Extract job title with enhanced selectors
     const jobTitle = document.querySelector('h1')?.innerText ||
                      document.querySelector('h2')?.innerText ||
                      document.querySelector('[class*="job-title"]')?.innerText ||
-                     document.querySelector('[class*="position"]')?.innerText || '';
+                     document.querySelector('[class*="jobTitle"]')?.innerText ||
+                     document.querySelector('[data-testid*="job-title"]')?.innerText ||
+                     document.querySelector('[class*="position"]')?.innerText ||
+                     document.querySelector('[class*="JobTitle"]')?.innerText ||
+                     document.querySelector('[id*="job-title"]')?.innerText || '';
 
+    // Extract company name with enhanced selectors
     let company = '';
     const companySelectors = [
         '[class*="company-name"]',
+        '[class*="companyName"]',
         '[class*="employer"]',
+        '[data-testid*="company"]',
         '[class*="company"]',
+        '[id*="company"]',
+        'a[href*="/company/"]',
         'h2',
         'h3'
     ];
@@ -187,21 +209,79 @@ function extractJobInfo() {
         const el = document.querySelector(selector);
         if (el && el.innerText && el.innerText.length < 100 && el.innerText.length > 2) {
             company = el.innerText.trim();
-            if (company && company !== jobTitle) break;
+            // Clean up common patterns
+            company = company.replace(/\s*\(.*?\)\s*/g, '').trim();
+            if (company && company !== jobTitle.trim()) break;
         }
     }
 
+    // Extract location with enhanced selectors
     let location = '';
-    const locationEl = document.querySelector('[class*="location"]') ||
-                       document.querySelector('[class*="city"]');
-    if (locationEl) {
-        location = locationEl.innerText.trim();
+    const locationSelectors = [
+        '[class*="location"]',
+        '[class*="jobLocation"]',
+        '[data-testid*="location"]',
+        '[class*="city"]',
+        '[id*="location"]'
+    ];
+
+    for (const selector of locationSelectors) {
+        const el = document.querySelector(selector);
+        if (el && el.innerText) {
+            location = el.innerText.trim();
+            if (location.length > 2 && location.length < 100) break;
+        }
+    }
+
+    // Extract salary information
+    let salary = '';
+    const salarySelectors = [
+        '[class*="salary"]',
+        '[class*="compensation"]',
+        '[class*="pay"]',
+        '[data-testid*="salary"]',
+        '[id*="salary"]'
+    ];
+
+    for (const selector of salarySelectors) {
+        const el = document.querySelector(selector);
+        if (el && el.innerText) {
+            const text = el.innerText.trim();
+            // Look for salary patterns ($XX,XXX or $XXk)
+            if (text.match(/\$[\d,]+k?/i) || text.match(/\d+[kK]\s*-\s*\d+[kK]/)) {
+                salary = text;
+                break;
+            }
+        }
+    }
+
+    // If no salary found, search page text for common patterns
+    if (!salary) {
+        const bodyText = document.body.innerText;
+        const salaryMatch = bodyText.match(/\$\d{2,3}[,\.]?\d{0,3}[kK]?\s*[-–]\s*\$\d{2,3}[,\.]?\d{0,3}[kK]?/);
+        if (salaryMatch) {
+            salary = salaryMatch[0];
+        }
+    }
+
+    // Extract job type (Full-time, Part-time, Contract, etc.)
+    let jobType = '';
+    const jobTypePatterns = ['full-time', 'part-time', 'contract', 'temporary', 'internship', 'remote', 'hybrid'];
+    const pageTextLower = document.body.innerText.toLowerCase();
+
+    for (const pattern of jobTypePatterns) {
+        if (pageTextLower.includes(pattern)) {
+            jobType = pattern.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('-');
+            break;
+        }
     }
 
     return {
         position: jobTitle.trim(),
         company: company,
-        location: location
+        location: location,
+        salary: salary,
+        jobType: jobType
     };
 }
 
