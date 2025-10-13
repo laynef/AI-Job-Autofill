@@ -4,7 +4,7 @@ try {
         const statusEl = document.getElementById('status');
         const resumeFileNameEl = document.getElementById('resumeFileName');
         const resumeFileInput = document.getElementById('resumeFile');
-        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'apiKey', 'additionalInfo'];
+        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'apiKey', 'additionalInfo', 'coverLetter'];
 
         // Load saved data when the popup opens
         chrome.storage.local.get([...textFields, 'resumeFileName', 'resume'], function(result) {
@@ -1512,7 +1512,16 @@ async function autofillPage() {
 
                 const coverLetterTextArea = document.getElementById('cover_letter_text');
                 if (coverLetterTextArea) {
-                    const coverLetterPrompt = `You are a helpful career assistant. Based on the provided resume, user profile, and job description, write a compelling cover letter.
+                    let coverLetterText = '';
+
+                    // Check if user provided a manual cover letter
+                    if (userData.coverLetter && userData.coverLetter.trim()) {
+                        console.log('✍️ Using manual cover letter provided by user');
+                        coverLetterText = userData.coverLetter.trim();
+                    } else {
+                        // Generate cover letter with AI
+                        console.log('🤖 Generating AI cover letter');
+                        const coverLetterPrompt = `You are a helpful career assistant. Based on the provided resume, user profile, and job description, write a compelling cover letter.
                         ---
                         **CONTEXT:**
                         - Job Title: ${jobTitle || 'Not found.'}
@@ -1526,7 +1535,9 @@ async function autofillPage() {
                         - Keep it to 3-4 paragraphs.
                         - Return only the cover letter text.
                         **COVER LETTER:**`;
-                    const coverLetterText = await getAIResponse(coverLetterPrompt, userData);
+                        coverLetterText = await getAIResponse(coverLetterPrompt, userData);
+                    }
+
                     if (coverLetterText) {
                         await simulateTyping(coverLetterTextArea, coverLetterText);
                     }
@@ -1983,7 +1994,14 @@ Be specific and professional. Focus on alignment between my skills and the role.
                 }
                 // Cover letter (if not handled earlier)
                 else if (combinedText.includes('cover letter') && (elType === 'textarea' || el.isContentEditable)) {
-                    const coverLetterPrompt = `You are a helpful career assistant. Based on the provided resume, user profile, and job description, write a compelling cover letter.
+                    // Check if user provided a manual cover letter
+                    if (userData.coverLetter && userData.coverLetter.trim()) {
+                        console.log('✍️ Using manual cover letter provided by user');
+                        valueToType = userData.coverLetter.trim();
+                    } else {
+                        // Generate cover letter with AI
+                        console.log('🤖 Generating AI cover letter');
+                        const coverLetterPrompt = `You are a helpful career assistant. Based on the provided resume, user profile, and job description, write a compelling cover letter.
                         ---
                         **CONTEXT:**
                         - Job Title: ${jobTitle || 'Not found.'}
@@ -1997,7 +2015,8 @@ Be specific and professional. Focus on alignment between my skills and the role.
                         - Keep it to 3-4 paragraphs.
                         - Return only the cover letter text.
                         **COVER LETTER:**`;
-                    valueToType = await getAIResponse(coverLetterPrompt, userData);
+                        valueToType = await getAIResponse(coverLetterPrompt, userData);
+                    }
                 }
                 // GitHub/portfolio links
                 else if (combinedText.includes('github') || combinedText.includes('gitlab') || combinedText.includes('online portfolio')) {
