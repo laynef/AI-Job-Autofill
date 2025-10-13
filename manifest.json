@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Free AI Job Application Copilot",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "Uses AI to automatically fill out job applications based on your saved information and resume.",
   "permissions": ["storage", "scripting", "activeTab"],
   "action": {
