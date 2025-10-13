@@ -299,7 +299,6 @@ function saveCurrentApplicationToTracker(tab, statusEl) {
                             });
                         }
                 });
-            }
         }).catch(err => {
             console.error('❌ Error extracting job info:', err);
             if (statusEl) {
