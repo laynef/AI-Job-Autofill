@@ -1,9 +1,20 @@
 {
   "manifest_version": 3,
   "name": "Free AI Job Application Copilot",
-  "version": "2.3.1",
+  "version": "2.3.4",
   "description": "Uses AI to automatically fill out job applications based on your saved information and resume.",
   "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": [
+    "*://job-boards.greenhouse.io/*",
+    "*://boards.greenhouse.io/*",
+    "*://jobs.lever.co/*",
+    "*://*.myworkdayjobs.com/*",
+    "*://*.ashbyhq.com/*",
+    "*://*.bamboohr.com/*",
+    "*://apply.workable.com/*",
+    "*://*.jobvite.com/*",
+    "*://*.smartrecruiters.com/*"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

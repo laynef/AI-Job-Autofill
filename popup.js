@@ -89,19 +89,57 @@ try {
                     return;
                 }
 
-                // Save application to tracker before autofilling
-                saveCurrentApplicationToTracker(tabs[0]);
-
+                // First, check if the page contains an iframe-based application form
                 chrome.scripting.executeScript({
                     target: {tabId: tabs[0].id},
-                    function: autofillPage,
-                }).then(() => {
-                     statusEl.textContent = 'Autofill complete!';
-                     setTimeout(() => statusEl.textContent = '', 3000);
+                    function: detectIframeForm,
+                }).then((results) => {
+                    const iframeDetected = results && results[0] && results[0].result;
+
+                    if (iframeDetected && iframeDetected.hasIframe) {
+                        // Display helpful message about iframe form
+                        statusEl.innerHTML = `<div style="color: #8B5CF6; font-size: 11px;">
+                            <strong>Iframe-based form detected!</strong><br>
+                            This form is embedded from ${iframeDetected.domain}.<br><br>
+                            <span style="color: #666;">Opening the application form directly...</span>
+                        </div>`;
+
+                        // Open the iframe URL in a new tab
+                        chrome.tabs.create({ url: iframeDetected.url }, (newTab) => {
+                            setTimeout(() => {
+                                statusEl.textContent = 'Form opened in new tab. Click Autofill again on the new tab.';
+                                setTimeout(() => statusEl.textContent = '', 5000);
+                            }, 1000);
+                        });
+                        return;
+                    }
+
+                    // No iframe detected, proceed with normal autofill
+                    chrome.scripting.executeScript({
+                        target: {tabId: tabs[0].id, allFrames: true},
+                        function: autofillPage,
+                    }).then(() => {
+                         statusEl.textContent = 'Autofill complete! Saving to tracker...';
+
+                         // Save application to tracker AFTER autofilling completes
+                         // Increased delay to 1000ms to ensure form fields are fully populated
+                         setTimeout(() => {
+                             saveCurrentApplicationToTracker(tabs[0]);
+                             // Give the tracker save a moment, then update status
+                             setTimeout(() => {
+                                 statusEl.textContent = '✓ Autofill complete & tracked!';
+                                 setTimeout(() => statusEl.textContent = '', 3000);
+                             }, 800);
+                         }, 1000);
+                    }).catch(err => {
+                         statusEl.textContent = 'Autofill failed on this page.';
+                         console.error('Autofill script injection failed:', err);
+                         setTimeout(() => statusEl.textContent = '', 3000);
+                    });
                 }).catch(err => {
-                     statusEl.textContent = 'Autofill failed on this page.';
-                     console.error('Autofill script injection failed:', err);
-                     setTimeout(() => statusEl.textContent = '', 3000);
+                    console.error('Iframe detection failed:', err);
+                    statusEl.textContent = 'Could not analyze page structure.';
+                    setTimeout(() => statusEl.textContent = '', 3000);
                 });
             });
         });
@@ -129,46 +167,99 @@ function saveCurrentApplicationToTracker(tab) {
                 chrome.storage.local.get(['jobApplications'], function(result) {
                     let applications = result.jobApplications || [];
 
+                    // Debug: Log what was extracted
+                    console.log('📊 Tracker received job info:', jobInfo);
+                    console.log('  • URL:', tab.url);
+
                     // Check if this job was already added (by URL)
                     const existingApp = applications.find(app => app.jobUrl === tab.url);
 
-                    if (!existingApp && jobInfo.company && jobInfo.position) {
-                        // Build notes with extracted metadata
-                        let notes = 'Auto-saved from extension';
-                        if (jobInfo.jobType) {
-                            notes += `\nJob Type: ${jobInfo.jobType}`;
+                    // Clean up empty strings and whitespace
+                    if (jobInfo.company) jobInfo.company = jobInfo.company.trim();
+                    if (jobInfo.position) jobInfo.position = jobInfo.position.trim();
+
+                    // If company is missing or empty, try to extract from URL
+                    if (!jobInfo.company || jobInfo.company === '') {
+                        console.log('🔍 Company not found, attempting URL extraction...');
+                        const urlMatch = tab.url.match(/(?:greenhouse\.io|lever\.co|myworkdayjobs\.com|ashbyhq\.com|bamboohr\.com|gem\.com|jobvite\.com|smartrecruiters\.com)\/([^\/\?]+)/);
+                        if (urlMatch && urlMatch[1]) {
+                            jobInfo.company = urlMatch[1].split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                            console.log('✓ Company extracted from URL:', jobInfo.company);
+                        } else {
+                            jobInfo.company = 'Unknown Company';
+                            console.log('⚠ Using fallback: Unknown Company');
                         }
-
-                        const newApp = {
-                            id: 'app_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                            company: jobInfo.company,
-                            position: jobInfo.position,
-                            location: jobInfo.location || '',
-                            salary: jobInfo.salary || '',
-                            applicationDate: new Date().toISOString().split('T')[0],
-                            status: 'Applied',
-                            jobUrl: tab.url,
-                            contactName: '',
-                            contactEmail: '',
-                            notes: notes,
-                            createdAt: new Date().toISOString(),
-                            updatedAt: new Date().toISOString(),
-                            timeline: [{
-                                status: 'Applied',
-                                date: new Date().toISOString().split('T')[0],
-                                note: 'Application submitted via AI Autofill'
-                            }]
-                        };
-
-                        applications.push(newApp);
-                        chrome.storage.local.set({ jobApplications: applications }, function() {
-                            console.log('Job application saved to tracker:', newApp.company, '-', newApp.position);
-                        });
-                    } else if (existingApp) {
-                        console.log('Job application already exists in tracker');
-                    } else {
-                        console.warn('Could not save job application - missing company or position info');
                     }
+
+                    // If position is missing or empty, use a fallback
+                    if (!jobInfo.position || jobInfo.position === '') {
+                        console.log('⚠ Position not found, using fallback');
+                        jobInfo.position = 'Position Not Detected';
+                    }
+
+                    // At this point, both should have values
+                    console.log('✓ Final values - Company:', jobInfo.company, '| Position:', jobInfo.position);
+
+                    // Build notes with extracted metadata
+                    let notes = 'Auto-saved from extension';
+                    if (jobInfo.jobType) {
+                        notes += `\nJob Type: ${jobInfo.jobType}`;
+                    }
+
+                    if (existingApp) {
+                            // UPDATE existing application with latest data
+                            existingApp.company = jobInfo.company || existingApp.company;
+                            existingApp.position = jobInfo.position || existingApp.position;
+                            existingApp.location = jobInfo.location || existingApp.location;
+                            existingApp.salary = jobInfo.salary || existingApp.salary;
+                            existingApp.updatedAt = new Date().toISOString();
+
+                            // Update notes if new info is available
+                            if (jobInfo.jobType && !existingApp.notes.includes('Job Type:')) {
+                                existingApp.notes += `\nJob Type: ${jobInfo.jobType}`;
+                            }
+
+                            // Add timeline entry if status changed or it's been updated
+                            const lastTimeline = existingApp.timeline[existingApp.timeline.length - 1];
+                            if (!lastTimeline || lastTimeline.note !== 'Application data updated') {
+                                existingApp.timeline.push({
+                                    status: existingApp.status || 'Applied',
+                                    date: new Date().toISOString().split('T')[0],
+                                    note: 'Application data updated'
+                                });
+                            }
+
+                            chrome.storage.local.set({ jobApplications: applications }, function() {
+                                console.log('Job application UPDATED in tracker:', existingApp.company, '-', existingApp.position);
+                            });
+                        } else {
+                            // CREATE new application
+                            const newApp = {
+                                id: 'app_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                                company: jobInfo.company,
+                                position: jobInfo.position,
+                                location: jobInfo.location || '',
+                                salary: jobInfo.salary || '',
+                                applicationDate: new Date().toISOString().split('T')[0],
+                                status: 'Applied',
+                                jobUrl: tab.url,
+                                contactName: '',
+                                contactEmail: '',
+                                notes: notes,
+                                createdAt: new Date().toISOString(),
+                                updatedAt: new Date().toISOString(),
+                                timeline: [{
+                                    status: 'Applied',
+                                    date: new Date().toISOString().split('T')[0],
+                                    note: 'Application submitted via AI Autofill'
+                                }]
+                            };
+
+                            applications.push(newApp);
+                            chrome.storage.local.set({ jobApplications: applications }, function() {
+                                console.log('Job application CREATED in tracker:', newApp.company, '-', newApp.position);
+                            });
+                        }
                 });
             }
         }).catch(err => {
@@ -179,20 +270,117 @@ function saveCurrentApplicationToTracker(tab) {
     }
 }
 
+// Detect iframe-based application forms
+function detectIframeForm() {
+    // URLs/domains to ignore (helper iframes, not application forms)
+    const ignorePatterns = [
+        'googleapis.com',
+        'google.com/recaptcha',
+        'accounts.google.com',
+        'googletagmanager.com',
+        'doubleclick.net',
+        'facebook.com/plugins',
+        'connect.facebook.net',
+        'platform.twitter.com',
+        'linkedin.com/embed',
+        'analytics',
+        'ads',
+        'tracking',
+        'cdn.',
+        'static.'
+    ];
+
+    // Common ATS iframe patterns
+    const atsIframePatterns = [
+        { domain: 'greenhouse', selector: 'iframe[id*="grnhse"], iframe[src*="greenhouse.io/embed/job_app"]' },
+        { domain: 'lever', selector: 'iframe[src*="jobs.lever.co"]' },
+        { domain: 'workday', selector: 'iframe[src*="myworkdayjobs.com"]' },
+        { domain: 'ashby', selector: 'iframe[src*="jobs.ashbyhq.com"]' },
+        { domain: 'bamboohr', selector: 'iframe[src*="bamboohr.com/jobs"]' },
+        { domain: 'workable', selector: 'iframe[src*="apply.workable.com"]' },
+        { domain: 'jobvite', selector: 'iframe[src*="jobs.jobvite.com"]' },
+        { domain: 'smartrecruiters', selector: 'iframe[src*="jobs.smartrecruiters.com"]' }
+    ];
+
+    for (const pattern of atsIframePatterns) {
+        const iframe = document.querySelector(pattern.selector);
+        if (iframe && iframe.src) {
+            // Check if this iframe should be ignored
+            const shouldIgnore = ignorePatterns.some(ignorePattern =>
+                iframe.src.toLowerCase().includes(ignorePattern.toLowerCase())
+            );
+
+            if (shouldIgnore) {
+                console.log(`Ignoring helper iframe:`, iframe.src);
+                continue;
+            }
+
+            // Additional check: iframe must be reasonably sized (not a tiny tracking pixel)
+            if (iframe.offsetWidth > 200 && iframe.offsetHeight > 200) {
+                console.log(`Detected ${pattern.domain} iframe:`, iframe.src);
+                return {
+                    hasIframe: true,
+                    url: iframe.src,
+                    domain: pattern.domain
+                };
+            } else {
+                console.log(`Ignoring small iframe (${iframe.offsetWidth}x${iframe.offsetHeight}):`, iframe.src);
+            }
+        }
+    }
+
+    return { hasIframe: false };
+}
+
 // Extract job information from page - returns a promise for async AI extraction
 async function extractJobInfo() {
     // Extract job title with enhanced selectors
-    const jobTitle = document.querySelector('h1')?.innerText ||
-                     document.querySelector('h2')?.innerText ||
-                     document.querySelector('[class*="job-title"]')?.innerText ||
-                     document.querySelector('[class*="jobTitle"]')?.innerText ||
-                     document.querySelector('[data-testid*="job-title"]')?.innerText ||
-                     document.querySelector('[class*="position"]')?.innerText ||
-                     document.querySelector('[class*="JobTitle"]')?.innerText ||
-                     document.querySelector('[id*="job-title"]')?.innerText || '';
+    let jobTitle = document.querySelector('h1')?.innerText ||
+                   document.querySelector('h2')?.innerText ||
+                   document.querySelector('[class*="job-title"]')?.innerText ||
+                   document.querySelector('[class*="jobTitle"]')?.innerText ||
+                   document.querySelector('[data-testid*="job-title"]')?.innerText ||
+                   document.querySelector('[class*="position"]')?.innerText ||
+                   document.querySelector('[class*="JobTitle"]')?.innerText ||
+                   document.querySelector('[id*="job-title"]')?.innerText || '';
+
+    // Fallback: try to extract from page title
+    if (!jobTitle || jobTitle.length < 3) {
+        const pageTitle = document.title;
+        // Common patterns: "Job Title - Company" or "Job Title at Company" or "Company - Job Title"
+        const titleMatch = pageTitle.match(/^([^-|]+?)(?:\s*[-|@]\s*|$)/);
+        if (titleMatch && titleMatch[1] && titleMatch[1].trim().length > 3) {
+            jobTitle = titleMatch[1].trim();
+        }
+    }
 
     // Extract company name with enhanced selectors
     let company = '';
+
+    // NEW: First try to extract from filled form fields (since autofill just ran)
+    const companyInputSelectors = [
+        'input[name*="company"]',
+        'input[id*="company"]',
+        'input[aria-label*="company" i]',
+        'input[placeholder*="company" i]',
+        '[contenteditable="true"][class*="company"]'
+    ];
+
+    for (const selector of companyInputSelectors) {
+        try {
+            const input = document.querySelector(selector);
+            if (input) {
+                const value = input.value || input.textContent || input.innerText;
+                if (value && value.trim().length > 2 && value.trim().length < 100) {
+                    company = value.trim();
+                    console.log('Company extracted from form field:', company);
+                    break;
+                }
+            }
+        } catch (e) {
+            // Continue to next selector
+        }
+    }
 
     // First, try Greenhouse-specific selectors
     const greenhouseCompany = document.querySelector('.company-name')?.innerText ||
@@ -263,36 +451,52 @@ async function extractJobInfo() {
     if (!company) {
         try {
             const url = window.location.href;
+            const urlPatterns = [
+                // Greenhouse pattern: boards.greenhouse.io/COMPANY
+                { regex: /greenhouse\.io\/([^\/\?]+)/, transform: (match) => match[1].split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') },
 
-            // Greenhouse pattern: boards.greenhouse.io/COMPANY
-            if (url.includes('greenhouse.io/')) {
-                const greenhouseMatch = url.match(/greenhouse\.io\/([^\/\?]+)/);
-                if (greenhouseMatch && greenhouseMatch[1]) {
-                    company = greenhouseMatch[1]
-                        .split('-')
-                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                        .join(' ');
-                }
-            }
+                // Lever pattern: jobs.lever.co/COMPANY
+                { regex: /lever\.co\/([^\/\?]+)/, transform: (match) => match[1].split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') },
 
-            // Lever pattern: jobs.lever.co/COMPANY
-            if (!company && url.includes('lever.co/')) {
-                const leverMatch = url.match(/lever\.co\/([^\/\?]+)/);
-                if (leverMatch && leverMatch[1]) {
-                    company = leverMatch[1]
-                        .split('-')
-                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                        .join(' ');
+                // Workday pattern: company.wd1.myworkdayjobs.com or company.wd5.myworkdayjobs.com
+                { regex: /([^\/]+)\.wd\d+\.myworkdayjobs\.com/, transform: (match) => match[1].split(/[-_]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') },
+
+                // Ashby pattern: jobs.ashbyhq.com/COMPANY
+                { regex: /ashbyhq\.com\/([^\/\?]+)/, transform: (match) => match[1].split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') },
+
+                // BambooHR pattern: company.bamboohr.com
+                { regex: /([^\/]+)\.bamboohr\.com/, transform: (match) => match[1].split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') },
+
+                // Gem pattern: gem.com/careers/COMPANY
+                { regex: /gem\.com\/careers\/([^\/\?]+)/, transform: (match) => match[1].split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') },
+
+                // Jobvite pattern: jobs.jobvite.com/COMPANY
+                { regex: /jobvite\.com\/([^\/\?]+)/, transform: (match) => match[1].split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') },
+
+                // SmartRecruiters pattern: jobs.smartrecruiters.com/COMPANY
+                { regex: /smartrecruiters\.com\/([^\/\?]+)/, transform: (match) => match[1].split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') }
+            ];
+
+            // Try each pattern
+            for (const pattern of urlPatterns) {
+                const match = url.match(pattern.regex);
+                if (match && match[1]) {
+                    company = pattern.transform(match);
+                    break;
                 }
             }
 
             // Generic careers page: company.com/careers or jobs.company.com
             if (!company) {
                 const domain = new URL(url).hostname;
-                if (domain.includes('jobs.') || domain.includes('careers.')) {
+                if (domain.includes('jobs.') || domain.includes('careers.') || domain.includes('recruiting.')) {
                     const domainParts = domain.split('.');
-                    const companyPart = domainParts.find(part => part !== 'jobs' && part !== 'careers' && part !== 'www' && part !== 'com' && part !== 'io' && part !== 'net' && part !== 'org');
-                    if (companyPart) {
+                    const companyPart = domainParts.find(part =>
+                        part !== 'jobs' && part !== 'careers' && part !== 'recruiting' &&
+                        part !== 'www' && part !== 'com' && part !== 'io' &&
+                        part !== 'net' && part !== 'org' && part !== 'co'
+                    );
+                    if (companyPart && companyPart.length > 2) {
                         company = companyPart.charAt(0).toUpperCase() + companyPart.slice(1);
                     }
                 }
@@ -491,13 +695,23 @@ ${jobDescription.substring(0, 3000)}`;
         }
     }
 
-    return {
+    const extractedData = {
         position: jobTitle.trim(),
         company: company,
         location: location,
         salary: salary,
         jobType: jobType
     };
+
+    // Log what was extracted for debugging
+    console.log('📊 Job Info Extracted:', extractedData);
+    console.log('  • Company:', company || '❌ NOT FOUND');
+    console.log('  • Position:', jobTitle.trim() || '❌ NOT FOUND');
+    console.log('  • Location:', location || '(empty)');
+    console.log('  • Salary:', salary || '(empty)');
+    console.log('  • Job Type:', jobType || '(empty)');
+
+    return extractedData;
 }
 
 
@@ -518,66 +732,122 @@ async function autofillPage() {
 
     async function selectReactSelectOption(inputElement, optionText) {
         try {
-            // Click to open dropdown
-            await simulateClick(inputElement);
-            await new Promise(resolve => setTimeout(resolve, 300));
+            console.log(`🔍 Attempting to select dropdown option: "${optionText}"`);
+            console.log(`   Element:`, inputElement);
 
-            // Find the listbox
+            // Click to open dropdown
+            inputElement.focus();
+            await simulateClick(inputElement);
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Find the listbox or menu - try multiple strategies
             const ariaControls = inputElement.getAttribute('aria-controls');
             let listbox = null;
 
+            // Strategy 1: Use aria-controls
             if (ariaControls) {
                 listbox = document.getElementById(ariaControls);
+                if (listbox) console.log(`   ✓ Found listbox via aria-controls: #${ariaControls}`);
             }
 
+            // Strategy 2: Look for visible listbox/menu
             if (!listbox) {
-                listbox = document.querySelector('[role="listbox"]:not(.iti__hide)');
+                listbox = document.querySelector('[role="listbox"]:not(.iti__hide):not([style*="display: none"]):not([style*="display:none"])');
+                if (listbox) console.log(`   ✓ Found listbox via role="listbox"`);
             }
 
-            if (listbox) {
-                const options = Array.from(listbox.querySelectorAll('[role="option"]'));
-                const targetOption = options.find(opt =>
-                    opt.innerText.toLowerCase().includes(optionText.toLowerCase()) ||
-                    optionText.toLowerCase().includes(opt.innerText.toLowerCase())
-                );
+            // Strategy 3: Look for menu (Material-UI style)
+            if (!listbox) {
+                listbox = document.querySelector('[role="menu"]:not([style*="display: none"]):not([style*="display:none"])');
+                if (listbox) console.log(`   ✓ Found menu via role="menu"`);
+            }
 
-                if (targetOption) {
-                    await simulateClick(targetOption);
-                    await new Promise(resolve => setTimeout(resolve, 200));
-
-                    // Verify selection was successful
-                    const selectedValue = inputElement.value || inputElement.getAttribute('aria-activedescendant');
-                    if (selectedValue) {
-                        return true;
-                    }
+            // Strategy 4: Look for any visible dropdown container
+            if (!listbox) {
+                const visibleDropdowns = Array.from(document.querySelectorAll('[class*="dropdown"], [class*="menu"], [class*="options"], [class*="list"]'))
+                    .filter(el => {
+                        const style = window.getComputedStyle(el);
+                        return style.display !== 'none' && style.visibility !== 'hidden' && el.offsetParent !== null;
+                    });
+                if (visibleDropdowns.length > 0) {
+                    listbox = visibleDropdowns[0];
+                    console.log(`   ✓ Found dropdown container via class name`);
                 }
             }
 
-            console.warn("Could not find matching option in dropdown for:", optionText);
+            if (listbox) {
+                console.log(`   Searching for options in listbox...`);
+                const options = Array.from(listbox.querySelectorAll('[role="option"], [role="menuitem"], li, div[class*="option"]'));
+                console.log(`   Found ${options.length} potential options`);
+
+                if (options.length > 0) {
+                    // Log all available options for debugging
+                    console.log(`   Available options:`, options.map(opt => opt.innerText.trim()).join(', '));
+                }
+
+                // Try exact match first
+                let targetOption = options.find(opt =>
+                    opt.innerText.trim().toLowerCase() === optionText.toLowerCase()
+                );
+
+                // Try partial match
+                if (!targetOption) {
+                    targetOption = options.find(opt =>
+                        opt.innerText.toLowerCase().includes(optionText.toLowerCase()) ||
+                        optionText.toLowerCase().includes(opt.innerText.toLowerCase())
+                    );
+                }
+
+                // Try fuzzy match (words in any order)
+                if (!targetOption) {
+                    const optionWords = optionText.toLowerCase().split(/\s+/);
+                    targetOption = options.find(opt => {
+                        const optText = opt.innerText.toLowerCase();
+                        return optionWords.every(word => optText.includes(word));
+                    });
+                }
+
+                if (targetOption) {
+                    console.log(`   ✓ Found matching option: "${targetOption.innerText.trim()}"`);
+                    targetOption.scrollIntoView({ block: 'nearest' });
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    await simulateClick(targetOption);
+                    await new Promise(resolve => setTimeout(resolve, 300));
+
+                    // Verify selection was successful
+                    const selectedValue = inputElement.value || inputElement.getAttribute('aria-activedescendant') || inputElement.innerText;
+                    if (selectedValue && selectedValue !== 'Please select' && selectedValue !== 'Select...') {
+                        console.log(`   ✓ Selection successful! Value: "${selectedValue}"`);
+                        return true;
+                    } else {
+                        console.warn(`   ⚠ Selection may have failed. Current value: "${selectedValue}"`);
+                    }
+                } else {
+                    console.warn(`   ✗ Could not find matching option for: "${optionText}"`);
+                }
+            } else {
+                console.warn(`   ✗ Could not find dropdown menu for element`, inputElement);
+            }
+
             // Close dropdown by clicking away
             await simulateClick(document.body);
             await new Promise(resolve => setTimeout(resolve, 200));
             return false;
         } catch (error) {
-            console.error("Error selecting React Select option:", error);
+            console.error("❌ Error selecting React Select option:", error);
             return false;
         }
     }
 
     async function attachResumeFile(resumeBase64, fileName) {
         try {
-            // Find resume upload button
-            const resumeButtons = Array.from(document.querySelectorAll('button, [role="button"]')).filter(btn => {
-                const text = btn.innerText.toLowerCase();
-                return text.includes('attach') && (text.includes('resume') || text.includes('cv'));
-            });
-
-            if (resumeButtons.length === 0) return false;
-
-            // Find file input
+            // Find file input - look for resume/CV or any file input that accepts PDF/doc
             const fileInputs = Array.from(document.querySelectorAll('input[type="file"]')).filter(input => {
                 const id = input.id.toLowerCase();
-                return id.includes('resume') || id.includes('cv');
+                const accept = input.getAttribute('accept') || '';
+                const hasResumeInId = id.includes('resume') || id.includes('cv');
+                const acceptsPdf = accept.includes('pdf') || accept.includes('.doc');
+                return hasResumeInId || acceptsPdf;
             });
 
             if (fileInputs.length === 0) return false;
@@ -652,25 +922,66 @@ async function autofillPage() {
     }
 
     function findQuestionForInput(element) {
+        // Priority 1: Explicit labels
         const checks = [
             element.getAttribute('aria-label'),
+            element.getAttribute('placeholder'),
             element.id ? document.querySelector(`label[for="${element.id}"]`)?.innerText : null,
             element.getAttribute('aria-labelledby') ? document.getElementById(element.getAttribute('aria-labelledby'))?.innerText : null
         ];
         for (const check of checks) {
-            if (check && check.trim()) return check.trim();
+            if (check && check.trim() && check.length > 2) return check.trim();
         }
+
+        // Priority 2: Check for sibling elements that might contain the question
+        const parent = element.parentElement;
+        if (parent) {
+            // Look for various text-containing elements
+            const siblingSelectors = [
+                'span[class*="body"]',
+                'div[class*="body"]',
+                'span[class*="text"]',
+                'div[class*="question"]',
+                'label',
+                'legend',
+                'span[class*="label"]',
+                'div[class*="label"]',
+                'p',
+                'h1', 'h2', 'h3', 'h4', 'h5', 'h6'
+            ];
+
+            const siblings = Array.from(parent.querySelectorAll(siblingSelectors.join(', ')));
+            for (const sibling of siblings) {
+                const text = sibling.innerText?.trim();
+                if (text && text.length > 3 && text.length < 500 && sibling !== element && !sibling.contains(element)) {
+                    // Skip if it's just a single character or common UI text
+                    if (text.length === 1 || text.toLowerCase() === 'required') continue;
+                    return text;
+                }
+            }
+        }
+
+        // Priority 3: Walk up the DOM tree
         let current = element.parentElement;
-        for (let i = 0; i < 3 && current; i++) {
+        for (let i = 0; i < 4 && current; i++) {
             try {
                 const clone = current.cloneNode(true);
-                const selector = `[name="${element.name}"], #${element.id}`;
-                Array.from(clone.querySelectorAll(selector)).forEach(el => el.remove());
+                // Remove the input element and similar siblings from the clone
+                const selector = element.name ? `[name="${element.name}"]` : `#${element.id}`;
+                Array.from(clone.querySelectorAll('input, textarea, select, button')).forEach(el => el.remove());
                 const text = clone.innerText.trim().split('\n')[0].trim();
-                if (text && text.length > 5 && text.length < 200) return text;
+                if (text && text.length > 3 && text.length < 300) return text;
             } catch (e) {}
             current = current.parentElement;
         }
+
+        // Priority 4: Use element attributes as fallback
+        const name = element.name || element.id || '';
+        if (name) {
+            // Convert camelCase or snake_case to readable text
+            return name.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim();
+        }
+
         return '';
     }
     
@@ -686,7 +997,7 @@ async function autofillPage() {
                  if (options.length > 0) return { options, source: parent };
              }
         }
-        
+
         if (element.tagName.toLowerCase() === 'select') {
             options = Array.from(element.options).map(opt => opt.text).filter(t => t.trim() !== '' && !t.toLowerCase().includes('select'));
         } else if (element.getAttribute('list')) {
@@ -702,24 +1013,141 @@ async function autofillPage() {
         }
         if (options.length > 0) return { options, source: element };
 
-        const isComboBox = element.getAttribute('role') === 'combobox' || element.hasAttribute('aria-controls') || element.getAttribute('aria-haspopup') === 'listbox';
+        // Check if this is a button-based dropdown (common in modern forms)
+        const isButtonDropdown = element.tagName.toLowerCase() === 'button' &&
+                                (element.hasAttribute('aria-haspopup') ||
+                                 element.querySelector('svg') ||
+                                 element.innerText.toLowerCase().includes('select'));
+
+        const isComboBox = element.getAttribute('role') === 'combobox' ||
+                          element.hasAttribute('aria-controls') ||
+                          element.getAttribute('aria-haspopup') === 'listbox' ||
+                          isButtonDropdown;
+
         if (isComboBox) {
             await simulateClick(element);
             await new Promise(resolve => setTimeout(resolve, 750));
-            
+
             const ariaControlsId = element.getAttribute('aria-controls');
             let controlledEl = ariaControlsId ? document.getElementById(ariaControlsId) : document.querySelector('[role="listbox"]:not([style*="display: none"])');
-            
+
+            // Also check for menu role (common in Material-UI and similar libraries)
+            if (!controlledEl) {
+                controlledEl = document.querySelector('[role="menu"]:not([style*="display: none"])');
+            }
+
             if (controlledEl) {
-                const optionElements = Array.from(controlledEl.querySelectorAll('[role="option"]'));
+                const optionElements = Array.from(controlledEl.querySelectorAll('[role="option"], [role="menuitem"]'));
                 if (optionElements.length > 0) {
+                    const opts = optionElements.map(opt => opt.innerText.trim()).filter(t => t.length > 0);
                     await simulateClick(document.body); // Close the dropdown
-                    return { options: optionElements.map(opt => opt.innerText.trim()), source: controlledEl };
+                    return { options: opts, source: controlledEl };
                 }
             }
             await simulateClick(document.body); // Click away to close
         }
         return { options: [] };
+    }
+
+    function classifyFieldType(element, question, combinedText) {
+        // Returns: { type: string, confidence: number, keywords: string[] }
+        const classifications = [];
+
+        // Personal Information
+        if (combinedText.includes('first') && combinedText.includes('name')) {
+            classifications.push({ type: 'firstName', confidence: 0.95, keywords: ['first', 'name'] });
+        }
+        if (combinedText.includes('last') && combinedText.includes('name')) {
+            classifications.push({ type: 'lastName', confidence: 0.95, keywords: ['last', 'name'] });
+        }
+        if (combinedText.match(/\b(full|legal)\s*name\b/i)) {
+            classifications.push({ type: 'fullName', confidence: 0.9, keywords: ['full', 'name'] });
+        }
+        if (combinedText.match(/\b(email|e-mail)\b/i)) {
+            classifications.push({ type: 'email', confidence: 0.95, keywords: ['email'] });
+        }
+        if (combinedText.match(/\b(phone|mobile|telephone|contact.*number)\b/i)) {
+            classifications.push({ type: 'phone', confidence: 0.9, keywords: ['phone'] });
+        }
+
+        // Location
+        if (combinedText.match(/\b(city|town)\b/i) && !combinedText.includes('work') && !combinedText.includes('job')) {
+            classifications.push({ type: 'city', confidence: 0.85, keywords: ['city'] });
+        }
+        if (combinedText.match(/\b(state|province|region)\b/i)) {
+            classifications.push({ type: 'state', confidence: 0.85, keywords: ['state'] });
+        }
+        if (combinedText.match(/\b(zip|postal)\b/i)) {
+            classifications.push({ type: 'zipCode', confidence: 0.9, keywords: ['zip'] });
+        }
+        if (combinedText.match(/\b(country|nation)\b/i)) {
+            classifications.push({ type: 'country', confidence: 0.85, keywords: ['country'] });
+        }
+        if (combinedText.match(/\b(address|street)\b/i) && !combinedText.includes('email')) {
+            classifications.push({ type: 'address', confidence: 0.8, keywords: ['address'] });
+        }
+
+        // Professional Links
+        if (combinedText.includes('linkedin')) {
+            classifications.push({ type: 'linkedinUrl', confidence: 0.95, keywords: ['linkedin'] });
+        }
+        if (combinedText.match(/\b(github|gitlab|portfolio|website|personal.*site)\b/i)) {
+            classifications.push({ type: 'portfolioUrl', confidence: 0.85, keywords: ['github', 'portfolio'] });
+        }
+
+        // Work Experience
+        if (combinedText.match(/\b(years|yrs).*experience\b/i) || combinedText.includes('hands on')) {
+            classifications.push({ type: 'yearsExperience', confidence: 0.85, keywords: ['years', 'experience'] });
+        }
+        if (combinedText.match(/\b(current|previous).*company\b/i) || (combinedText.includes('employer') && !combinedText.includes('former'))) {
+            classifications.push({ type: 'company', confidence: 0.8, keywords: ['company'] });
+        }
+        if (combinedText.match(/\b(job.*title|position|role)\b/i) && !combinedText.includes('desired')) {
+            classifications.push({ type: 'jobTitle', confidence: 0.8, keywords: ['title', 'position'] });
+        }
+
+        // Availability
+        if (combinedText.match(/\b(available|availability|start.*date)\b/i)) {
+            classifications.push({ type: 'availability', confidence: 0.8, keywords: ['available'] });
+        }
+        if (combinedText.match(/\b(salary|compensation|expected.*pay|wage)\b/i)) {
+            classifications.push({ type: 'salary', confidence: 0.85, keywords: ['salary'] });
+        }
+
+        // Authorization
+        if (combinedText.match(/\b(authorized|authorization|eligible.*work|work.*permit)\b/i)) {
+            classifications.push({ type: 'workAuthorization', confidence: 0.9, keywords: ['authorized'] });
+        }
+        if (combinedText.match(/\b(sponsor|visa)\b/i)) {
+            classifications.push({ type: 'sponsorship', confidence: 0.9, keywords: ['sponsor'] });
+        }
+
+        // Motivation
+        if (combinedText.match(/\bwhy.*(interested|applying|company|role|position)\b/i)) {
+            classifications.push({ type: 'whyInterested', confidence: 0.85, keywords: ['why', 'interested'] });
+        }
+        if (combinedText.match(/\b(cover.*letter)\b/i)) {
+            classifications.push({ type: 'coverLetter', confidence: 0.95, keywords: ['cover', 'letter'] });
+        }
+
+        // Resume
+        if (combinedText.match(/\b(resume|cv)\b/i)) {
+            classifications.push({ type: 'resume', confidence: 0.95, keywords: ['resume', 'cv'] });
+        }
+
+        // References
+        if (combinedText.match(/\breference(?!.*preference)\b/i)) {
+            classifications.push({ type: 'references', confidence: 0.85, keywords: ['reference'] });
+        }
+
+        // Unclassified - will need AI
+        if (classifications.length === 0) {
+            return { type: 'unknown', confidence: 0, keywords: [] };
+        }
+
+        // Return highest confidence classification
+        classifications.sort((a, b) => b.confidence - a.confidence);
+        return classifications[0];
     }
 
     async function getAIResponse(prompt, userData) {
@@ -729,11 +1157,11 @@ async function autofillPage() {
         }
 
         const parts = [{ text: prompt }];
-        
+
         if (userData.resume && userData.resume.startsWith('data:')) {
             const [meta, base64Data] = userData.resume.split(',');
             const mimeTypeMatch = meta.match(/:(.*?);/);
-            
+
             if (mimeTypeMatch && mimeTypeMatch[1] && base64Data) {
                 const mimeType = mimeTypeMatch[1];
                 if (mimeType === 'application/pdf' || mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
@@ -826,20 +1254,93 @@ async function autofillPage() {
     let experienceIndex = 0;
     let educationIndex = 0;
     
-    const allElements = Array.from(document.querySelectorAll('input, textarea, select, [role="textbox"], [role="combobox"], [contenteditable="true"], button'));
+    // Dynamic form element discovery - finds ALL potential form inputs
+    function discoverFormElements() {
+        const selectors = [
+            // Standard HTML form elements
+            'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"])',
+            'textarea',
+            'select',
+
+            // ARIA roles for custom controls
+            '[role="textbox"]',
+            '[role="combobox"]',
+            '[role="listbox"]',
+            '[role="radiogroup"] input[type="radio"]',
+            '[role="group"] input[type="checkbox"]',
+
+            // Content editable
+            '[contenteditable="true"]',
+
+            // Button-based dropdowns (common in React/Material-UI)
+            'button[aria-haspopup]',
+            'button[aria-expanded]',
+            'button[class*="select"]',
+            'button[class*="dropdown"]',
+            'button[class*="button"][class*="-"]', // Catches CSS-module buttons
+
+            // Custom input patterns
+            '[data-testid*="input"]',
+            '[data-testid*="field"]',
+            '[data-testid*="select"]',
+            '[class*="input"]',
+            '[class*="field"]',
+            '[class*="textField"]',
+            '[class*="textarea"]'
+        ];
+
+        const elements = new Set();
+
+        selectors.forEach(selector => {
+            try {
+                document.querySelectorAll(selector).forEach(el => {
+                    // Only add if element is likely interactive
+                    if (el.offsetParent !== null || el.offsetWidth > 0 || el.offsetHeight > 0) {
+                        elements.add(el);
+                    }
+                });
+            } catch (e) {
+                // Selector might be invalid in some contexts
+                console.warn(`AI Autofill: Invalid selector "${selector}"`);
+            }
+        });
+
+        return Array.from(elements);
+    }
+
+    const allElements = discoverFormElements();
+    console.log(`AI Autofill: Discovered ${allElements.length} form elements`);
+    console.log('AI Autofill: Element types found:', allElements.map(el => `${el.tagName.toLowerCase()}[${el.type || el.getAttribute('role') || 'no-type'}]`).join(', '));
 
     for (const el of allElements) {
         try {
             const style = window.getComputedStyle(el);
             if (el.disabled || el.readOnly || style.display === 'none' || style.visibility === 'hidden' || el.closest('[style*="display: none"]')) {
+                console.log(`AI Autofill: Skipping disabled/hidden element:`, el);
                 continue;
             }
 
             const elType = el.tagName.toLowerCase();
             const isButton = elType === 'button' || el.getAttribute('role') === 'button';
 
-            // Skip non-interactive buttons
-            if (isButton && (el.type ==='submit' || el.type === 'reset')) continue;
+            // Skip non-interactive buttons and submit buttons
+            if (isButton) {
+                const buttonText = el.innerText.toLowerCase().trim();
+                const buttonType = el.type;
+
+                // Skip submit, reset, and action buttons
+                if (buttonType === 'submit' ||
+                    buttonType === 'reset' ||
+                    buttonText.includes('apply') ||
+                    buttonText.includes('submit') ||
+                    buttonText.includes('upload') ||
+                    buttonText.includes('attach') ||
+                    buttonText.includes('remove') ||
+                    buttonText.includes('delete') ||
+                    buttonText.includes('cross')) {
+                    continue;
+                }
+            }
             
             // --- Check if already filled ---
             const isRadioOrCheckbox = el.type === 'radio' || el.type === 'checkbox';
@@ -856,6 +1357,12 @@ async function autofillPage() {
                 }
             } else if (el.isContentEditable) {
                 if (el.textContent?.trim()) {
+                    isFilled = true;
+                }
+            } else if (elType === 'button') {
+                // Check if button-based dropdown has been filled (doesn't contain "select" or "please")
+                const buttonText = el.innerText.toLowerCase().trim();
+                if (buttonText && !buttonText.includes('select') && !buttonText.includes('please') && buttonText.length > 0) {
                     isFilled = true;
                 }
             } else if (typeof el.value === 'string' && el.value.trim()) {
@@ -877,6 +1384,10 @@ async function autofillPage() {
             const question = findQuestionForInput(el);
             const combinedText = `${el.id} ${el.name} ${question}`.toLowerCase();
             const isDemographic = demographicKeywords.some(keyword => combinedText.includes(keyword));
+
+            // Classify the field type for smarter handling
+            const fieldClassification = classifyFieldType(el, question, combinedText);
+            console.log(`AI Autofill: Field classified as "${fieldClassification.type}" (confidence: ${fieldClassification.confidence}) - Question: "${question}"`);
 
             // --- Handle EEOC/Demographic Fields ---
             if (isDemographic) {
@@ -1218,8 +1729,8 @@ Provide a concise answer.`;
                             console.warn("Radio/checkbox selection failed for:", question);
                         }
                     }
-                } else if (el.getAttribute('role') === 'combobox') {
-                    // Use AI-guided selection for combobox elements
+                } else if (el.getAttribute('role') === 'combobox' || (el.tagName.toLowerCase() === 'button' && el.hasAttribute('aria-haspopup'))) {
+                    // Handle combobox and button-based dropdowns
                     selectionSuccessful = await selectReactSelectOption(el, bestMatch);
 
                     // If selection failed, try opening and selecting again with more time
@@ -1233,7 +1744,7 @@ Provide a concise answer.`;
                     }
                 } else {
                     // Custom dropdowns - button groups or other custom elements
-                    const optionElements = Array.from(source.querySelectorAll('[role="option"], button'));
+                    const optionElements = Array.from(source.querySelectorAll('[role="option"], [role="menuitem"], button'));
                     const targetOption = optionElements.find(opt =>
                         opt.innerText.trim() === bestMatch ||
                         opt.innerText.trim().toLowerCase() === bestMatch.toLowerCase()
@@ -1376,10 +1887,17 @@ Job: ${jobTitle || 'Not specified'}
 Description: ${jobDescription || 'Not specified'}`;
                     valueToType = await getAIResponse(salaryPrompt, userData) || "Negotiable";
                 }
-                // Years of experience
-                else if (combinedText.includes('years') && (combinedText.includes('experience') || combinedText.includes('exp'))) {
-                    const yearsPrompt = `Based on my resume, how many years of relevant experience do I have? Provide just a number.`;
-                    valueToType = await getAIResponse(yearsPrompt, userData) || "5";
+                // Years of experience (with specific technology or general)
+                else if (combinedText.includes('years') && (combinedText.includes('experience') || combinedText.includes('exp') || combinedText.includes('hands on'))) {
+                    // Check if question asks about specific technology
+                    const techMatch = question.match(/\b(react|vue|angular|node|python|java|javascript|typescript|go|rust|swift|kotlin)\b/i);
+                    let yearsPrompt;
+                    if (techMatch) {
+                        yearsPrompt = `Based on my resume, how many years of hands-on ${techMatch[1]} experience do I have? Provide just a number. If I don't have specific experience with ${techMatch[1]}, say "0".`;
+                    } else {
+                        yearsPrompt = `Based on my resume, how many years of relevant professional experience do I have? Provide just a number.`;
+                    }
+                    valueToType = await getAIResponse(yearsPrompt, userData) || "3";
                 }
                 // Skills/Technologies
                 else if (combinedText.includes('skills') || combinedText.includes('technologies') ||
@@ -1436,9 +1954,9 @@ Be specific and professional. Focus on alignment between my skills and the role.
                         **COVER LETTER:**`;
                     valueToType = await getAIResponse(coverLetterPrompt, userData);
                 }
-                // LinkedIn profile
-                else if (combinedText.includes('github')) {
-                    valueToType = userData.portfolioUrl; // Assuming portfolio might include GitHub
+                // GitHub/portfolio links
+                else if (combinedText.includes('github') || combinedText.includes('gitlab') || combinedText.includes('online portfolio')) {
+                    valueToType = userData.portfolioUrl || userData.linkedinUrl;
                 }
                 // Desired job title
                 else if (combinedText.includes('desired') && combinedText.includes('title')) {
