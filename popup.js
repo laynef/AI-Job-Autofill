@@ -1978,34 +1978,42 @@ Provide a concise answer.`;
                 // Availability and start date
                 else if (combinedText.includes('available') || combinedText.includes('start date') ||
                          combinedText.includes('availability')) {
-                    const availabilityPrompt = `Based on the job application context, provide a professional availability response. Common options: "Immediately", "2 weeks notice", "1 month", etc. Provide just the answer.`;
-                    valueToType = await getAIResponse(availabilityPrompt, userData) || "Immediately";
+                    valueToType = "Immediately"; // Simple default, user can change if needed
                 }
                 // Salary expectations
                 else if (combinedText.includes('salary') || combinedText.includes('compensation') ||
                          combinedText.includes('expected pay') || combinedText.includes('wage')) {
-                    const salaryPrompt = `Based on the job description and my profile, what would be a reasonable salary expectation? Provide just a number or range (e.g., "$80,000 - $100,000" or "Negotiable").
-
-Job: ${jobTitle || 'Not specified'}
-Description: ${jobDescription || 'Not specified'}`;
-                    valueToType = await getAIResponse(salaryPrompt, userData) || "Negotiable";
+                    valueToType = "Negotiable"; // Simple default, user can change if needed
                 }
                 // Years of experience (with specific technology or general)
                 else if (combinedText.includes('years') && (combinedText.includes('experience') || combinedText.includes('exp') || combinedText.includes('hands on'))) {
                     // Check if question asks about specific technology
-                    const techMatch = question.match(/\b(react|vue|angular|node|python|java|javascript|typescript|go|rust|swift|kotlin)\b/i);
-                    let yearsPrompt;
-                    if (techMatch) {
-                        yearsPrompt = `Based on my resume, how many years of hands-on ${techMatch[1]} experience do I have? Provide just a number. If I don't have specific experience with ${techMatch[1]}, say "0".`;
+                    const techMatch = question.match(/\b(react|vue|angular|node|python|java|javascript|typescript|go|rust|swift|kotlin|c\+\+|\.net|aws|docker|kubernetes)\b/i);
+
+                    // Check if user's additionalInfo mentions years
+                    const userYearsMatch = userData.additionalInfo?.match(/(\d+)\+?\s*(?:years?|yrs?)/i);
+
+                    if (userYearsMatch) {
+                        // Use the years mentioned in user's profile
+                        valueToType = userYearsMatch[1];
+                    } else if (techMatch && userData.additionalInfo?.toLowerCase().includes(techMatch[1].toLowerCase())) {
+                        // User mentions the tech, estimate conservatively
+                        valueToType = "3";
                     } else {
-                        yearsPrompt = `Based on my resume, how many years of relevant professional experience do I have? Provide just a number.`;
+                        // General experience - use default
+                        valueToType = "3";
                     }
-                    valueToType = await getAIResponse(yearsPrompt, userData) || "3";
                 }
                 // Skills/Technologies
                 else if (combinedText.includes('skills') || combinedText.includes('technologies') ||
-                         combinedText.includes('expertise') || combinedText.includes('proficienc')) {
-                    valueToType = userData.additionalInfo || await getAIResponse("List my key technical skills from my resume in a concise format.", userData);
+                         combinedText.includes('expertise') || combinedText.includes('proficienc') ||
+                         combinedText.includes('technical background') || combinedText.includes('qualifications')) {
+                    // Always use additionalInfo first if available
+                    if (userData.additionalInfo && userData.additionalInfo.trim()) {
+                        valueToType = userData.additionalInfo.trim();
+                    } else {
+                        valueToType = await getAIResponse("List my top 5 key skills from my resume in a brief comma-separated format.", userData);
+                    }
                 }
                 // References
                 else if (combinedText.includes('reference') && !combinedText.includes('preference')) {
@@ -2030,14 +2038,13 @@ Description: ${jobDescription || 'Not specified'}`;
                 // Why are you interested / Why this company
                 else if ((combinedText.includes('why') && (combinedText.includes('interested') || combinedText.includes('applying'))) ||
                          (combinedText.includes('why') && (combinedText.includes('company') || combinedText.includes('role') || combinedText.includes('position')))) {
-                    const whyPrompt = `Based on the job description and my profile, write a concise 2-3 sentence answer explaining why I'm interested in this role/company.
-
-Job Title: ${jobTitle || 'Not specified'}
-Job Description: ${jobDescription || 'Not specified'}
-My Profile: ${userData.additionalInfo || 'Not provided'}
-
-Be specific and professional. Focus on alignment between my skills and the role.`;
-                    valueToType = await getAIResponse(whyPrompt, userData) || "I am excited about this opportunity because it aligns with my skills and career goals.";
+                    // Check if user has additionalInfo that can answer this
+                    if (userData.additionalInfo && userData.additionalInfo.trim().length > 50) {
+                        valueToType = `I am interested because my skills align well with this role. ${userData.additionalInfo.split('.')[0]}.`;
+                    } else {
+                        const whyPrompt = `Write a brief 1-2 sentence answer: Why am I interested in this ${jobTitle || 'role'}? Use my profile: ${userData.additionalInfo || 'experienced professional'}. Be specific and concise.`;
+                        valueToType = await getAIResponse(whyPrompt, userData) || "I am excited about this opportunity because it aligns with my skills and career goals.";
+                    }
                 }
                 // Cover letter (if not handled earlier)
                 else if (combinedText.includes('cover letter') && (elType === 'textarea' || el.isContentEditable)) {
@@ -2079,49 +2086,39 @@ Be specific and professional. Focus on alignment between my skills and the role.
                 } else {
                     const cleanQuestion = question.replace(/[*:]$/, '').trim();
                     if (cleanQuestion.length > 10 && !isDemographic) {
-                        // Determine question category for better prompting
-                        let questionCategory = 'general';
-                        let maxLength = '2-4 sentences';
+                        // First, try to use additionalInfo if the question seems general
+                        if ((cleanQuestion.toLowerCase().includes('about yourself') ||
+                             cleanQuestion.toLowerCase().includes('background') ||
+                             cleanQuestion.toLowerCase().includes('experience')) &&
+                            userData.additionalInfo && userData.additionalInfo.trim().length > 30) {
+                            // Use user's profile directly for general questions
+                            await simulateTyping(el, userData.additionalInfo.trim());
+                            continue;
+                        }
 
+                        // Determine max length - MUCH SHORTER
+                        let maxLength = '1 brief sentence';
                         if (elType === 'textarea' || el.isContentEditable) {
-                            maxLength = '3-5 sentences or a short paragraph';
+                            maxLength = '2-3 sentences maximum';
                         } else if (elType === 'input' && el.type === 'text') {
-                            maxLength = '1-2 sentences or a brief phrase';
+                            maxLength = 'one short phrase or sentence';
                         }
 
-                        if (cleanQuestion.toLowerCase().includes('tell me about') || cleanQuestion.toLowerCase().includes('describe yourself')) {
-                            questionCategory = 'self-introduction';
-                        } else if (cleanQuestion.toLowerCase().includes('strength') || cleanQuestion.toLowerCase().includes('weakness')) {
-                            questionCategory = 'strengths-weaknesses';
-                        } else if (cleanQuestion.toLowerCase().includes('challenge') || cleanQuestion.toLowerCase().includes('difficult')) {
-                            questionCategory = 'behavioral-challenge';
-                        } else if (cleanQuestion.toLowerCase().includes('achieve') || cleanQuestion.toLowerCase().includes('accomplishment')) {
-                            questionCategory = 'achievement';
-                        } else if (cleanQuestion.toLowerCase().includes('team') || cleanQuestion.toLowerCase().includes('collaboration')) {
-                            questionCategory = 'teamwork';
-                        }
+                        // MUCH SIMPLER prompt
+                        const prompt = `Answer this job application question briefly using my profile.
 
-                        const prompt = `You are a helpful career assistant. Answer the following job application question concisely, based on my resume and the job description.
-                            ---
-                            **CONTEXT:**
-                            - Job Title: ${jobTitle || 'Not found.'}
-                            - Job Description: ${jobDescription || 'Not found.'}
-                            - My Profile: ${userData.additionalInfo || 'Not provided.'}
-                            - Question Category: ${questionCategory}
-                            - Answers Already Used: ${Array.from(usedAnswers).join(", ") || 'None'}
-                            ---
-                            **TASK:**
-                            - Question: "${cleanQuestion}"
-                            ---
-                            **INSTRUCTIONS:**
-                            - Write only the answer itself, with no preamble or explanation.
-                            - Keep the answer concise and relevant to the job: ${maxLength}.
-                            - If it's a yes/no question, respond with just "Yes" or "No" followed by a brief explanation if needed.
-                            - For behavioral questions, use the STAR method (Situation, Task, Action, Result) if appropriate.
-                            - Be specific and professional.
-                            - Avoid repeating previous answers.
-                            **ANSWER:**`;
-                        const aiAnswer = await getAIResponse(prompt, userData) || "Based on my experience, I am a strong fit for this role."; // Final fallback
+Question: "${cleanQuestion}"
+My Profile: ${userData.additionalInfo || 'Experienced professional seeking new opportunities'}
+Job: ${jobTitle || 'Not specified'}
+
+Instructions:
+- Answer in ${maxLength}
+- Be direct and concise
+- No preamble or extra explanation
+- If yes/no question, just say "Yes" or "No"
+
+Answer:`;
+                        const aiAnswer = await getAIResponse(prompt, userData) || "Yes"; // Final fallback
                         usedAnswers.add(aiAnswer);
                         await simulateTyping(el, aiAnswer);
                     }
