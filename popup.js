@@ -118,10 +118,10 @@ try {
 // Save current job application to tracker
 function saveCurrentApplicationToTracker(tab) {
     try {
-        // Extract company and job title from page
+        // Extract company and job title from page (async function)
         chrome.scripting.executeScript({
             target: {tabId: tab.id},
-            function: extractJobInfo,
+            func: extractJobInfo,
         }).then((results) => {
             if (results && results[0] && results[0].result) {
                 const jobInfo = results[0].result;
@@ -179,8 +179,8 @@ function saveCurrentApplicationToTracker(tab) {
     }
 }
 
-// Extract job information from page
-function extractJobInfo() {
+// Extract job information from page - returns a promise for async AI extraction
+async function extractJobInfo() {
     // Extract job title with enhanced selectors
     const jobTitle = document.querySelector('h1')?.innerText ||
                      document.querySelector('h2')?.innerText ||
@@ -373,6 +373,63 @@ function extractJobInfo() {
         if (company.length > 100) company = ''; // Too long, probably not a company name
     }
 
+    // If company is still not found, try to extract from job description using AI
+    if (!company) {
+        try {
+            // Get job description text
+            let jobDescription = '';
+            const ldJsonScript = document.querySelector('script[type="application/ld+json"]');
+            if (ldJsonScript) {
+                const jsonData = JSON.parse(ldJsonScript.textContent);
+                const descContainer = (Array.isArray(jsonData) ? jsonData.find(j => j.description) : jsonData) || {};
+                if (descContainer.description) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = descContainer.description;
+                    jobDescription = tempDiv.innerText;
+                }
+            }
+            if (!jobDescription) {
+                const descDiv = document.querySelector('#job-description, [class*="job-description"], [class*="jobdescription"]');
+                if (descDiv) jobDescription = descDiv.innerText;
+            }
+
+            // Use AI to extract company name from description
+            if (jobDescription) {
+                const userData = await new Promise(resolve => {
+                    chrome.storage.local.get(['apiKey'], (result) => {
+                        resolve(result);
+                    });
+                });
+
+                if (userData.apiKey) {
+                    const companyPrompt = `Extract the company name from this job description. Return ONLY the company name, nothing else.
+
+Job Description:
+${jobDescription.substring(0, 3000)}`;
+
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${userData.apiKey}`;
+                    const payload = { contents: [{ role: "user", parts: [{ text: companyPrompt }] }] };
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        const extractedCompany = result.candidates?.[0]?.content?.parts?.[0]?.text.trim() || "";
+                        if (extractedCompany && extractedCompany.length > 2 && extractedCompany.length < 100) {
+                            company = extractedCompany;
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.log('Could not extract company via AI:', e);
+        }
+    }
+
     // Extract location with enhanced selectors
     let location = '';
     const locationSelectors = [
@@ -487,18 +544,20 @@ async function autofillPage() {
                 if (targetOption) {
                     await simulateClick(targetOption);
                     await new Promise(resolve => setTimeout(resolve, 200));
-                    return true;
+
+                    // Verify selection was successful
+                    const selectedValue = inputElement.value || inputElement.getAttribute('aria-activedescendant');
+                    if (selectedValue) {
+                        return true;
+                    }
                 }
             }
 
-            // Fallback: type the option text
-            await simulateTyping(inputElement, optionText);
-            await new Promise(resolve => setTimeout(resolve, 300));
-
-            // Press Enter
-            inputElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+            console.warn("Could not find matching option in dropdown for:", optionText);
+            // Close dropdown by clicking away
+            await simulateClick(document.body);
             await new Promise(resolve => setTimeout(resolve, 200));
-            return true;
+            return false;
         } catch (error) {
             console.error("Error selecting React Select option:", error);
             return false;
@@ -1126,25 +1185,54 @@ Provide a concise answer.`;
                 usedAnswers.add(bestMatch);
 
                 // Select the option based on element type
+                let selectionSuccessful = false;
+
                 if (el.tagName.toLowerCase() === 'select') {
                     for (let option of el.options) {
                         if (option.text.trim() === bestMatch || option.text.trim().toLowerCase() === bestMatch.toLowerCase()) {
                             el.value = option.value;
                             el.dispatchEvent(new Event('change', { bubbles: true }));
                             el.dispatchEvent(new Event('input', { bubbles: true }));
+                            selectionSuccessful = true;
                             break;
                         }
+                    }
+                    // Verify selection
+                    if (selectionSuccessful) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
                     }
                 } else if (el.type === 'radio' || el.type === 'checkbox') {
                     for (const input of document.querySelectorAll(`input[name="${el.name}"]`)) {
                         const label = document.querySelector(`label[for="${input.id}"]`);
                         if (label && (label.innerText.trim() === bestMatch || label.innerText.trim().toLowerCase() === bestMatch.toLowerCase())) {
                             await simulateClick(input);
+                            selectionSuccessful = true;
                             break;
                         }
                     }
+                    // Verify selection
+                    if (selectionSuccessful) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        const isChecked = document.querySelector(`input[name="${el.name}"]:checked`);
+                        if (!isChecked) {
+                            console.warn("Radio/checkbox selection failed for:", question);
+                        }
+                    }
+                } else if (el.getAttribute('role') === 'combobox') {
+                    // Use AI-guided selection for combobox elements
+                    selectionSuccessful = await selectReactSelectOption(el, bestMatch);
+
+                    // If selection failed, try opening and selecting again with more time
+                    if (!selectionSuccessful) {
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        selectionSuccessful = await selectReactSelectOption(el, bestMatch);
+                    }
+
+                    if (!selectionSuccessful) {
+                        console.warn("Could not select dropdown option for:", question, "Tried to select:", bestMatch);
+                    }
                 } else {
-                    // Custom dropdowns and comboboxes
+                    // Custom dropdowns - button groups or other custom elements
                     const optionElements = Array.from(source.querySelectorAll('[role="option"], button'));
                     const targetOption = optionElements.find(opt =>
                         opt.innerText.trim() === bestMatch ||
@@ -1152,10 +1240,18 @@ Provide a concise answer.`;
                     );
                     if (targetOption) {
                         await simulateClick(targetOption);
+                        selectionSuccessful = true;
+                        await new Promise(resolve => setTimeout(resolve, 100));
                     } else {
-                        await simulateTyping(el, bestMatch); // Type if direct match fails
+                        console.warn("Could not find option to click for:", question);
                     }
                 }
+
+                // Wait for any UI updates after selection
+                if (selectionSuccessful) {
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+
                 continue;
             }
             
