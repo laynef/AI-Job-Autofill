@@ -31,7 +31,7 @@
         .grid-cols-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
 
         label { display: block; font-size: 0.875rem; font-weight: 500; color: #4b5563; }
-        input[type="text"], input[type="email"], input[type="tel"], input[type="url"], input[type="password"], textarea {
+        input[type="text"], input[type="email"], input[type="tel"], input[type="url"], input[type="password"], textarea, select {
             margin-top: 0.25rem;
             display: block;
             width: 100%;
@@ -41,7 +41,7 @@
             border-radius: 0.375rem;
             box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
         }
-        input:focus, textarea:focus { outline: 2px solid transparent; outline-offset: 2px; --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color); --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(3px + var(--tw-ring-offset-width)) var(--tw-ring-color); box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000); border-color: #4f46e5; }
+        input:focus, textarea:focus, select:focus { outline: 2px solid transparent; outline-offset: 2px; --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color); --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(3px + var(--tw-ring-offset-width)) var(--tw-ring-color); box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000); border-color: #4f46e5; }
 
         input[type="file"] {
              margin-top: 0.25rem; display: block; width: 100%; font-size: 0.875rem; color: #6b7280;
@@ -112,6 +112,67 @@
         <input type="url" id="linkedinUrl" placeholder="LinkedIn URL">
         <input type="url" id="portfolioUrl" placeholder="Portfolio/Website URL">
         
+        <h2 class="section-header">Demographic Information (Optional)</h2>
+        <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">These fields are optional and will only be used to autofill EEOC/demographic questions on job applications. Leave blank to decline answering.</p>
+
+        <div>
+            <label for="gender">Gender</label>
+            <select id="gender">
+                <option value="">Prefer not to answer</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Non-binary">Non-binary</option>
+                <option value="Other">Other</option>
+                <option value="Decline to Self-Identify">Decline to Self-Identify</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="hispanic">Are you Hispanic or Latino?</label>
+            <select id="hispanic">
+                <option value="">Prefer not to answer</option>
+                <option value="Yes">Yes, I am Hispanic or Latino</option>
+                <option value="No">No, I am not Hispanic or Latino</option>
+                <option value="I don't wish to answer">I don't wish to answer</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="race">Race / Ethnicity</label>
+            <select id="race">
+                <option value="">Prefer not to answer</option>
+                <option value="American Indian or Alaska Native">American Indian or Alaska Native</option>
+                <option value="Asian">Asian</option>
+                <option value="Black or African American">Black or African American</option>
+                <option value="Hispanic or Latino">Hispanic or Latino</option>
+                <option value="Native Hawaiian or Other Pacific Islander">Native Hawaiian or Other Pacific Islander</option>
+                <option value="White">White</option>
+                <option value="Two or More Races">Two or More Races</option>
+                <option value="Decline To Self Identify">Decline To Self Identify</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="veteran">Veteran Status</label>
+            <select id="veteran">
+                <option value="">Prefer not to answer</option>
+                <option value="I am a veteran">I am a veteran</option>
+                <option value="I am not a veteran">I am not a veteran</option>
+                <option value="I identify as one or more of the classifications of protected veteran">I identify as one or more of the classifications of protected veteran</option>
+                <option value="I don't wish to answer">I don't wish to answer</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="disability">Disability Status</label>
+            <select id="disability">
+                <option value="">Prefer not to answer</option>
+                <option value="Yes, I have a disability">Yes, I have a disability (or previously had a disability)</option>
+                <option value="No, I don't have a disability">No, I don't have a disability</option>
+                <option value="I don't wish to answer">I don't wish to answer</option>
+            </select>
+        </div>
+
         <h2 class="section-header">AI & Resume</h2>
         <input type="password" id="apiKey" placeholder="Google AI API Key (Required)">
         <div>

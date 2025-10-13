@@ -4,7 +4,7 @@ try {
         const statusEl = document.getElementById('status');
         const resumeFileNameEl = document.getElementById('resumeFileName');
         const resumeFileInput = document.getElementById('resumeFile');
-        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'apiKey', 'additionalInfo', 'coverLetter'];
+        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'apiKey', 'additionalInfo', 'coverLetter', 'gender', 'hispanic', 'race', 'veteran', 'disability'];
 
         // Load saved data when the popup opens
         chrome.storage.local.get([...textFields, 'resumeFileName', 'resume'], function(result) {
@@ -152,16 +152,29 @@ try {
 function saveCurrentApplicationToTracker(tab, statusEl) {
     try {
         console.log('🔄 Starting tracker save process...');
+        console.log('   Tab ID:', tab.id);
+        console.log('   Tab URL:', tab.url);
 
         // Extract company and job title from page (async function)
         chrome.scripting.executeScript({
             target: {tabId: tab.id},
-            func: extractJobInfo,
+            function: extractJobInfo,
         }).then((results) => {
+            console.log('📦 Raw results from extractJobInfo:', results);
+
             if (!results || !results[0]) {
                 console.error('❌ No results from extractJobInfo');
                 if (statusEl) {
-                    statusEl.textContent = '⚠ Tracker update failed: Could not extract job info';
+                    statusEl.textContent = '⚠ Tracker update failed: Script injection failed';
+                    setTimeout(() => statusEl.textContent = '', 4000);
+                }
+                return;
+            }
+
+            if (results[0].error) {
+                console.error('❌ Script execution error:', results[0].error);
+                if (statusEl) {
+                    statusEl.textContent = '⚠ Tracker update failed: ' + results[0].error;
                     setTimeout(() => statusEl.textContent = '', 4000);
                 }
                 return;
@@ -169,6 +182,7 @@ function saveCurrentApplicationToTracker(tab, statusEl) {
 
             if (!results[0].result) {
                 console.error('❌ extractJobInfo returned no data');
+                console.error('   Full result object:', results[0]);
                 if (statusEl) {
                     statusEl.textContent = '⚠ Tracker update failed: No job data found';
                     setTimeout(() => statusEl.textContent = '', 4000);
@@ -177,6 +191,7 @@ function saveCurrentApplicationToTracker(tab, statusEl) {
             }
 
             const jobInfo = results[0].result;
+            console.log('✅ Successfully extracted job info:', jobInfo);
 
             chrome.storage.local.get(['jobApplications'], function(result) {
                 let applications = result.jobApplications || [];
@@ -379,6 +394,9 @@ function detectIframeForm() {
 
 // Extract job information from page - returns a promise for async AI extraction
 async function extractJobInfo() {
+    console.log('🔍 extractJobInfo: Starting job info extraction...');
+    console.log('   Current URL:', window.location.href);
+
     // Extract job title with enhanced selectors
     let jobTitle = document.querySelector('h1')?.innerText ||
                    document.querySelector('h2')?.innerText ||
@@ -622,62 +640,8 @@ async function extractJobInfo() {
         if (company.length > 100) company = ''; // Too long, probably not a company name
     }
 
-    // If company is still not found, try to extract from job description using AI
-    if (!company) {
-        try {
-            // Get job description text
-            let jobDescription = '';
-            const ldJsonScript = document.querySelector('script[type="application/ld+json"]');
-            if (ldJsonScript) {
-                const jsonData = JSON.parse(ldJsonScript.textContent);
-                const descContainer = (Array.isArray(jsonData) ? jsonData.find(j => j.description) : jsonData) || {};
-                if (descContainer.description) {
-                    const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = descContainer.description;
-                    jobDescription = tempDiv.innerText;
-                }
-            }
-            if (!jobDescription) {
-                const descDiv = document.querySelector('#job-description, [class*="job-description"], [class*="jobdescription"]');
-                if (descDiv) jobDescription = descDiv.innerText;
-            }
-
-            // Use AI to extract company name from description
-            if (jobDescription) {
-                const userData = await new Promise(resolve => {
-                    chrome.storage.local.get(['apiKey'], (result) => {
-                        resolve(result);
-                    });
-                });
-
-                if (userData.apiKey) {
-                    const companyPrompt = `Extract the company name from this job description. Return ONLY the company name, nothing else.
-
-Job Description:
-${jobDescription.substring(0, 3000)}`;
-
-                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${userData.apiKey}`;
-                    const payload = { contents: [{ role: "user", parts: [{ text: companyPrompt }] }] };
-
-                    const response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (response.ok) {
-                        const result = await response.json();
-                        const extractedCompany = result.candidates?.[0]?.content?.parts?.[0]?.text.trim() || "";
-                        if (extractedCompany && extractedCompany.length > 2 && extractedCompany.length < 100) {
-                            company = extractedCompany;
-                        }
-                    }
-                }
-            }
-        } catch (e) {
-            console.log('Could not extract company via AI:', e);
-        }
-    }
+    // Note: AI-based company extraction removed because chrome.storage is not available
+    // when this function is injected into page context via chrome.scripting.executeScript
 
     // Extract location with enhanced selectors
     let location = '';
@@ -880,6 +844,54 @@ async function autofillPage() {
             return false;
         } catch (error) {
             console.error("❌ Error selecting React Select option:", error);
+            return false;
+        }
+    }
+
+    async function selectDropdownOption(selectElement, optionText) {
+        try {
+            console.log(`🔽 Selecting dropdown option: "${optionText}"`);
+
+            // For regular <select> elements
+            if (selectElement.tagName.toLowerCase() === 'select') {
+                const options = Array.from(selectElement.options);
+
+                // Try exact match first
+                let matchingOption = options.find(opt => opt.text.trim() === optionText || opt.value === optionText);
+
+                // Try partial match (case-insensitive)
+                if (!matchingOption) {
+                    const optionLower = optionText.toLowerCase();
+                    matchingOption = options.find(opt =>
+                        opt.text.toLowerCase().includes(optionLower) ||
+                        opt.value.toLowerCase().includes(optionLower)
+                    );
+                }
+
+                // Try matching keywords
+                if (!matchingOption) {
+                    const keywords = optionText.toLowerCase().split(/\s+/);
+                    matchingOption = options.find(opt => {
+                        const optText = opt.text.toLowerCase();
+                        return keywords.some(keyword => optText.includes(keyword));
+                    });
+                }
+
+                if (matchingOption) {
+                    selectElement.value = matchingOption.value;
+                    selectElement.dispatchEvent(new Event('change', { bubbles: true }));
+                    selectElement.dispatchEvent(new Event('input', { bubbles: true }));
+                    console.log(`   ✓ Selected: "${matchingOption.text}"`);
+                    return true;
+                } else {
+                    console.warn(`   ✗ Could not find matching option for: "${optionText}"`);
+                    return false;
+                }
+            }
+
+            return false;
+        } catch (error) {
+            console.error("❌ Error selecting dropdown option:", error);
             return false;
         }
     }
@@ -1437,40 +1449,75 @@ async function autofillPage() {
             // --- Handle EEOC/Demographic Fields ---
             if (isDemographic) {
                 const inputRole = el.getAttribute('role');
+                const elType = el.tagName.toLowerCase();
 
-                // Handle race/ethnicity dropdown (React Select)
-                if ((combinedText.includes('race') || combinedText.includes('ethnicity')) &&
-                    inputRole === 'combobox') {
-                    await selectReactSelectOption(el, 'Decline To Self Identify');
+                // Handle race/ethnicity dropdown
+                if (combinedText.includes('race') || combinedText.includes('ethnicity')) {
+                    const raceValue = userData.race || 'Decline To Self Identify';
+                    console.log('🏷️ Using saved race/ethnicity:', raceValue);
+
+                    if (inputRole === 'combobox') {
+                        await selectReactSelectOption(el, raceValue);
+                    } else if (elType === 'select') {
+                        await selectDropdownOption(el, raceValue);
+                    }
                     continue;
                 }
 
-                // Handle gender dropdown (React Select)
-                if (combinedText.includes('gender') && inputRole === 'combobox') {
-                    await selectReactSelectOption(el, 'Decline to Self-Identify');
+                // Handle gender dropdown
+                if (combinedText.includes('gender') && !combinedText.includes('transgender')) {
+                    const genderValue = userData.gender || 'Decline to Self-Identify';
+                    console.log('🏷️ Using saved gender:', genderValue);
+
+                    if (inputRole === 'combobox') {
+                        await selectReactSelectOption(el, genderValue);
+                    } else if (elType === 'select') {
+                        await selectDropdownOption(el, genderValue);
+                    }
                     continue;
                 }
 
-                // Handle veteran status dropdown (React Select)
-                if (combinedText.includes('veteran') && inputRole === 'combobox') {
-                    await selectReactSelectOption(el, 'I don\'t wish to answer');
+                // Handle veteran status dropdown
+                if (combinedText.includes('veteran')) {
+                    const veteranValue = userData.veteran || 'I don\'t wish to answer';
+                    console.log('🏷️ Using saved veteran status:', veteranValue);
+
+                    if (inputRole === 'combobox') {
+                        await selectReactSelectOption(el, veteranValue);
+                    } else if (elType === 'select') {
+                        await selectDropdownOption(el, veteranValue);
+                    }
                     continue;
                 }
 
-                // Handle disability status dropdown (React Select)
-                if (combinedText.includes('disability') && inputRole === 'combobox') {
-                    await selectReactSelectOption(el, 'I don\'t wish to answer');
+                // Handle disability status dropdown
+                if (combinedText.includes('disability')) {
+                    const disabilityValue = userData.disability || 'I don\'t wish to answer';
+                    console.log('🏷️ Using saved disability status:', disabilityValue);
+
+                    if (inputRole === 'combobox') {
+                        await selectReactSelectOption(el, disabilityValue);
+                    } else if (elType === 'select') {
+                        await selectDropdownOption(el, disabilityValue);
+                    }
                     continue;
                 }
 
-                // Handle hispanic/latino dropdown (React Select)
-                if ((combinedText.includes('hispanic') || combinedText.includes('latino')) &&
-                    inputRole === 'combobox') {
-                    await selectReactSelectOption(el, 'I don\'t wish to answer');
+                // Handle hispanic/latino dropdown
+                if (combinedText.includes('hispanic') || combinedText.includes('latino')) {
+                    const hispanicValue = userData.hispanic || 'I don\'t wish to answer';
+                    console.log('🏷️ Using saved hispanic/latino status:', hispanicValue);
+
+                    if (inputRole === 'combobox') {
+                        await selectReactSelectOption(el, hispanicValue);
+                    } else if (elType === 'select') {
+                        await selectDropdownOption(el, hispanicValue);
+                    }
                     continue;
                 }
 
                 // Skip other demographic fields
+                console.log('⏭️ Skipping other demographic field');
                 continue;
             }
             
