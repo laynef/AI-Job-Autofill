@@ -122,15 +122,10 @@ try {
                          statusEl.textContent = 'Autofill complete! Saving to tracker...';
 
                          // Save application to tracker AFTER autofilling completes
-                         // Increased delay to 1000ms to ensure form fields are fully populated
+                         // Increased delay to 2000ms to ensure form fields are fully populated and dynamic content loads
                          setTimeout(() => {
-                             saveCurrentApplicationToTracker(tabs[0]);
-                             // Give the tracker save a moment, then update status
-                             setTimeout(() => {
-                                 statusEl.textContent = '✓ Autofill complete & tracked!';
-                                 setTimeout(() => statusEl.textContent = '', 3000);
-                             }, 800);
-                         }, 1000);
+                             saveCurrentApplicationToTracker(tabs[0], statusEl);
+                         }, 2000);
                     }).catch(err => {
                          statusEl.textContent = 'Autofill failed on this page.';
                          console.error('Autofill script injection failed:', err);
@@ -154,22 +149,41 @@ try {
 }
 
 // Save current job application to tracker
-function saveCurrentApplicationToTracker(tab) {
+function saveCurrentApplicationToTracker(tab, statusEl) {
     try {
+        console.log('🔄 Starting tracker save process...');
+
         // Extract company and job title from page (async function)
         chrome.scripting.executeScript({
             target: {tabId: tab.id},
             func: extractJobInfo,
         }).then((results) => {
-            if (results && results[0] && results[0].result) {
-                const jobInfo = results[0].result;
+            if (!results || !results[0]) {
+                console.error('❌ No results from extractJobInfo');
+                if (statusEl) {
+                    statusEl.textContent = '⚠ Tracker update failed: Could not extract job info';
+                    setTimeout(() => statusEl.textContent = '', 4000);
+                }
+                return;
+            }
 
-                chrome.storage.local.get(['jobApplications'], function(result) {
-                    let applications = result.jobApplications || [];
+            if (!results[0].result) {
+                console.error('❌ extractJobInfo returned no data');
+                if (statusEl) {
+                    statusEl.textContent = '⚠ Tracker update failed: No job data found';
+                    setTimeout(() => statusEl.textContent = '', 4000);
+                }
+                return;
+            }
 
-                    // Debug: Log what was extracted
-                    console.log('📊 Tracker received job info:', jobInfo);
-                    console.log('  • URL:', tab.url);
+            const jobInfo = results[0].result;
+
+            chrome.storage.local.get(['jobApplications'], function(result) {
+                let applications = result.jobApplications || [];
+
+                // Debug: Log what was extracted
+                console.log('📊 Tracker received job info:', jobInfo);
+                console.log('  • URL:', tab.url);
 
                     // Check if this job was already added (by URL)
                     const existingApp = applications.find(app => app.jobUrl === tab.url);
@@ -230,7 +244,19 @@ function saveCurrentApplicationToTracker(tab) {
                             }
 
                             chrome.storage.local.set({ jobApplications: applications }, function() {
-                                console.log('Job application UPDATED in tracker:', existingApp.company, '-', existingApp.position);
+                                if (chrome.runtime.lastError) {
+                                    console.error('❌ Error saving to tracker:', chrome.runtime.lastError);
+                                    if (statusEl) {
+                                        statusEl.textContent = '⚠ Tracker save failed';
+                                        setTimeout(() => statusEl.textContent = '', 4000);
+                                    }
+                                } else {
+                                    console.log('✅ Job application UPDATED in tracker:', existingApp.company, '-', existingApp.position);
+                                    if (statusEl) {
+                                        statusEl.textContent = '✓ Autofill complete & tracked! (updated)';
+                                        setTimeout(() => statusEl.textContent = '', 3000);
+                                    }
+                                }
                             });
                         } else {
                             // CREATE new application
@@ -257,16 +283,36 @@ function saveCurrentApplicationToTracker(tab) {
 
                             applications.push(newApp);
                             chrome.storage.local.set({ jobApplications: applications }, function() {
-                                console.log('Job application CREATED in tracker:', newApp.company, '-', newApp.position);
+                                if (chrome.runtime.lastError) {
+                                    console.error('❌ Error saving to tracker:', chrome.runtime.lastError);
+                                    if (statusEl) {
+                                        statusEl.textContent = '⚠ Tracker save failed';
+                                        setTimeout(() => statusEl.textContent = '', 4000);
+                                    }
+                                } else {
+                                    console.log('✅ Job application CREATED in tracker:', newApp.company, '-', newApp.position);
+                                    if (statusEl) {
+                                        statusEl.textContent = '✓ Autofill complete & tracked!';
+                                        setTimeout(() => statusEl.textContent = '', 3000);
+                                    }
+                                }
                             });
                         }
                 });
             }
         }).catch(err => {
-            console.error('Error extracting job info:', err);
+            console.error('❌ Error extracting job info:', err);
+            if (statusEl) {
+                statusEl.textContent = '⚠ Tracker update failed: ' + err.message;
+                setTimeout(() => statusEl.textContent = '', 4000);
+            }
         });
     } catch (e) {
-        console.error('Error in saveCurrentApplicationToTracker:', e);
+        console.error('❌ Error in saveCurrentApplicationToTracker:', e);
+        if (statusEl) {
+            statusEl.textContent = '⚠ Tracker save error';
+            setTimeout(() => statusEl.textContent = '', 4000);
+        }
     }
 }
 
