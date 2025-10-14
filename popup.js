@@ -119,16 +119,18 @@ try {
                         target: {tabId: tabs[0].id, allFrames: true},
                         function: autofillPage,
                     }).then(() => {
+                         console.log('✓ Autofill script executed successfully');
                          statusEl.textContent = 'Autofill complete! Saving to tracker...';
 
                          // Save application to tracker AFTER autofilling completes
-                         // Increased delay to 2000ms to ensure form fields are fully populated and dynamic content loads
+                         // Increased delay to 3000ms to ensure form fields are fully populated and dynamic content loads
                          setTimeout(() => {
+                             console.log('⏰ Starting tracker save (after 3s delay)...');
                              saveCurrentApplicationToTracker(tabs[0], statusEl);
-                         }, 2000);
+                         }, 3000);
                     }).catch(err => {
                          statusEl.textContent = 'Autofill failed on this page.';
-                         console.error('Autofill script injection failed:', err);
+                         console.error('❌ Autofill script injection failed:', err);
                          setTimeout(() => statusEl.textContent = '', 3000);
                     });
                 }).catch(err => {
@@ -162,36 +164,26 @@ function saveCurrentApplicationToTracker(tab, statusEl) {
         }).then((results) => {
             console.log('📦 Raw results from extractJobInfo:', results);
 
+            // Initialize default job info in case extraction fails
+            let jobInfo = {
+                position: '',
+                company: '',
+                location: '',
+                salary: '',
+                jobType: ''
+            };
+
             if (!results || !results[0]) {
-                console.error('❌ No results from extractJobInfo');
-                if (statusEl) {
-                    statusEl.textContent = '⚠ Tracker update failed: Script injection failed';
-                    setTimeout(() => statusEl.textContent = '', 4000);
-                }
-                return;
-            }
-
-            if (results[0].error) {
+                console.error('❌ No results from extractJobInfo - using defaults');
+            } else if (results[0].error) {
                 console.error('❌ Script execution error:', results[0].error);
-                if (statusEl) {
-                    statusEl.textContent = '⚠ Tracker update failed: ' + results[0].error;
-                    setTimeout(() => statusEl.textContent = '', 4000);
-                }
-                return;
-            }
-
-            if (!results[0].result) {
-                console.error('❌ extractJobInfo returned no data');
+            } else if (!results[0].result) {
+                console.error('❌ extractJobInfo returned no data - using defaults');
                 console.error('   Full result object:', results[0]);
-                if (statusEl) {
-                    statusEl.textContent = '⚠ Tracker update failed: No job data found';
-                    setTimeout(() => statusEl.textContent = '', 4000);
-                }
-                return;
+            } else {
+                jobInfo = results[0].result;
+                console.log('✅ Successfully extracted job info:', jobInfo);
             }
-
-            const jobInfo = results[0].result;
-            console.log('✅ Successfully extracted job info:', jobInfo);
 
             chrome.storage.local.get(['jobApplications'], function(result) {
                 let applications = result.jobApplications || [];
@@ -315,11 +307,62 @@ function saveCurrentApplicationToTracker(tab, statusEl) {
                         }
                 });
         }).catch(err => {
-            console.error('❌ Error extracting job info:', err);
-            if (statusEl) {
-                statusEl.textContent = '⚠ Tracker update failed: ' + err.message;
-                setTimeout(() => statusEl.textContent = '', 4000);
-            }
+            console.error('❌ Error executing extractJobInfo script:', err);
+            console.log('⚠️ Proceeding with tracker save using URL-based fallbacks...');
+
+            // Even if extraction fails completely, still save the application with fallback values
+            chrome.storage.local.get(['jobApplications'], function(result) {
+                let applications = result.jobApplications || [];
+
+                // Use URL-based extraction as fallback
+                let company = 'Unknown Company';
+                const urlMatch = tab.url.match(/(?:greenhouse\.io|lever\.co|myworkdayjobs\.com|ashbyhq\.com|bamboohr\.com|gem\.com|jobvite\.com|smartrecruiters\.com)\/([^\/\?]+)/);
+                if (urlMatch && urlMatch[1]) {
+                    company = urlMatch[1].split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                    console.log('✓ Company extracted from URL:', company);
+                }
+
+                const existingApp = applications.find(app => app.jobUrl === tab.url);
+
+                if (existingApp) {
+                    existingApp.updatedAt = new Date().toISOString();
+                    console.log('✅ Job application UPDATED in tracker (fallback)');
+                    if (statusEl) {
+                        statusEl.textContent = '✓ Autofill complete & tracked! (updated)';
+                        setTimeout(() => statusEl.textContent = '', 3000);
+                    }
+                } else {
+                    const newApp = {
+                        id: 'app_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                        company: company,
+                        position: 'Position Not Detected',
+                        location: '',
+                        salary: '',
+                        applicationDate: new Date().toISOString().split('T')[0],
+                        status: 'Applied',
+                        jobUrl: tab.url,
+                        contactName: '',
+                        contactEmail: '',
+                        notes: 'Auto-saved from extension (extraction failed)',
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                        timeline: [{
+                            status: 'Applied',
+                            date: new Date().toISOString().split('T')[0],
+                            note: 'Application submitted via AI Autofill'
+                        }]
+                    };
+
+                    applications.push(newApp);
+                    console.log('✅ Job application CREATED in tracker (fallback):', newApp.company);
+                    if (statusEl) {
+                        statusEl.textContent = '✓ Autofill complete & tracked!';
+                        setTimeout(() => statusEl.textContent = '', 3000);
+                    }
+                }
+
+                chrome.storage.local.set({ jobApplications: applications });
+            });
         });
     } catch (e) {
         console.error('❌ Error in saveCurrentApplicationToTracker:', e);
@@ -1460,6 +1503,8 @@ async function autofillPage() {
                         await selectReactSelectOption(el, raceValue);
                     } else if (elType === 'select') {
                         await selectDropdownOption(el, raceValue);
+                    } else if (elType === 'button') {
+                        await selectReactSelectOption(el, raceValue);
                     }
                     continue;
                 }
@@ -1473,6 +1518,8 @@ async function autofillPage() {
                         await selectReactSelectOption(el, genderValue);
                     } else if (elType === 'select') {
                         await selectDropdownOption(el, genderValue);
+                    } else if (elType === 'button') {
+                        await selectReactSelectOption(el, genderValue);
                     }
                     continue;
                 }
@@ -1486,6 +1533,8 @@ async function autofillPage() {
                         await selectReactSelectOption(el, veteranValue);
                     } else if (elType === 'select') {
                         await selectDropdownOption(el, veteranValue);
+                    } else if (elType === 'button') {
+                        await selectReactSelectOption(el, veteranValue);
                     }
                     continue;
                 }
@@ -1499,6 +1548,8 @@ async function autofillPage() {
                         await selectReactSelectOption(el, disabilityValue);
                     } else if (elType === 'select') {
                         await selectDropdownOption(el, disabilityValue);
+                    } else if (elType === 'button') {
+                        await selectReactSelectOption(el, disabilityValue);
                     }
                     continue;
                 }
@@ -1512,6 +1563,8 @@ async function autofillPage() {
                         await selectReactSelectOption(el, hispanicValue);
                     } else if (elType === 'select') {
                         await selectDropdownOption(el, hispanicValue);
+                    } else if (elType === 'button') {
+                        await selectReactSelectOption(el, hispanicValue);
                     }
                     continue;
                 }
