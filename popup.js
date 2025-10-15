@@ -2174,20 +2174,30 @@ Provide a concise answer.`;
                             maxLength = 'one short phrase or sentence';
                         }
 
-                        // MUCH SIMPLER prompt
-                        const prompt = `Answer this job application question briefly using my profile.
+                        // Enhanced AI prompt with better context
+                        const prompt = `You are filling out a job application. Answer this question accurately based on the candidate's resume and profile.
 
-Question: "${cleanQuestion}"
-My Profile: ${userData.additionalInfo || 'Experienced professional seeking new opportunities'}
-Job: ${jobTitle || 'Not specified'}
+**RESUME & PROFILE:**
+${userData.additionalInfo || 'Experienced professional seeking new opportunities'}
 
-Instructions:
-- Answer in ${maxLength}
-- Be direct and concise
-- No preamble or extra explanation
-- If yes/no question, just say "Yes" or "No"
+**JOB DETAILS:**
+- Position: ${jobTitle || 'Not specified'}
+- Description: ${jobDescription ? jobDescription.substring(0, 500) : 'Not available'}
 
-Answer:`;
+**QUESTION TO ANSWER:**
+"${cleanQuestion}"
+
+**IMPORTANT INSTRUCTIONS:**
+1. Answer in ${maxLength}
+2. Be truthful based on the resume/profile provided
+3. For yes/no questions, respond with only "Yes" or "No"
+4. For work authorization questions, only answer "Yes" if clearly stated in profile
+5. For technical skills, only confirm if mentioned in resume
+6. Do NOT exaggerate or fabricate information
+7. Be direct - no preamble or explanation
+8. If unsure, give a conservative answer
+
+**YOUR ANSWER:**`;
                         const aiAnswer = await getAIResponse(prompt, userData) || "Yes"; // Final fallback
                         usedAnswers.add(aiAnswer);
                         await simulateTyping(el, aiAnswer);
