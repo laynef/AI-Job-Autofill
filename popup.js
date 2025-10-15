@@ -1606,11 +1606,25 @@ async function autofillPage() {
             }
 
             // --- Cover Letter ---
-            if (el.dataset.testid === 'cover_letter-text') {
+            // Enhanced detection: Check for "Enter manually" button in cover letter upload sections
+            const isCoverLetterButton =
+                el.dataset.testid === 'cover_letter-text' ||
+                (elType === 'button' &&
+                 el.innerText.toLowerCase().includes('enter manually') &&
+                 (combinedText.includes('cover letter') ||
+                  el.closest('.file-upload')?.querySelector('[id*="cover_letter"], [for*="cover_letter"]')));
+
+            if (isCoverLetterButton) {
+                console.log('📝 Found cover letter "Enter manually" button');
                 await simulateClick(el);
                 await new Promise(resolve => setTimeout(resolve, 500)); // Wait for textarea to appear
 
-                const coverLetterTextArea = document.getElementById('cover_letter_text');
+                // Try multiple selectors to find the textarea that appears
+                const coverLetterTextArea = document.getElementById('cover_letter_text') ||
+                                           document.querySelector('textarea[id*="cover_letter"]') ||
+                                           document.querySelector('textarea[name*="cover_letter"]') ||
+                                           document.querySelector('[contenteditable="true"][class*="cover"]');
+
                 if (coverLetterTextArea) {
                     let coverLetterText = '';
 
@@ -1640,7 +1654,10 @@ async function autofillPage() {
 
                     if (coverLetterText) {
                         await simulateTyping(coverLetterTextArea, coverLetterText);
+                        console.log('✅ Cover letter filled successfully');
                     }
+                } else {
+                    console.warn('⚠️ Cover letter textarea not found after clicking "Enter manually"');
                 }
                 continue; // Move to the next element
             }
