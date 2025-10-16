@@ -1668,13 +1668,6 @@ async function autofillPage() {
                                            document.querySelector('[contenteditable="true"][class*="cover"]');
 
                 if (coverLetterTextArea) {
-                    // Check if cover letter textarea is already filled
-                    const existingValue = coverLetterTextArea.value || coverLetterTextArea.textContent || '';
-                    if (existingValue.trim().length > 0) {
-                        console.log('📝 Cover letter field already filled, skipping');
-                        continue;
-                    }
-
                     let coverLetterText = '';
 
                     // Check if user provided a manual cover letter
@@ -2167,13 +2160,6 @@ Provide a concise answer.`;
                 }
                 // Cover letter (if not handled earlier)
                 else if (combinedText.includes('cover letter') && (elType === 'textarea' || el.isContentEditable)) {
-                    // Double-check if already filled (since general check happens earlier, this is extra safety)
-                    const existingValue = el.value || el.textContent || '';
-                    if (existingValue.trim().length > 0) {
-                        console.log('📝 Cover letter field already filled, skipping (secondary check)');
-                        continue; // Skip this field
-                    }
-
                     // Check if user provided a manual cover letter
                     if (userData.coverLetter && userData.coverLetter.trim()) {
                         console.log('✍️ Using manual cover letter provided by user');
