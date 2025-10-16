@@ -90,31 +90,69 @@ try {
                 }
 
                 // First, check if the page contains an iframe-based application form
-                chrome.scripting.executeScript({
-                    target: {tabId: tabs[0].id},
-                    function: detectIframeForm,
-                }).then((results) => {
-                    const iframeDetected = results && results[0] && results[0].result;
+                // BUT ONLY if we're not already on a known ATS domain
+                const currentUrl = tabs[0].url || '';
+                const isAlreadyOnATS = currentUrl.includes('greenhouse.io') ||
+                                      currentUrl.includes('lever.co') ||
+                                      currentUrl.includes('myworkdayjobs.com') ||
+                                      currentUrl.includes('ashbyhq.com') ||
+                                      currentUrl.includes('bamboohr.com') ||
+                                      currentUrl.includes('workable.com') ||
+                                      currentUrl.includes('jobvite.com') ||
+                                      currentUrl.includes('smartrecruiters.com');
 
-                    if (iframeDetected && iframeDetected.hasIframe) {
-                        // Display helpful message about iframe form
-                        statusEl.innerHTML = `<div style="color: #8B5CF6; font-size: 11px;">
-                            <strong>Iframe-based form detected!</strong><br>
-                            This form is embedded from ${iframeDetected.domain}.<br><br>
-                            <span style="color: #666;">Opening the application form directly...</span>
-                        </div>`;
+                if (!isAlreadyOnATS) {
+                    chrome.scripting.executeScript({
+                        target: {tabId: tabs[0].id},
+                        function: detectIframeForm,
+                    }).then((results) => {
+                        const iframeDetected = results && results[0] && results[0].result;
 
-                        // Open the iframe URL in a new tab
-                        chrome.tabs.create({ url: iframeDetected.url }, (newTab) => {
-                            setTimeout(() => {
-                                statusEl.textContent = 'Form opened in new tab. Click Autofill again on the new tab.';
-                                setTimeout(() => statusEl.textContent = '', 5000);
-                            }, 1000);
+                        if (iframeDetected && iframeDetected.hasIframe) {
+                            // Display helpful message about iframe form
+                            statusEl.innerHTML = `<div style="color: #8B5CF6; font-size: 11px;">
+                                <strong>Iframe-based form detected!</strong><br>
+                                This form is embedded from ${iframeDetected.domain}.<br><br>
+                                <span style="color: #666;">Opening the application form directly...</span>
+                            </div>`;
+
+                            // Open the iframe URL in a new tab
+                            chrome.tabs.create({ url: iframeDetected.url }, (newTab) => {
+                                setTimeout(() => {
+                                    statusEl.textContent = 'Form opened in new tab. Click Autofill again on the new tab.';
+                                    setTimeout(() => statusEl.textContent = '', 5000);
+                                }, 1000);
+                            });
+                            return;
+                        }
+
+                        // No iframe detected, proceed with normal autofill
+                        chrome.scripting.executeScript({
+                            target: {tabId: tabs[0].id, allFrames: true},
+                            function: autofillPage,
+                        }).then(() => {
+                             console.log('✓ Autofill script executed successfully');
+                             statusEl.textContent = 'Autofill complete! Saving to tracker...';
+
+                             // Save application to tracker AFTER autofilling completes
+                             // Increased delay to 3000ms to ensure form fields are fully populated and dynamic content loads
+                             setTimeout(() => {
+                                 console.log('⏰ Starting tracker save (after 3s delay)...');
+                                 saveCurrentApplicationToTracker(tabs[0], statusEl);
+                             }, 3000);
+                        }).catch(err => {
+                             statusEl.textContent = 'Autofill failed on this page.';
+                             console.error('❌ Autofill script injection failed:', err);
+                             setTimeout(() => statusEl.textContent = '', 3000);
                         });
-                        return;
-                    }
-
-                    // No iframe detected, proceed with normal autofill
+                    }).catch(err => {
+                        console.error('Iframe detection failed:', err);
+                        statusEl.textContent = 'Could not analyze page structure.';
+                        setTimeout(() => statusEl.textContent = '', 3000);
+                    });
+                } else {
+                    // Already on ATS domain, skip iframe detection and proceed with autofill
+                    console.log('Already on ATS domain, proceeding with direct autofill');
                     chrome.scripting.executeScript({
                         target: {tabId: tabs[0].id, allFrames: true},
                         function: autofillPage,
@@ -133,11 +171,7 @@ try {
                          console.error('❌ Autofill script injection failed:', err);
                          setTimeout(() => statusEl.textContent = '', 3000);
                     });
-                }).catch(err => {
-                    console.error('Iframe detection failed:', err);
-                    statusEl.textContent = 'Could not analyze page structure.';
-                    setTimeout(() => statusEl.textContent = '', 3000);
-                });
+                }
             });
         });
 
@@ -1459,6 +1493,14 @@ async function autofillPage() {
                 if (el.textContent?.trim()) {
                     isFilled = true;
                 }
+            } else if (elType === 'textarea') {
+                // Check if textarea has content
+                if (el.value && el.value.trim() && el.value.trim().length > 0) {
+                    // Make sure it's not just the placeholder
+                    if (!el.placeholder || el.value.trim() !== el.placeholder.trim()) {
+                        isFilled = true;
+                    }
+                }
             } else if (elType === 'button') {
                 // Check if button-based dropdown has been filled (doesn't contain "select" or "please")
                 const buttonText = el.innerText.toLowerCase().trim();
@@ -1626,6 +1668,13 @@ async function autofillPage() {
                                            document.querySelector('[contenteditable="true"][class*="cover"]');
 
                 if (coverLetterTextArea) {
+                    // Check if cover letter textarea is already filled
+                    const existingValue = coverLetterTextArea.value || coverLetterTextArea.textContent || '';
+                    if (existingValue.trim().length > 0) {
+                        console.log('📝 Cover letter field already filled, skipping');
+                        continue;
+                    }
+
                     let coverLetterText = '';
 
                     // Check if user provided a manual cover letter
@@ -2118,6 +2167,13 @@ Provide a concise answer.`;
                 }
                 // Cover letter (if not handled earlier)
                 else if (combinedText.includes('cover letter') && (elType === 'textarea' || el.isContentEditable)) {
+                    // Double-check if already filled (since general check happens earlier, this is extra safety)
+                    const existingValue = el.value || el.textContent || '';
+                    if (existingValue.trim().length > 0) {
+                        console.log('📝 Cover letter field already filled, skipping (secondary check)');
+                        continue; // Skip this field
+                    }
+
                     // Check if user provided a manual cover letter
                     if (userData.coverLetter && userData.coverLetter.trim()) {
                         console.log('✍️ Using manual cover letter provided by user');
