@@ -2252,9 +2252,35 @@ ${userData.additionalInfo || 'Experienced professional seeking new opportunities
 6. Do NOT exaggerate or fabricate information
 7. Be direct - no preamble or explanation
 8. If unsure, give a conservative answer
+9. NEVER say "the question is missing" or ask for clarification - always provide a reasonable answer based on the context
+10. If you cannot determine a specific answer, provide a generic professional response relevant to the field
 
 **YOUR ANSWER:**`;
-                        const aiAnswer = await getAIResponse(prompt, userData) || "Yes"; // Final fallback
+                        let aiAnswer = await getAIResponse(prompt, userData) || "";
+
+                        // Validate AI response - ensure it's not an unhelpful message
+                        const unhelpfulPatterns = [
+                            /question.*missing/i,
+                            /please provide.*question/i,
+                            /need more information/i,
+                            /cannot answer without/i,
+                            /unclear what you're asking/i
+                        ];
+
+                        const isUnhelpful = unhelpfulPatterns.some(pattern => pattern.test(aiAnswer));
+
+                        if (!aiAnswer || aiAnswer.trim().length === 0 || isUnhelpful) {
+                            // Provide a reasonable fallback based on field context
+                            console.warn('AI provided unhelpful response, using fallback for:', cleanQuestion);
+                            if (elType === 'textarea' || el.isContentEditable) {
+                                aiAnswer = userData.additionalInfo ?
+                                    userData.additionalInfo.substring(0, 200) :
+                                    "I am a motivated professional with relevant experience and skills that align well with this position.";
+                            } else {
+                                aiAnswer = "Yes";
+                            }
+                        }
+
                         usedAnswers.add(aiAnswer);
                         await simulateTyping(el, aiAnswer);
                     }
