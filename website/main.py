@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 import os
 
 app = FastAPI(
@@ -9,6 +10,23 @@ app = FastAPI(
     description="AI-powered job application assistant",
     version="1.0.0"
 )
+
+# CORS middleware for Chrome extension
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "chrome-extension://*",
+        "https://hiredalways.com",
+        "http://localhost:*"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Import and include API router
+from api import router as api_router
+app.include_router(api_router)
 
 # Mount static files (CSS, images, etc.)
 app.mount("/static", StaticFiles(directory="static"), name="static")

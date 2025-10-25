@@ -241,11 +241,26 @@
         const loadingDiv = document.getElementById('loading');
         const resultDiv = document.getElementById('license-result');
 
-        // Generate subscription key
-        function generateSubscriptionKey(email, subscriptionID) {
-            const timestamp = Date.now();
-            const hash = btoa(`${email}-${subscriptionID}-${timestamp}`).replace(/[^A-Z0-9]/gi, '').substring(0, 20);
-            return `HA-SUB-${hash.toUpperCase()}`;
+        // Call server to generate secure subscription key
+        async function generateSubscriptionKey(email, subscriptionID, orderID) {
+            const response = await fetch('/api/create-subscription', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: email,
+                    subscription_id: subscriptionID,
+                    order_id: orderID
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to generate subscription key');
+            }
+
+            const data = await response.json();
+            return data.license_key;
         }
 
         paypal.Buttons({
@@ -276,11 +291,12 @@
                     }
                 });
             },
-            onApprove: function(data, actions) {
-                loadingDiv.classList.remove('active');
+            onApprove: async function(data, actions) {
+                try {
+                    loadingDiv.classList.add('active');
 
-                // Generate subscription key
-                const subscriptionKey = generateSubscriptionKey(userEmail, data.subscriptionID);
+                    // Generate subscription key from server
+                    const subscriptionKey = await generateSubscriptionKey(userEmail, data.subscriptionID, data.orderID);
 
                 // Store subscription info
                 const subscriptionData = {
@@ -324,6 +340,17 @@
                         A confirmation email has been sent to ${userEmail}.
                     </p>
                 `;
+
+                    loadingDiv.classList.remove('active');
+                } catch (error) {
+                    console.error('Error creating subscription:', error);
+                    loadingDiv.classList.remove('active');
+                    resultDiv.className = 'error';
+                    resultDiv.innerHTML = `
+                        <h3>Subscription Error</h3>
+                        <p>Payment was successful, but there was an error generating your license key. Please contact support with your PayPal subscription ID: ${data.subscriptionID}</p>
+                    `;
+                }
             },
             onError: function(err) {
                 console.error('PayPal error:', err);
