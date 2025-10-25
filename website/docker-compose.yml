@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  website:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-job-copilot-website
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    volumes:
+      # Mount parent directory images for easy updates
+      - ../images:/usr/share/nginx/html/images:ro
+      - ../icons:/usr/share/nginx/html/icons:ro
+    networks:
+      - web
+    labels:
+      - "com.example.description=AI Job Copilot Website"
+      - "com.example.version=1.0"
+
+networks:
+  web:
+    driver: bridge
