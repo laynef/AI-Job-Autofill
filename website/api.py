@@ -22,6 +22,34 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 LICENSE_SECRET = os.environ.get("LICENSE_SECRET", secrets.token_hex(32))
 FREE_TRIAL_LIMIT = 5
 
+# Whitelisted emails with unlimited free access (owner/testing)
+WHITELIST_EMAILS = {
+    "laynefaler@gmail.com",  # Owner - unlimited free access
+}
+
+def is_whitelisted_user(email: str) -> bool:
+    """Check if user email is whitelisted for free unlimited access"""
+    return email.lower() in {e.lower() for e in WHITELIST_EMAILS}
+
+def get_user_email_from_license(license_key: str) -> Optional[str]:
+    """Extract user email from license key"""
+    license_data = db.get_license(license_key)
+    if license_data:
+        return license_data.get("user_id")
+    return None
+
+def check_whitelist_from_device(device_fingerprint: str) -> bool:
+    """Check if device is associated with whitelisted user"""
+    usage_data = db.get_usage(device_fingerprint)
+    if usage_data.get("license_key"):
+        email = get_user_email_from_license(usage_data["license_key"])
+        if email and is_whitelisted_user(email):
+            return True
+    # Also check if device has a stored email (for whitelisted trials)
+    if usage_data.get("email"):
+        return is_whitelisted_user(usage_data["email"])
+    return False
+
 # Import database
 from db import db
 
@@ -141,10 +169,31 @@ async def check_usage(request: CheckUsageRequest):
     """
     usage_data = get_device_usage(request.device_fingerprint)
 
+    # Check if whitelisted user (unlimited free access)
+    if check_whitelist_from_device(request.device_fingerprint):
+        return {
+            "status": "whitelisted",
+            "valid": True,
+            "is_paid": False,
+            "is_whitelisted": True,
+            "message": "Unlimited free access (owner)"
+        }
+
     # If license key provided, validate it
     if request.license_key:
         validation = validate_license_signature(request.license_key)
         if validation["valid"]:
+            # Check if user email is whitelisted
+            email = validation.get("user_id")
+            if email and is_whitelisted_user(email):
+                return {
+                    "status": "whitelisted",
+                    "valid": True,
+                    "is_paid": False,
+                    "is_whitelisted": True,
+                    "message": "Unlimited free access (owner)"
+                }
+
             return {
                 "status": "subscribed",
                 "valid": True,
@@ -188,10 +237,34 @@ async def track_usage(request: TrackUsageRequest):
     """
     usage_data = get_device_usage(request.device_fingerprint)
 
+    # Check if whitelisted user (unlimited free access)
+    if check_whitelist_from_device(request.device_fingerprint):
+        db.update_usage(request.device_fingerprint, {"last_used": datetime.now().isoformat()})
+        return {
+            "allowed": True,
+            "is_paid": False,
+            "is_whitelisted": True,
+            "message": "Autofill authorized (unlimited - owner)"
+        }
+
     # If license key provided, validate it
     if request.license_key:
         validation = validate_license_signature(request.license_key)
         if validation["valid"]:
+            # Check if whitelisted by email
+            email = validation.get("user_id")
+            if email and is_whitelisted_user(email):
+                db.update_usage(request.device_fingerprint, {
+                    "last_used": datetime.now().isoformat(),
+                    "email": email  # Store for future whitelist checks
+                })
+                return {
+                    "allowed": True,
+                    "is_paid": False,
+                    "is_whitelisted": True,
+                    "message": "Autofill authorized (unlimited - owner)"
+                }
+
             # Paid user - no limit, just log usage
             db.update_usage(request.device_fingerprint, {"last_used": datetime.now().isoformat()})
             return {
@@ -277,6 +350,38 @@ async def proxy_ai(request: AIProxyRequest):
         raise HTTPException(status_code=504, detail="AI service timeout")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI service error: {str(e)}")
+
+
+# Whitelist activation endpoint
+class WhitelistActivationRequest(BaseModel):
+    email: str
+    device_fingerprint: str
+
+@router.post("/activate-whitelist")
+async def activate_whitelist(request: WhitelistActivationRequest):
+    """
+    Activate unlimited free access for whitelisted emails
+    No payment required - for owner use only
+    """
+    if not is_whitelisted_user(request.email):
+        raise HTTPException(
+            status_code=403,
+            detail="Email not whitelisted. Please purchase a subscription."
+        )
+
+    # Store email with device for future checks
+    db.update_usage(request.device_fingerprint, {
+        "email": request.email,
+        "last_used": datetime.now().isoformat()
+    })
+
+    return {
+        "success": True,
+        "email": request.email,
+        "status": "whitelisted",
+        "message": "Unlimited free access activated!",
+        "is_whitelisted": True
+    }
 
 
 # Admin endpoints for license management

@@ -17,13 +17,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY main.py .
+COPY api.py .
+COPY db.py .
 
 # Copy templates and static files
 COPY templates/ templates/
 COPY static/ static/
 
+# Create data directory for database
+RUN mkdir -p /data && chmod 777 /data
+
 # Create a non-root user
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app /data
 USER appuser
 
 # Set environment variables
