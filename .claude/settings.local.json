@@ -14,7 +14,9 @@
       "Bash(docker-compose up:*)",
       "Bash(docker-compose down:*)",
       "Bash(docker logs:*)",
-      "Bash(docker-compose restart:*)"
+      "Bash(docker-compose restart:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
