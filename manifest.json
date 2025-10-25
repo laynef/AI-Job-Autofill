@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Hired Always - AI Job Application Assistant",
   "version": "2.4",
-  "description": "AI-powered job application assistant that automatically fills out applications using your resume and information. Visit hiredalways.com",
+  "description": "AI-powered job application assistant that automatically fills out applications using your resume and information: hiredalways.com",
   "permissions": ["storage", "scripting", "activeTab"],
   "host_permissions": [
     "*://job-boards.greenhouse.io/*",
