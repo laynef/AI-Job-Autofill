@@ -1,35 +1,41 @@
-# Use nginx alpine image for a lightweight container
-FROM nginx:alpine
-
-# Install envsubst (part of gettext package)
-RUN apk add --no-cache gettext
+# Use Python 3.11 slim image
+FROM python:3.11-slim
 
 # Set working directory
-WORKDIR /usr/share/nginx/html
+WORKDIR /app
 
-# Remove default nginx website
-RUN rm -rf /usr/share/nginx/html/*
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy website files to nginx html directory
-COPY index.html /usr/share/nginx/html/
-COPY styles.css /usr/share/nginx/html/
+# Copy requirements first for better caching
+COPY requirements.txt .
 
-# Copy nginx configuration template
-COPY nginx.conf.template /etc/nginx/conf.d/default.conf.template
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy and set permissions for entrypoint script
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+# Copy application code
+COPY main.py .
 
-# Default PORT for local development (Cloud Run will override this)
+# Copy templates and static files
+COPY templates/ templates/
+COPY static/ static/
+
+# Create a non-root user
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
 
-# Expose port (will be set dynamically)
+# Expose port
 EXPOSE 8080
 
-# Add healthcheck (using PORT variable)
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost:${PORT}/ || exit 1
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"
 
-# Use custom entrypoint
-ENTRYPOINT ["/docker-entrypoint.sh"]
+# Run the application
+CMD exec uvicorn main:app --host 0.0.0.0 --port ${PORT}

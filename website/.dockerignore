@@ -5,10 +5,6 @@
 # Documentation
 README.md
 
-# Docker files
-Dockerfile
-.dockerignore
-
 # OS files
 .DS_Store
 Thumbs.db

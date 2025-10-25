@@ -37,16 +37,17 @@ docker-compose up -d --build
 
 ### Option 2: Using Docker CLI
 
-Build the Docker image:
+Build the Docker image (from parent directory):
 
 ```bash
-docker build -t hired-always-website .
+cd ..
+docker build -f website/Dockerfile -t hired-always-website .
 ```
 
 Run the container:
 
 ```bash
-docker run -d -p 8080:80 --name hired-always-website hired-always-website
+docker run -d -p 8080:8080 -e PORT=8080 --name hired-always-website hired-always-website
 ```
 
 The website will be available at `http://localhost:8080`
@@ -145,16 +146,18 @@ environment:
 
 The container is pre-configured to work with Google Cloud Run, which automatically sets the `PORT` environment variable.
 
-Deploy using gcloud CLI:
+**Important:** Google Cloud Run needs to build from the parent directory to access the images folder.
+
+Deploy using gcloud CLI (run from website directory):
 ```bash
 gcloud run deploy hiredalways \
-  --source . \
+  --source .. \
   --platform managed \
   --region us-central1 \
   --allow-unauthenticated
 ```
 
-Or use Cloud Build with a cloudbuild.yaml file in your project.
+Or if you have a cloudbuild.yaml file configured in your project root, trigger a build from there.
 
 ## License
 

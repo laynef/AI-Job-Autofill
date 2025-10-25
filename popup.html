@@ -87,6 +87,24 @@
         <img src="images/icon48.png">
     </div>
 
+    <!-- License Activation Modal -->
+    <div id="licenseModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
+        <div style="background: white; width: 90%; max-width: 500px; margin: 2rem auto; padding: 2rem; border-radius: 0.5rem; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
+            <h2 style="margin-bottom: 1rem; color: #1f2937;">Activate Hired Always</h2>
+            <p style="margin-bottom: 1rem; color: #6b7280;">
+                <strong>🎁 Free Trial Ended!</strong><br>
+                You've used your 5 free autofills. Upgrade to get unlimited access!<br><br>
+                Enter your subscription key below or <a href="https://hiredalways.com/purchase.html" target="_blank" style="color: #4f46e5; text-decoration: underline; font-weight: 600;">Subscribe Now</a> for $9.99/month
+            </p>
+            <input type="text" id="licenseKeyInput" placeholder="HA-SUB-XXXXXXXXXXXXXXXXXXXX" style="width: 100%; padding: 0.75rem; border: 2px solid #d1d5db; border-radius: 0.375rem; margin-bottom: 1rem; font-family: monospace;">
+            <div id="licenseError" style="color: #ef4444; margin-bottom: 1rem; display: none;"></div>
+            <div style="display: flex; gap: 0.5rem;">
+                <button id="activateLicense" style="flex: 1; background: #4f46e5; color: white; border: none; padding: 0.75rem; border-radius: 0.375rem; font-weight: 600; cursor: pointer;">Activate</button>
+            </div>
+            <div id="licenseStatus" style="margin-top: 1rem; padding: 0.75rem; border-radius: 0.375rem; display: none;"></div>
+        </div>
+    </div>
+
     <div class="form-container space-y-3 custom-scrollbar">
         <h2 class="section-header">Personal Information</h2>
         <div class="grid-cols-2">
@@ -173,8 +191,7 @@
             </select>
         </div>
 
-        <h2 class="section-header">AI & Resume</h2>
-        <input type="password" id="apiKey" placeholder="Google AI API Key (Required)">
+        <h2 class="section-header">Resume & Information</h2>
         <div>
             <label for="resumeFile">Upload Resume/CV (.pdf, .docx)</label>
             <input type="file" id="resumeFile" accept=".pdf,.docx">
@@ -191,6 +208,9 @@
     </div>
 
     <div class="footer">
+        <div id="licenseInfo" style="text-align: center; margin-bottom: 0.5rem; font-size: 0.875rem; color: #10b981; display: none;">
+            ✓ Subscription Active
+        </div>
         <div id="status"></div>
         <div class="button-container">
             <button id="save">Save Information</button>
@@ -198,6 +218,9 @@
         </div>
         <div class="tracker-link">
             <button id="viewTracker">View Application Tracker</button>
+        </div>
+        <div style="text-align: center; margin-top: 0.75rem;">
+            <button id="manageLicense" style="background: transparent; color: #6b7280; font-size: 0.875rem; padding: 0.5rem; border: none; cursor: pointer; text-decoration: underline;">Manage Subscription</button>
         </div>
     </div>
     

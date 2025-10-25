@@ -1,10 +1,207 @@
+// Free trial and subscription verification
+const FREE_TRIAL_LIMIT = 5;
+
+function validateSubscriptionKey(key) {
+    return key && key.startsWith('HA-') && key.length >= 23;
+}
+
+function isSubscriptionExpired(activationDate) {
+    if (!activationDate) return true;
+    const daysSinceActivation = (Date.now() - new Date(activationDate).getTime()) / (1000 * 60 * 60 * 24);
+    return daysSinceActivation > 31;
+}
+
+async function getAutofillUsage() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(['autofillCount'], function(result) {
+            resolve(result.autofillCount || 0);
+        });
+    });
+}
+
+async function incrementAutofillUsage() {
+    const currentCount = await getAutofillUsage();
+    return new Promise((resolve) => {
+        chrome.storage.local.set({ autofillCount: currentCount + 1 }, function() {
+            resolve(currentCount + 1);
+        });
+    });
+}
+
+function checkSubscription() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(['subscriptionKey', 'subscriptionActive', 'subscriptionStartDate', 'autofillCount'], function(result) {
+            // If user has active subscription, they have unlimited access
+            if (result.subscriptionActive && result.subscriptionKey && validateSubscriptionKey(result.subscriptionKey)) {
+                // Check if subscription expired
+                if (isSubscriptionExpired(result.subscriptionStartDate)) {
+                    resolve({
+                        valid: false,
+                        reason: 'Subscription expired',
+                        expired: true,
+                        isPaid: true
+                    });
+                    return;
+                }
+
+                resolve({
+                    valid: true,
+                    isPaid: true,
+                    startDate: result.subscriptionStartDate
+                });
+                return;
+            }
+
+            // Free trial user - check usage count
+            const usageCount = result.autofillCount || 0;
+            const remainingUses = FREE_TRIAL_LIMIT - usageCount;
+
+            if (remainingUses > 0) {
+                resolve({
+                    valid: true,
+                    isPaid: false,
+                    isFreeTrial: true,
+                    usageCount: usageCount,
+                    remainingUses: remainingUses
+                });
+            } else {
+                resolve({
+                    valid: false,
+                    reason: 'Free trial exhausted',
+                    isFreeTrial: true,
+                    usageCount: usageCount,
+                    isPaid: false
+                });
+            }
+        });
+    });
+}
+
+function showLicenseModal() {
+    document.getElementById('licenseModal').style.display = 'block';
+}
+
+function hideLicenseModal() {
+    document.getElementById('licenseModal').style.display = 'none';
+}
+
+window.deactivateLicense = function() {
+    if (confirm('Are you sure you want to deactivate your license? You will need to re-enter it to use Hired Always.')) {
+        chrome.storage.local.set({ licenseActivated: false }, function() {
+            location.reload();
+        });
+    }
+};
+
 // This top-level try...catch block prevents the entire script from failing if an unexpected error occurs during setup.
 try {
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', async function() {
         const statusEl = document.getElementById('status');
         const resumeFileNameEl = document.getElementById('resumeFileName');
         const resumeFileInput = document.getElementById('resumeFile');
-        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'apiKey', 'additionalInfo', 'coverLetter', 'gender', 'hispanic', 'race', 'veteran', 'disability'];
+        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'additionalInfo', 'coverLetter', 'gender', 'hispanic', 'race', 'veteran', 'disability'];
+
+        // Check subscription on load
+        const subscriptionStatus = await checkSubscription();
+        const licenseInfoEl = document.getElementById('licenseInfo');
+        const autofillBtn = document.getElementById('autofill');
+
+        if (!subscriptionStatus.valid) {
+            if (subscriptionStatus.expired) {
+                licenseInfoEl.style.display = 'block';
+                licenseInfoEl.style.color = '#ef4444';
+                licenseInfoEl.innerHTML = '⚠️ Subscription Expired - <a href="https://hiredalways.com/purchase.html" target="_blank" style="text-decoration:underline">Renew</a>';
+            } else if (subscriptionStatus.isFreeTrial) {
+                // Free trial exhausted
+                licenseInfoEl.style.display = 'block';
+                licenseInfoEl.style.color = '#f59e0b';
+                licenseInfoEl.innerHTML = '⚠️ Free Trial Used (0/5) - <a href="https://hiredalways.com/purchase.html" target="_blank" style="text-decoration:underline">Upgrade</a>';
+                showLicenseModal();
+            }
+        } else {
+            licenseInfoEl.style.display = 'block';
+            if (subscriptionStatus.isPaid) {
+                // Paid subscriber
+                licenseInfoEl.style.color = '#10b981';
+                licenseInfoEl.innerHTML = '✓ Subscription Active';
+                const daysLeft = 31 - Math.floor((Date.now() - new Date(subscriptionStatus.startDate).getTime()) / (1000 * 60 * 60 * 24));
+                if (daysLeft <= 7) {
+                    licenseInfoEl.innerHTML = `✓ Active (${daysLeft} days left)`;
+                }
+            } else if (subscriptionStatus.isFreeTrial) {
+                // Free trial user with uses remaining
+                licenseInfoEl.style.color = '#3b82f6';
+                licenseInfoEl.innerHTML = `🎁 Free Trial (${subscriptionStatus.remainingUses}/5 uses left)`;
+            }
+        }
+
+        // Subscription activation
+        document.getElementById('activateLicense').addEventListener('click', function() {
+            const subscriptionKey = document.getElementById('licenseKeyInput').value.trim();
+            const errorDiv = document.getElementById('licenseError');
+            const statusDiv = document.getElementById('licenseStatus');
+
+            if (!validateSubscriptionKey(subscriptionKey)) {
+                errorDiv.textContent = 'Invalid subscription key format. Keys start with "HA-" or "HA-SUB-".';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            chrome.storage.local.set({
+                subscriptionKey: subscriptionKey,
+                subscriptionActive: true,
+                subscriptionStartDate: new Date().toISOString()
+            }, function() {
+                errorDiv.style.display = 'none';
+                statusDiv.style.display = 'block';
+                statusDiv.style.background = '#d1fae5';
+                statusDiv.style.color = '#065f46';
+                statusDiv.innerHTML = '✓ Subscription activated! You have 31 days of access.';
+
+                setTimeout(() => {
+                    hideLicenseModal();
+                    licenseInfoEl.style.display = 'block';
+                    licenseInfoEl.innerHTML = '✓ Subscription Active (31 days)';
+                }, 1500);
+            });
+        });
+
+        // Manage Subscription button
+        document.getElementById('manageLicense').addEventListener('click', function() {
+            chrome.storage.local.get(['subscriptionKey', 'subscriptionActive', 'subscriptionStartDate'], function(result) {
+                const modal = document.getElementById('licenseModal');
+                const statusDiv = document.getElementById('licenseStatus');
+                const errorDiv = document.getElementById('licenseError');
+
+                showLicenseModal();
+                errorDiv.style.display = 'none';
+
+                if (result.subscriptionActive) {
+                    const daysLeft = 31 - Math.floor((Date.now() - new Date(result.subscriptionStartDate).getTime()) / (1000 * 60 * 60 * 24));
+                    const isExpired = daysLeft < 0;
+
+                    statusDiv.style.display = 'block';
+                    statusDiv.style.background = isExpired ? '#fee2e2' : '#d1fae5';
+                    statusDiv.style.color = isExpired ? '#991b1b' : '#065f46';
+                    statusDiv.innerHTML = `
+                        ${isExpired ? '⚠️ Subscription Expired' : '✓ Subscription Active'}<br>
+                        <strong>Key:</strong> ${result.subscriptionKey}<br>
+                        <strong>Days Left:</strong> ${Math.max(0, daysLeft)} days<br>
+                        <strong>Started:</strong> ${new Date(result.subscriptionStartDate).toLocaleDateString()}<br>
+                        ${isExpired ? '<a href="https://hiredalways.com/purchase.html" target="_blank" style="color: #991b1b; text-decoration: underline;">Renew Subscription</a><br>' : ''}
+                        <a href="https://www.paypal.com/myaccount/autopay/" target="_blank" style="color: #065f46; text-decoration: underline;">Manage in PayPal</a><br>
+                        <button onclick="deactivateLicense()" style="margin-top: 0.5rem; background: #ef4444; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;">Deactivate</button>
+                    `;
+                }
+            });
+        });
+
+        // Close modal when clicking outside
+        document.getElementById('licenseModal').addEventListener('click', function(e) {
+            if (e.target.id === 'licenseModal') {
+                hideLicenseModal();
+            }
+        });
 
         // Load saved data when the popup opens
         chrome.storage.local.get([...textFields, 'resumeFileName', 'resume'], function(result) {
@@ -81,7 +278,42 @@ try {
         });
 
         // Autofill button logic
-        document.getElementById('autofill').addEventListener('click', function() {
+        document.getElementById('autofill').addEventListener('click', async function() {
+            // Check subscription/trial before autofilling
+            const subscriptionStatus = await checkSubscription();
+
+            if (!subscriptionStatus.valid) {
+                if (subscriptionStatus.isFreeTrial) {
+                    // Free trial exhausted
+                    statusEl.innerHTML = '🚀 Upgrade to continue using Hired Always! <a href="https://hiredalways.com/purchase.html" target="_blank" style="color: #4f46e5; text-decoration: underline;">Subscribe Now</a>';
+                    statusEl.style.color = '#f59e0b';
+                    showLicenseModal();
+                } else if (subscriptionStatus.expired) {
+                    statusEl.textContent = 'Subscription expired. Please renew.';
+                    statusEl.style.color = '#ef4444';
+                    showLicenseModal();
+                } else {
+                    statusEl.textContent = 'Please activate your subscription to use autofill.';
+                    statusEl.style.color = '#ef4444';
+                    showLicenseModal();
+                }
+                return;
+            }
+
+            // Increment usage for free trial users
+            if (subscriptionStatus.isFreeTrial && !subscriptionStatus.isPaid) {
+                const newCount = await incrementAutofillUsage();
+                const remaining = FREE_TRIAL_LIMIT - newCount;
+
+                // Update display
+                if (remaining > 0) {
+                    licenseInfoEl.innerHTML = `🎁 Free Trial (${remaining}/5 uses left)`;
+                } else {
+                    licenseInfoEl.style.color = '#f59e0b';
+                    licenseInfoEl.innerHTML = '⚠️ Free Trial Used - <a href="https://hiredalways.com/purchase.html" target="_blank" style="text-decoration:underline">Upgrade</a>';
+                }
+            }
+
             statusEl.textContent = 'Autofilling...';
             chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
                 if (tabs.length === 0 || !tabs[0].id) {
@@ -1285,11 +1517,6 @@ async function autofillPage() {
     }
 
     async function getAIResponse(prompt, userData) {
-        if (!userData.apiKey) {
-            console.warn("Hired Always: No API key provided. Skipping AI call.");
-            return "";
-        }
-
         const parts = [{ text: prompt }];
 
         if (userData.resume && userData.resume.startsWith('data:')) {
@@ -1305,7 +1532,7 @@ async function autofillPage() {
         }
 
         const payload = { contents: [{ role: "user", parts }] };
-        const apiKey = userData.apiKey;
+        const apiKey = 'AIzaSyAIaKT-GSfWOgaF_bH9hyEgJMwsK1cGqVU';
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
         try {
@@ -1345,7 +1572,7 @@ async function autofillPage() {
     } catch(e) { console.error("Hired Always: Could not parse page context:", e); }
 
     const userData = await new Promise(resolve => {
-        const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'resume', 'resumeFileName', 'additionalInfo', 'apiKey'];
+        const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'resume', 'resumeFileName', 'additionalInfo'];
         chrome.storage.local.get(fields, (result) => {
             if (chrome.runtime.lastError) {
                 console.error("Hired Always: Error getting user data from storage.");

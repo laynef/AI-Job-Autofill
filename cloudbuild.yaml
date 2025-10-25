@@ -1,0 +1,40 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'website/Dockerfile'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/hiredalways:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/hiredalways:latest'
+      - '.'
+
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/hiredalways:$COMMIT_SHA'
+
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'hiredalways'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/hiredalways:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+
+images:
+  - 'gcr.io/$PROJECT_ID/hiredalways:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/hiredalways:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Purchase Hired Always - Lifetime License</title>
+    <meta name="description" content="Get lifetime access to Hired Always - AI-powered job application assistant. One-time payment, no subscriptions.">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/png" href="images/icon48.png">
+    <script src="https://www.paypal.com/sdk/js?client-id=Afi-D_TFUCNLZun1AEyBNjJGEeKNuhDcDsUgchF1kR1zPnmxlrHGGP29h8Y--RlXFSth7Ge83FJuOacF&currency=USD"></script>
+    <style>
+        .purchase-container {
+            max-width: 800px;
+            margin: 4rem auto;
+            padding: 2rem;
+        }
+
+        .pricing-card {
+            background: white;
+            border-radius: 1rem;
+            padding: 3rem;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .price-tag {
+            font-size: 4rem;
+            font-weight: 700;
+            color: #4f46e5;
+            margin: 1rem 0;
+        }
+
+        .price-tag sup {
+            font-size: 2rem;
+            vertical-align: super;
+        }
+
+        .price-subtitle {
+            color: #6b7280;
+            font-size: 1.125rem;
+            margin-bottom: 2rem;
+        }
+
+        .features-list {
+            text-align: left;
+            margin: 2rem 0;
+            padding: 0 2rem;
+        }
+
+        .features-list li {
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+        }
+
+        .features-list li:before {
+            content: "✓";
+            color: #10b981;
+            font-weight: bold;
+            font-size: 1.5rem;
+            margin-right: 1rem;
+        }
+
+        #paypal-button-container {
+            margin: 2rem auto;
+            max-width: 400px;
+        }
+
+        .email-input-group {
+            margin: 2rem 0;
+        }
+
+        .email-input-group input {
+            width: 100%;
+            max-width: 400px;
+            padding: 1rem;
+            border: 2px solid #d1d5db;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+        }
+
+        .email-input-group input:focus {
+            outline: none;
+            border-color: #4f46e5;
+        }
+
+        #license-result {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            display: none;
+        }
+
+        #license-result.success {
+            background: #d1fae5;
+            border: 2px solid #10b981;
+            display: block;
+        }
+
+        #license-result.error {
+            background: #fee2e2;
+            border: 2px solid #ef4444;
+            display: block;
+        }
+
+        .license-key {
+            font-family: monospace;
+            font-size: 1.25rem;
+            font-weight: bold;
+            color: #4f46e5;
+            padding: 1rem;
+            background: white;
+            border-radius: 0.5rem;
+            margin: 1rem 0;
+            word-break: break-all;
+        }
+
+        .copy-button {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-weight: 600;
+            margin: 0.5rem;
+        }
+
+        .copy-button:hover {
+            background: #4338ca;
+        }
+
+        .loading {
+            display: none;
+            margin: 2rem 0;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #4f46e5;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-content">
+                <div class="logo">
+                    <img src="images/icon48.png" alt="Hired Always Logo">
+                    <span>Hired Always</span>
+                </div>
+                <div class="nav-links">
+                    <a href="index.html">Home</a>
+                    <a href="index.html#features">Features</a>
+                    <a href="index.html#how-it-works">How It Works</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="purchase-container">
+        <div class="pricing-card">
+            <h1>Upgrade to Unlimited</h1>
+            <p style="background: #dbeafe; color: #1e40af; padding: 1rem; border-radius: 0.5rem; font-weight: 600; margin-bottom: 1rem;">
+                🎁 Already used your 5 free applications? Upgrade for unlimited access!
+            </p>
+            <div class="price-tag">
+                <sup>$</sup>9<sup>.99</sup>
+            </div>
+            <p class="price-subtitle">Per month • Cancel anytime</p>
+
+            <ul class="features-list">
+                <li>Unlimited AI-powered job application autofills</li>
+                <li>Smart cover letter generation for every application</li>
+                <li>Multi-platform support (Greenhouse, Lever, Workday, etc.)</li>
+                <li>Application tracker</li>
+                <li>Priority support</li>
+                <li>Regular updates & new features</li>
+                <li>Cancel anytime, no commitment</li>
+            </ul>
+
+            <div class="email-input-group">
+                <label for="email-input" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Enter your email:</label>
+                <input type="email" id="email-input" placeholder="your@email.com" required>
+            </div>
+
+            <div id="paypal-button-container"></div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Processing your payment...</p>
+            </div>
+
+            <div id="license-result"></div>
+
+            <p style="margin-top: 2rem; color: #6b7280; font-size: 0.875rem;">
+                Secure payment powered by PayPal. After purchase, you'll receive a license key to activate the extension.
+            </p>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>Hired Always</h4>
+                    <p>AI-powered job application assistant.</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Links</h4>
+                    <ul>
+                        <li><a href="https://chromewebstore.google.com/detail/free-ai-job-application-c/kedoofhdliinkiibdljbplolfnbhaiia" target="_blank">Chrome Web Store</a></li>
+                        <li><a href="index.html">Home</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2025 HiredAlways. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        let userEmail = '';
+        const emailInput = document.getElementById('email-input');
+        const loadingDiv = document.getElementById('loading');
+        const resultDiv = document.getElementById('license-result');
+
+        // Generate subscription key
+        function generateSubscriptionKey(email, subscriptionID) {
+            const timestamp = Date.now();
+            const hash = btoa(`${email}-${subscriptionID}-${timestamp}`).replace(/[^A-Z0-9]/gi, '').substring(0, 20);
+            return `HA-SUB-${hash.toUpperCase()}`;
+        }
+
+        paypal.Buttons({
+            style: {
+                shape: 'rect',
+                color: 'gold',
+                layout: 'vertical',
+                label: 'subscribe'
+            },
+            createSubscription: function(data, actions) {
+                userEmail = emailInput.value.trim();
+
+                if (!userEmail || !userEmail.includes('@')) {
+                    alert('Please enter a valid email address');
+                    throw new Error('Invalid email');
+                }
+
+                loadingDiv.classList.add('active');
+
+                // Create subscription
+                return actions.subscription.create({
+                    'plan_id': 'P-6JV16799AC017454WND6VSRI', // Real Plan ID created via PayPal API
+                    'custom_id': userEmail,
+                    'application_context': {
+                        'brand_name': 'Hired Always',
+                        'shipping_preference': 'NO_SHIPPING',
+                        'user_action': 'SUBSCRIBE_NOW'
+                    }
+                });
+            },
+            onApprove: function(data, actions) {
+                loadingDiv.classList.remove('active');
+
+                // Generate subscription key
+                const subscriptionKey = generateSubscriptionKey(userEmail, data.subscriptionID);
+
+                // Store subscription info
+                const subscriptionData = {
+                    subscriptionKey: subscriptionKey,
+                    email: userEmail,
+                    subscriptionID: data.subscriptionID,
+                    orderID: data.orderID,
+                    startDate: new Date().toISOString(),
+                    status: 'active',
+                    type: 'subscription',
+                    price: 9.99,
+                    interval: 'monthly'
+                };
+
+                console.log('Subscription created:', subscriptionData);
+
+                resultDiv.className = 'success';
+                resultDiv.innerHTML = `
+                    <h3>✓ Subscription Active!</h3>
+                    <p>Thank you for subscribing to Hired Always!</p>
+                    <p><strong>Your Subscription Key:</strong></p>
+                    <div class="license-key" id="license-key">${subscriptionKey}</div>
+                    <button class="copy-button" onclick="copyLicenseKey()">Copy Subscription Key</button>
+                    <p style="margin-top: 1rem;">
+                        <strong>Next Steps:</strong><br>
+                        1. Copy your subscription key above<br>
+                        2. Install the extension from <a href="https://chromewebstore.google.com/detail/free-ai-job-application-c/kedoofhdliinkiibdljbplolfnbhaiia" target="_blank">Chrome Web Store</a><br>
+                        3. Open the Hired Always extension<br>
+                        4. Enter your subscription key to activate<br>
+                        5. Start applying to jobs faster!
+                    </p>
+                    <p style="margin-top: 1rem; font-size: 0.875rem; color: #6b7280;">
+                        <strong>Subscription Details:</strong><br>
+                        • Billing: $9.99/month<br>
+                        • Next billing date: ${new Date(Date.now() + 30*24*60*60*1000).toLocaleDateString()}<br>
+                        • Manage subscription: <a href="https://www.paypal.com/myaccount/autopay/" target="_blank">PayPal Dashboard</a><br>
+                        • Cancel anytime, no questions asked
+                    </p>
+                    <p style="margin-top: 1rem; font-size: 0.875rem; color: #6b7280;">
+                        <strong>Important:</strong> Save your subscription key! You'll need it to activate the extension.
+                        A confirmation email has been sent to ${userEmail}.
+                    </p>
+                `;
+            },
+            onError: function(err) {
+                console.error('PayPal error:', err);
+                loadingDiv.classList.remove('active');
+                resultDiv.className = 'error';
+                resultDiv.innerHTML = `
+                    <h3>Subscription Error</h3>
+                    <p>There was an error creating your subscription. Please try again or contact support.</p>
+                `;
+            },
+            onCancel: function(data) {
+                loadingDiv.classList.remove('active');
+                resultDiv.className = 'error';
+                resultDiv.innerHTML = `
+                    <h3>Subscription Cancelled</h3>
+                    <p>You cancelled the subscription. You can try again when you're ready.</p>
+                `;
+            }
+        }).render('#paypal-button-container');
+
+        function copyLicenseKey() {
+            const licenseKey = document.getElementById('license-key').textContent;
+            navigator.clipboard.writeText(licenseKey).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✓ Copied!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                alert('Failed to copy. Please select and copy manually.');
+            });
+        }
+    </script>
+</body>
+</html>

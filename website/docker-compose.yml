@@ -11,10 +11,11 @@ services:
     environment:
       - PORT=8080
     restart: unless-stopped
-    volumes:
-      # Mount parent directory images for easy updates
-      - ../images:/usr/share/nginx/html/images:ro
-      - ../icons:/usr/share/nginx/html/icons:ro
+    # Uncomment for development - enables hot reload
+    # volumes:
+    #   - ./main.py:/app/main.py
+    #   - ./templates:/app/templates
+    #   - ./static:/app/static
     networks:
       - web
     labels:

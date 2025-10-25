@@ -1,7 +1,20 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(docker build:*)",
+      "Bash(cat:*)",
+      "Bash(docker run:*)",
+      "Bash(dos2unix:*)",
+      "Bash(curl:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker rm:*)",
+      "Bash(git add:*)",
+      "Bash(docker-compose build:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker-compose restart:*)"
     ],
     "deny": [],
     "ask": []

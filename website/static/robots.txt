@@ -1,0 +1,15 @@
+# Hired Always - Robots.txt
+# Allow all search engines to crawl the site
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://hiredalways.com/sitemap.xml
+
+# Crawl-delay for polite crawling
+Crawl-delay: 1
+
+# Disallow certain paths if needed in the future
+# Disallow: /admin/
+# Disallow: /api/
