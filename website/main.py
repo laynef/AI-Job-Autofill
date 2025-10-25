@@ -21,6 +21,11 @@ async def home(request: Request):
     """Home page - Main landing page"""
     return templates.TemplateResponse("index.html", {"request": request})
 
+@app.get("/index.html", response_class=HTMLResponse)
+async def home_alt(request: Request):
+    """Home page - Alternative route with .html extension"""
+    return templates.TemplateResponse("index.html", {"request": request})
+
 @app.get("/purchase.html", response_class=HTMLResponse)
 async def purchase(request: Request):
     """Purchase page - Subscription checkout"""
