@@ -1,6 +1,6 @@
-# AI Job Copilot Website
+# Hired Always Website
 
-This is the promotional website for the AI Job Application Copilot Chrome extension.
+This is the promotional website for the Hired Always Chrome extension.
 
 ## Local Development
 
@@ -40,13 +40,13 @@ docker-compose up -d --build
 Build the Docker image:
 
 ```bash
-docker build -t ai-job-copilot-website .
+docker build -t hired-always-website .
 ```
 
 Run the container:
 
 ```bash
-docker run -d -p 8080:80 --name ai-job-copilot-website ai-job-copilot-website
+docker run -d -p 8080:80 --name hired-always-website hired-always-website
 ```
 
 The website will be available at `http://localhost:8080`
@@ -54,20 +54,20 @@ The website will be available at `http://localhost:8080`
 To stop and remove the container:
 
 ```bash
-docker stop ai-job-copilot-website
-docker rm ai-job-copilot-website
+docker stop hired-always-website
+docker rm hired-always-website
 ```
 
 ### Docker Commands
 
 View logs:
 ```bash
-docker logs ai-job-copilot-website
+docker logs hired-always-website
 ```
 
 Access container shell:
 ```bash
-docker exec -it ai-job-copilot-website sh
+docker exec -it hired-always-website sh
 ```
 
 Check container health:
@@ -83,8 +83,8 @@ docker ps
 
 1. Build and push the image to a container registry:
 ```bash
-docker build -t your-registry/ai-job-copilot-website:latest .
-docker push your-registry/ai-job-copilot-website:latest
+docker build -t your-registry/hired-always-website:latest .
+docker push your-registry/hired-always-website:latest
 ```
 
 2. Deploy using your cloud provider's container service
@@ -128,7 +128,7 @@ To modify nginx settings, edit `nginx.conf` and rebuild the container.
 By default, the website runs on port 8080 (mapped to container port 80). To change this, modify the port mapping:
 
 ```bash
-docker run -d -p 3000:80 --name ai-job-copilot-website ai-job-copilot-website
+docker run -d -p 3000:80 --name hired-always-website hired-always-website
 ```
 
 Or in `docker-compose.yml`:

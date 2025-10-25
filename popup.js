@@ -318,7 +318,7 @@ function saveCurrentApplicationToTracker(tab, statusEl) {
                                 timeline: [{
                                     status: 'Applied',
                                     date: new Date().toISOString().split('T')[0],
-                                    note: 'Application submitted via AI Autofill'
+                                    note: 'Application submitted via Hired Always'
                                 }]
                             };
 
@@ -383,7 +383,7 @@ function saveCurrentApplicationToTracker(tab, statusEl) {
                         timeline: [{
                             status: 'Applied',
                             date: new Date().toISOString().split('T')[0],
-                            note: 'Application submitted via AI Autofill'
+                            note: 'Application submitted via Hired Always'
                         }]
                     };
 
@@ -803,7 +803,7 @@ async function extractJobInfo() {
 
 // This function is injected into the page to perform the autofill
 async function autofillPage() {
-    console.log("AI Autofill: Starting process...");
+    console.log("Hired Always: Starting process...");
 
     // --- HELPER FUNCTIONS ---
     async function simulateClick(element) {
@@ -1286,7 +1286,7 @@ async function autofillPage() {
 
     async function getAIResponse(prompt, userData) {
         if (!userData.apiKey) {
-            console.warn("AI Autofill: No API key provided. Skipping AI call.");
+            console.warn("Hired Always: No API key provided. Skipping AI call.");
             return "";
         }
 
@@ -1342,13 +1342,13 @@ async function autofillPage() {
             const descDiv = document.querySelector('#job-description, [class*="job-description"], [class*="jobdescription"]');
             if (descDiv) jobDescription = descDiv.innerText;
         }
-    } catch(e) { console.error("AI Autofill: Could not parse page context:", e); }
+    } catch(e) { console.error("Hired Always: Could not parse page context:", e); }
 
     const userData = await new Promise(resolve => {
         const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'resume', 'resumeFileName', 'additionalInfo', 'apiKey'];
         chrome.storage.local.get(fields, (result) => {
             if (chrome.runtime.lastError) {
-                console.error("AI Autofill: Error getting user data from storage.");
+                console.error("Hired Always: Error getting user data from storage.");
                 resolve({});
             } else {
                 resolve(result);
@@ -1357,7 +1357,7 @@ async function autofillPage() {
     });
 
     if (!Object.keys(userData).length) {
-        console.error("AI Autofill: Could not load user data. Aborting.");
+        console.error("Hired Always: Could not load user data. Aborting.");
         return;
     }
 
@@ -1369,7 +1369,7 @@ async function autofillPage() {
             const cleanedJson = historyJson.replace(/```json/g, '').replace(/```/g, '').trim();
             workHistory = JSON.parse(cleanedJson);
         }
-    } catch(e) { console.error("AI Autofill: Could not parse work history from resume.", e); }
+    } catch(e) { console.error("Hired Always: Could not parse work history from resume.", e); }
 
     const educationPrompt = "Analyze the attached resume and extract education history. Return a JSON array where each object has 'degree', 'school', 'fieldOfStudy', 'startDate', 'endDate', and 'gpa' keys. If GPA is not mentioned, use an empty string.";
     let educationHistory = [];
@@ -1379,7 +1379,7 @@ async function autofillPage() {
             const cleanedJson = educationJson.replace(/```json/g, '').replace(/```/g, '').trim();
             educationHistory = JSON.parse(cleanedJson);
         }
-    } catch(e) { console.error("AI Autofill: Could not parse education from resume.", e); }
+    } catch(e) { console.error("Hired Always: Could not parse education from resume.", e); }
 
     await new Promise(resolve => setTimeout(resolve, 500)); // Wait for the page to finish loading dynamic content
     
@@ -1435,7 +1435,7 @@ async function autofillPage() {
                 });
             } catch (e) {
                 // Selector might be invalid in some contexts
-                console.warn(`AI Autofill: Invalid selector "${selector}"`);
+                console.warn(`Hired Always: Invalid selector "${selector}"`);
             }
         });
 
@@ -1443,14 +1443,14 @@ async function autofillPage() {
     }
 
     const allElements = discoverFormElements();
-    console.log(`AI Autofill: Discovered ${allElements.length} form elements`);
-    console.log('AI Autofill: Element types found:', allElements.map(el => `${el.tagName.toLowerCase()}[${el.type || el.getAttribute('role') || 'no-type'}]`).join(', '));
+    console.log(`Hired Always: Discovered ${allElements.length} form elements`);
+    console.log('Hired Always: Element types found:', allElements.map(el => `${el.tagName.toLowerCase()}[${el.type || el.getAttribute('role') || 'no-type'}]`).join(', '));
 
     for (const el of allElements) {
         try {
             const style = window.getComputedStyle(el);
             if (el.disabled || el.readOnly || style.display === 'none' || style.visibility === 'hidden' || el.closest('[style*="display: none"]')) {
-                console.log(`AI Autofill: Skipping disabled/hidden element:`, el);
+                console.log(`Hired Always: Skipping disabled/hidden element:`, el);
                 continue;
             }
 
@@ -1516,7 +1516,7 @@ async function autofillPage() {
             }
 
             if (isFilled) {
-                console.log("AI Autofill: Skipping already filled element:", el);
+                console.log("Hired Always: Skipping already filled element:", el);
                 continue;
             }
 
@@ -1529,7 +1529,7 @@ async function autofillPage() {
 
             // Classify the field type for smarter handling
             const fieldClassification = classifyFieldType(el, question, combinedText);
-            console.log(`AI Autofill: Field classified as "${fieldClassification.type}" (confidence: ${fieldClassification.confidence}) - Question: "${question}"`);
+            console.log(`Hired Always: Field classified as "${fieldClassification.type}" (confidence: ${fieldClassification.confidence}) - Question: "${question}"`);
 
             // --- Handle EEOC/Demographic Fields ---
             if (isDemographic) {
@@ -1621,12 +1621,12 @@ async function autofillPage() {
                  if (el.type === 'file') {
                     // Attempt to attach resume file
                     if (userData.resume && userData.resumeFileName) {
-                        console.log("AI Autofill: Attempting to attach resume file...");
+                        console.log("Hired Always: Attempting to attach resume file...");
                         const attached = await attachResumeFile(userData.resume, userData.resumeFileName);
                         if (attached) {
-                            console.log("AI Autofill: Resume attached successfully!");
+                            console.log("Hired Always: Resume attached successfully!");
                         } else {
-                            console.log("AI Autofill: Could not automatically attach resume. User will need to upload manually.");
+                            console.log("Hired Always: Could not automatically attach resume. User will need to upload manually.");
                             el.style.border = '2px solid #8B5CF6';
                             let notice = el.parentElement.querySelector('p.autofill-notice');
                             if (!notice) {
@@ -2273,9 +2273,9 @@ ${userData.additionalInfo || 'Experienced professional seeking new opportunities
                 }
             }
         } catch (error) {
-            console.error("AI Autofill: Error processing element:", el, error);
+            console.error("Hired Always: Error processing element:", el, error);
         }
     }
-    console.log("AI Autofill: Process finished.");
+    console.log("Hired Always: Process finished.");
 }
 

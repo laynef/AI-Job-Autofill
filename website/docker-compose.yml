@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ai-job-copilot-website
+    container_name: hired-always-website
     ports:
       - "8080:80"
     restart: unless-stopped
@@ -16,7 +16,7 @@ services:
     networks:
       - web
     labels:
-      - "com.example.description=AI Job Copilot Website"
+      - "com.example.description=Hired Always Website"
       - "com.example.version=1.0"
 
 networks:
