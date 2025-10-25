@@ -1,6 +1,9 @@
 # Use nginx alpine image for a lightweight container
 FROM nginx:alpine
 
+# Install envsubst (part of gettext package)
+RUN apk add --no-cache gettext
+
 # Set working directory
 WORKDIR /usr/share/nginx/html
 
@@ -11,15 +14,22 @@ RUN rm -rf /usr/share/nginx/html/*
 COPY index.html /usr/share/nginx/html/
 COPY styles.css /usr/share/nginx/html/
 
-# Copy custom nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy nginx configuration template
+COPY nginx.conf.template /etc/nginx/conf.d/default.conf.template
 
-# Expose port 80
-EXPOSE 80
+# Copy and set permissions for entrypoint script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
-# Add healthcheck
+# Default PORT for local development (Cloud Run will override this)
+ENV PORT=8080
+
+# Expose port (will be set dynamically)
+EXPOSE 8080
+
+# Add healthcheck (using PORT variable)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
+    CMD wget --quiet --tries=1 --spider http://localhost:${PORT}/ || exit 1
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Use custom entrypoint
+ENTRYPOINT ["/docker-entrypoint.sh"]

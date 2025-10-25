@@ -125,17 +125,36 @@ To modify nginx settings, edit `nginx.conf` and rebuild the container.
 
 ## Port Configuration
 
-By default, the website runs on port 8080 (mapped to container port 80). To change this, modify the port mapping:
+By default, the website runs on port 8080. The container is configured to use the `PORT` environment variable, making it compatible with Google Cloud Run and other cloud platforms.
+
+To change the port for local development:
 
 ```bash
-docker run -d -p 3000:80 --name hired-always-website hired-always-website
+docker run -d -p 3000:3000 -e PORT=3000 --name hired-always-website hired-always-website
 ```
 
 Or in `docker-compose.yml`:
 ```yaml
 ports:
-  - "3000:80"
+  - "3000:3000"
+environment:
+  - PORT=3000
 ```
+
+## Google Cloud Run Deployment
+
+The container is pre-configured to work with Google Cloud Run, which automatically sets the `PORT` environment variable.
+
+Deploy using gcloud CLI:
+```bash
+gcloud run deploy hiredalways \
+  --source . \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated
+```
+
+Or use Cloud Build with a cloudbuild.yaml file in your project.
 
 ## License
 
