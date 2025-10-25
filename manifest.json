@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Free AI Job Application Copilot",
+  "name": "Hired Always - AI Job Application Assistant",
   "version": "2.3.5",
-  "description": "Uses AI to automatically fill out job applications based on your saved information and resume.",
+  "description": "AI-powered job application assistant that automatically fills out applications using your resume and information. Visit hiredalways.com",
   "permissions": ["storage", "scripting", "activeTab"],
   "host_permissions": [
     "*://job-boards.greenhouse.io/*",
