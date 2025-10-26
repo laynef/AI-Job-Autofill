@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 import os
 
 app = FastAPI(
@@ -10,6 +11,64 @@ app = FastAPI(
     description="AI-powered job application assistant",
     version="1.0.0"
 )
+
+# Security Headers Middleware
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+
+        # Content Security Policy - Comprehensive policy for web security
+        csp_directives = [
+            "default-src 'self'",
+            "script-src 'self' 'unsafe-inline' https://www.paypal.com https://www.paypalobjects.com",
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data: https:",
+            "font-src 'self' data:",
+            "connect-src 'self' https://www.paypal.com https://www.paypalobjects.com https://generativelanguage.googleapis.com",
+            "frame-src https://www.paypal.com",
+            "object-src 'none'",
+            "base-uri 'self'",
+            "form-action 'self' https://www.paypal.com",
+            "frame-ancestors 'none'",
+            "upgrade-insecure-requests"
+        ]
+        response.headers["Content-Security-Policy"] = "; ".join(csp_directives)
+
+        # Prevent MIME type sniffing
+        response.headers["X-Content-Type-Options"] = "nosniff"
+
+        # Prevent clickjacking attacks
+        response.headers["X-Frame-Options"] = "DENY"
+
+        # Enable browser XSS protection (legacy but still useful)
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+
+        # Strict Transport Security - Force HTTPS (31536000 = 1 year)
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+
+        # Referrer Policy - Control referrer information
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+        # Permissions Policy - Disable unnecessary browser features
+        permissions_policy = [
+            "accelerometer=()",
+            "camera=()",
+            "geolocation=()",
+            "gyroscope=()",
+            "magnetometer=()",
+            "microphone=()",
+            "payment=(self)",
+            "usb=()"
+        ]
+        response.headers["Permissions-Policy"] = ", ".join(permissions_policy)
+
+        # Remove server header for security through obscurity
+        response.headers.pop("Server", None)
+
+        return response
+
+# Add security headers middleware (add this before CORS)
+app.add_middleware(SecurityHeadersMiddleware)
 
 # CORS middleware for Chrome extension
 app.add_middleware(
