@@ -347,6 +347,105 @@ try {
         document.getElementById('viewTracker').addEventListener('click', function() {
             chrome.tabs.create({ url: chrome.runtime.getURL('tracker.html') });
         });
+
+        // Rating System
+        function incrementUsageCount() {
+            chrome.storage.local.get(['usageCount', 'hasRated', 'ratingDismissed'], function(result) {
+                const usageCount = (result.usageCount || 0) + 1;
+                chrome.storage.local.set({ usageCount: usageCount }, function() {
+                    // Show rating prompt after 5 uses if user hasn't rated or dismissed
+                    if (usageCount >= 5 && !result.hasRated && !result.ratingDismissed) {
+                        setTimeout(() => showRatingModal(), 500);
+                    }
+                });
+            });
+        }
+
+        function showRatingModal() {
+            const modal = document.getElementById('ratingModal');
+            modal.style.display = 'flex';
+        }
+
+        function hideRatingModal() {
+            const modal = document.getElementById('ratingModal');
+            modal.style.display = 'none';
+        }
+
+        // Star rating interaction
+        const stars = document.querySelectorAll('.star');
+        const rateNowBtn = document.getElementById('rateNowBtn');
+        let selectedRating = 0;
+
+        stars.forEach(star => {
+            star.addEventListener('mouseenter', function() {
+                const rating = parseInt(this.getAttribute('data-rating'));
+                highlightStars(rating);
+            });
+
+            star.addEventListener('click', function() {
+                selectedRating = parseInt(this.getAttribute('data-rating'));
+                highlightStars(selectedRating);
+                rateNowBtn.style.display = 'block';
+            });
+        });
+
+        document.querySelector('.stars-container').addEventListener('mouseleave', function() {
+            if (selectedRating > 0) {
+                highlightStars(selectedRating);
+            } else {
+                highlightStars(0);
+            }
+        });
+
+        function highlightStars(rating) {
+            stars.forEach((star, index) => {
+                if (index < rating) {
+                    star.classList.add('filled');
+                } else {
+                    star.classList.remove('filled');
+                }
+            });
+        }
+
+        // Rate Now button - opens Chrome Web Store
+        rateNowBtn.addEventListener('click', function() {
+            const extensionId = chrome.runtime.id;
+            const webStoreUrl = `https://chromewebstore.google.com/detail/${extensionId}`;
+            chrome.tabs.create({ url: webStoreUrl });
+            chrome.storage.local.set({ hasRated: true });
+            hideRatingModal();
+        });
+
+        // Remind Later button
+        document.getElementById('remindLaterBtn').addEventListener('click', function() {
+            // Reset usage count so it will ask again after another 5 uses
+            chrome.storage.local.set({ usageCount: 0 });
+            hideRatingModal();
+        });
+
+        // Don't Ask Again button
+        document.getElementById('dontAskAgainBtn').addEventListener('click', function() {
+            chrome.storage.local.set({ ratingDismissed: true });
+            hideRatingModal();
+        });
+
+        // Increment usage count when saving or autofilling
+        const originalSaveHandler = document.getElementById('save').onclick;
+        document.getElementById('save').addEventListener('click', function() {
+            incrementUsageCount();
+        }, { once: false });
+
+        const originalAutofillHandler = document.getElementById('autofill').onclick;
+        document.getElementById('autofill').addEventListener('click', function() {
+            incrementUsageCount();
+        }, { once: false });
+
+        // Check if we should show rating modal on load
+        chrome.storage.local.get(['usageCount', 'hasRated', 'ratingDismissed'], function(result) {
+            if ((result.usageCount || 0) >= 5 && !result.hasRated && !result.ratingDismissed) {
+                setTimeout(() => showRatingModal(), 1000);
+            }
+        });
     });
 } catch (e) {
     console.error("A fatal error occurred in popup.js:", e);
