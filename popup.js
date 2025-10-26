@@ -1,76 +1,3 @@
-// Subscription verification for ad-free experience
-function validateSubscriptionKey(key) {
-    return key && key.startsWith('HA-') && key.length >= 23;
-}
-
-function isSubscriptionExpired(activationDate) {
-    if (!activationDate) return true;
-    const daysSinceActivation = (Date.now() - new Date(activationDate).getTime()) / (1000 * 60 * 60 * 24);
-    return daysSinceActivation > 31;
-}
-
-function checkSubscription() {
-    return new Promise((resolve) => {
-        chrome.storage.local.get(['subscriptionKey', 'subscriptionActive', 'subscriptionStartDate'], function(result) {
-            // If user has active subscription, they get ad-free experience
-            if (result.subscriptionActive && result.subscriptionKey && validateSubscriptionKey(result.subscriptionKey)) {
-                // Check if subscription expired
-                if (isSubscriptionExpired(result.subscriptionStartDate)) {
-                    resolve({
-                        valid: true, // App is always free to use
-                        isPaid: false, // Expired subscription means ads shown
-                        expired: true,
-                        startDate: result.subscriptionStartDate
-                    });
-                    return;
-                }
-
-                resolve({
-                    valid: true,
-                    isPaid: true, // Active subscription = ad-free
-                    startDate: result.subscriptionStartDate
-                });
-                return;
-            }
-
-            // Free user with ads
-            resolve({
-                valid: true, // App is always free to use
-                isPaid: false, // Free users see ads
-                isFree: true
-            });
-        });
-    });
-}
-
-// Show or hide ads based on subscription status
-function manageAdVisibility(isPaid) {
-    const adContainers = document.querySelectorAll('.ad-container');
-    adContainers.forEach(container => {
-        if (isPaid) {
-            container.style.display = 'none'; // Hide ads for subscribers
-        } else {
-            container.style.display = 'block'; // Show ads for free users
-        }
-    });
-}
-
-function showLicenseModal() {
-    document.getElementById('licenseModal').style.display = 'block';
-}
-
-function hideLicenseModal() {
-    document.getElementById('licenseModal').style.display = 'none';
-}
-
-window.deactivateLicense = function() {
-    if (confirm('Are you sure you want to deactivate your license? You will need to re-enter it to use Hired Always.')) {
-        chrome.storage.local.set({ licenseActivated: false }, function() {
-            location.reload();
-        });
-    }
-};
-
 // This top-level try...catch block prevents the entire script from failing if an unexpected error occurs during setup.
 try {
     document.addEventListener('DOMContentLoaded', async function() {
@@ -79,99 +6,15 @@ try {
         const resumeFileInput = document.getElementById('resumeFile');
         const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'additionalInfo', 'coverLetter', 'gender', 'hispanic', 'race', 'veteran', 'disability'];
 
-        // Check subscription on load
-        const subscriptionStatus = await checkSubscription();
+        // Show free app badge - extension is now 100% free!
+        const appStatus = await AppManager.getStatus();
         const licenseInfoEl = document.getElementById('licenseInfo');
-        const autofillBtn = document.getElementById('autofill');
-
-        // Manage ad visibility based on subscription
-        manageAdVisibility(subscriptionStatus.isPaid);
-
-        // Update UI based on subscription status
-        licenseInfoEl.style.display = 'block';
-        if (subscriptionStatus.isPaid) {
-            // Paid subscriber - ad-free
-            licenseInfoEl.style.color = '#10b981';
-            licenseInfoEl.innerHTML = '✓ Ad-Free Subscription Active';
-            const daysLeft = 31 - Math.floor((Date.now() - new Date(subscriptionStatus.startDate).getTime()) / (1000 * 60 * 60 * 24));
-            if (daysLeft <= 7) {
-                licenseInfoEl.innerHTML = `✓ Ad-Free (${daysLeft} days left)`;
-            }
-        } else if (subscriptionStatus.expired) {
-            licenseInfoEl.style.color = '#f59e0b';
-            licenseInfoEl.innerHTML = 'Subscription Expired - <a href="https://hiredalways.com/purchase.html" target="_blank" style="text-decoration:underline">Remove Ads for $9.99/mo</a>';
-        } else {
-            // Free user with ads
-            licenseInfoEl.style.color = '#3b82f6';
-            licenseInfoEl.innerHTML = 'Free Version - <a href="https://hiredalways.com/purchase.html" target="_blank" style="text-decoration:underline">Remove Ads for $9.99/mo</a>';
+        if (licenseInfoEl) {
+            licenseInfoEl.style.display = 'block';
         }
 
-        // Subscription activation
-        document.getElementById('activateLicense').addEventListener('click', function() {
-            const subscriptionKey = document.getElementById('licenseKeyInput').value.trim();
-            const errorDiv = document.getElementById('licenseError');
-            const statusDiv = document.getElementById('licenseStatus');
-
-            if (!validateSubscriptionKey(subscriptionKey)) {
-                errorDiv.textContent = 'Invalid subscription key format. Keys start with "HA-" or "HA-SUB-".';
-                errorDiv.style.display = 'block';
-                return;
-            }
-
-            chrome.storage.local.set({
-                subscriptionKey: subscriptionKey,
-                subscriptionActive: true,
-                subscriptionStartDate: new Date().toISOString()
-            }, function() {
-                errorDiv.style.display = 'none';
-                statusDiv.style.display = 'block';
-                statusDiv.style.background = '#d1fae5';
-                statusDiv.style.color = '#065f46';
-                statusDiv.innerHTML = '✓ Subscription activated! Ads removed for 31 days.';
-
-                setTimeout(() => {
-                    hideLicenseModal();
-                    location.reload(); // Reload to hide ads
-                }, 1500);
-            });
-        });
-
-        // Manage Subscription button
-        document.getElementById('manageLicense').addEventListener('click', function() {
-            chrome.storage.local.get(['subscriptionKey', 'subscriptionActive', 'subscriptionStartDate'], function(result) {
-                const modal = document.getElementById('licenseModal');
-                const statusDiv = document.getElementById('licenseStatus');
-                const errorDiv = document.getElementById('licenseError');
-
-                showLicenseModal();
-                errorDiv.style.display = 'none';
-
-                if (result.subscriptionActive) {
-                    const daysLeft = 31 - Math.floor((Date.now() - new Date(result.subscriptionStartDate).getTime()) / (1000 * 60 * 60 * 24));
-                    const isExpired = daysLeft < 0;
-
-                    statusDiv.style.display = 'block';
-                    statusDiv.style.background = isExpired ? '#fee2e2' : '#d1fae5';
-                    statusDiv.style.color = isExpired ? '#991b1b' : '#065f46';
-                    statusDiv.innerHTML = `
-                        ${isExpired ? '⚠️ Subscription Expired' : '✓ Subscription Active'}<br>
-                        <strong>Key:</strong> ${result.subscriptionKey}<br>
-                        <strong>Days Left:</strong> ${Math.max(0, daysLeft)} days<br>
-                        <strong>Started:</strong> ${new Date(result.subscriptionStartDate).toLocaleDateString()}<br>
-                        ${isExpired ? '<a href="https://hiredalways.com/purchase.html" target="_blank" style="color: #991b1b; text-decoration: underline;">Renew Subscription</a><br>' : ''}
-                        <a href="https://www.paypal.com/myaccount/autopay/" target="_blank" style="color: #065f46; text-decoration: underline;">Manage in PayPal</a><br>
-                        <button onclick="deactivateLicense()" style="margin-top: 0.5rem; background: #ef4444; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;">Deactivate</button>
-                    `;
-                }
-            });
-        });
-
-        // Close modal when clicking outside
-        document.getElementById('licenseModal').addEventListener('click', function(e) {
-            if (e.target.id === 'licenseModal') {
-                hideLicenseModal();
-            }
-        });
+        // Initialize rating system
+        await RatingManager.init();
 
         // Load saved data when the popup opens
         chrome.storage.local.get([...textFields, 'resumeFileName', 'resume'], function(result) {

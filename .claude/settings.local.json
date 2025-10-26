@@ -19,7 +19,9 @@
       "Bash(git push:*)",
       "Bash(python3:*)",
       "Bash(git reset:*)",
-      "Bash(convert:*)"
+      "Bash(convert:*)",
+      "Bash(zip:*)",
+      "Bash(unzip:*)"
     ],
     "deny": [],
     "ask": []
