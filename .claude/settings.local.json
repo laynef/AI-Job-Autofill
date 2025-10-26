@@ -16,7 +16,9 @@
       "Bash(docker logs:*)",
       "Bash(docker-compose restart:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(python3:*)",
+      "Bash(git reset:*)"
     ],
     "deny": [],
     "ask": []
