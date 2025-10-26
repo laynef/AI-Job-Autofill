@@ -24,9 +24,12 @@ const elements = {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async function() {
-    // Check subscription and manage ad visibility
-    const subscriptionStatus = await SubscriptionManager.checkStatus();
-    UIUtils.manageAdVisibility(subscriptionStatus.isPaid);
+    // Show free app status
+    const appStatus = await AppManager.getStatus();
+    const licenseInfoEl = document.getElementById('licenseInfo');
+    if (licenseInfoEl) {
+        UIUtils.showFreeBadge(licenseInfoEl);
+    }
 
     setupEventListeners();
     loadApplications();

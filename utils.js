@@ -3,16 +3,7 @@
 
 // Constants
 const CONSTANTS = {
-    SUBSCRIPTION: {
-        PREFIX: 'HA-',
-        MIN_LENGTH: 23,
-        DURATION_DAYS: 31,
-        RENEWAL_WARNING_DAYS: 7
-    },
     STORAGE_KEYS: {
-        SUBSCRIPTION_KEY: 'subscriptionKey',
-        SUBSCRIPTION_ACTIVE: 'subscriptionActive',
-        SUBSCRIPTION_START_DATE: 'subscriptionStartDate',
         JOB_APPLICATIONS: 'jobApplications',
         USAGE_COUNT: 'usageCount',
         HAS_RATED: 'hasRated',
@@ -27,78 +18,37 @@ const CONSTANTS = {
         OFFER: 'Offer',
         REJECTED: 'Rejected',
         WITHDRAWN: 'Withdrawn'
-    }
+    },
+    APP_NAME: 'Hired Always',
+    VERSION: '2.5'
 };
 
-// Subscription Management
-const SubscriptionManager = {
+// App Manager - Simplified for free version
+const AppManager = {
     /**
-     * Validates subscription key format
-     * @param {string} key - The subscription key to validate
-     * @returns {boolean} True if valid format
+     * Get app status - Always free!
+     * @returns {Promise<Object>} App status object
      */
-    validateKey(key) {
-        return key &&
-               key.startsWith(CONSTANTS.SUBSCRIPTION.PREFIX) &&
-               key.length >= CONSTANTS.SUBSCRIPTION.MIN_LENGTH;
+    async getStatus() {
+        return {
+            valid: true,
+            isFree: true,
+            isPaid: false,
+            message: 'Hired Always is 100% free!'
+        };
     },
 
     /**
-     * Checks if subscription has expired
-     * @param {string} activationDate - ISO date string
-     * @returns {boolean} True if expired
+     * Get app information
+     * @returns {Object} App info
      */
-    isExpired(activationDate) {
-        if (!activationDate) return true;
-        const daysSinceActivation = (Date.now() - new Date(activationDate).getTime()) / (1000 * 60 * 60 * 24);
-        return daysSinceActivation > CONSTANTS.SUBSCRIPTION.DURATION_DAYS;
-    },
-
-    /**
-     * Gets days remaining in subscription
-     * @param {string} startDate - ISO date string
-     * @returns {number} Days remaining (negative if expired)
-     */
-    getDaysRemaining(startDate) {
-        if (!startDate) return 0;
-        const daysSinceStart = Math.floor((Date.now() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24));
-        return CONSTANTS.SUBSCRIPTION.DURATION_DAYS - daysSinceStart;
-    },
-
-    /**
-     * Checks subscription status
-     * @returns {Promise<Object>} Subscription status object
-     */
-    async checkStatus() {
-        return new Promise((resolve) => {
-            chrome.storage.local.get([
-                CONSTANTS.STORAGE_KEYS.SUBSCRIPTION_KEY,
-                CONSTANTS.STORAGE_KEYS.SUBSCRIPTION_ACTIVE,
-                CONSTANTS.STORAGE_KEYS.SUBSCRIPTION_START_DATE
-            ], (result) => {
-                if (result[CONSTANTS.STORAGE_KEYS.SUBSCRIPTION_ACTIVE] &&
-                    result[CONSTANTS.STORAGE_KEYS.SUBSCRIPTION_KEY] &&
-                    this.validateKey(result[CONSTANTS.STORAGE_KEYS.SUBSCRIPTION_KEY])) {
-
-                    const expired = this.isExpired(result[CONSTANTS.STORAGE_KEYS.SUBSCRIPTION_START_DATE]);
-
-                    resolve({
-                        valid: true,
-                        isPaid: !expired,
-                        expired: expired,
-                        startDate: result[CONSTANTS.STORAGE_KEYS.SUBSCRIPTION_START_DATE],
-                        daysRemaining: this.getDaysRemaining(result[CONSTANTS.STORAGE_KEYS.SUBSCRIPTION_START_DATE])
-                    });
-                    return;
-                }
-
-                resolve({
-                    valid: true,
-                    isPaid: false,
-                    isFree: true
-                });
-            });
-        });
+    getInfo() {
+        return {
+            name: CONSTANTS.APP_NAME,
+            version: CONSTANTS.VERSION,
+            isFree: true,
+            description: 'AI-powered job application assistant - 100% free forever'
+        };
     }
 };
 
@@ -128,17 +78,6 @@ const UIUtils = {
     },
 
     /**
-     * Manages ad visibility based on subscription status
-     * @param {boolean} isPaid - Whether user has active subscription
-     */
-    manageAdVisibility(isPaid) {
-        const adContainers = document.querySelectorAll('.ad-container');
-        adContainers.forEach(container => {
-            container.style.display = isPaid ? 'none' : 'flex';
-        });
-    },
-
-    /**
      * Shows status message with auto-clear
      * @param {HTMLElement} statusEl - Status element
      * @param {string} message - Message to display
@@ -157,6 +96,15 @@ const UIUtils = {
                 statusEl.className = 'status';
             }, duration);
         }
+    },
+
+    /**
+     * Show free app badge
+     * @param {HTMLElement} element - Element to show badge in
+     */
+    showFreeBadge(element) {
+        if (!element) return;
+        element.innerHTML = '<span style="color: #10b981; font-weight: bold;">✓ 100% FREE Forever</span>';
     }
 };
 
@@ -319,7 +267,7 @@ const PerformanceUtils = {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         CONSTANTS,
-        SubscriptionManager,
+        AppManager,
         UIUtils,
         DataUtils,
         StorageUtils,
