@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -59,17 +59,19 @@ async def health_check():
     """Health check endpoint for Cloud Run"""
     return {"status": "healthy"}
 
-@app.get("/robots.txt", response_class=HTMLResponse)
+@app.get("/robots.txt")
 async def robots():
     """Serve robots.txt for SEO"""
     with open("static/robots.txt", "r") as f:
-        return f.read()
+        content = f.read()
+    return Response(content=content, media_type="text/plain")
 
-@app.get("/sitemap.xml", response_class=HTMLResponse)
+@app.get("/sitemap.xml")
 async def sitemap():
     """Serve sitemap.xml for SEO"""
     with open("static/sitemap.xml", "r") as f:
-        return f.read()
+        content = f.read()
+    return Response(content=content, media_type="application/xml")
 
 if __name__ == "__main__":
     import uvicorn
