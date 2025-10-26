@@ -5,41 +5,6 @@ let applications = [];
 let currentEditId = null;
 let currentViewId = null;
 
-// Subscription verification for ad management
-function validateSubscriptionKey(key) {
-    return key && key.startsWith('HA-') && key.length >= 23;
-}
-
-function isSubscriptionExpired(activationDate) {
-    if (!activationDate) return true;
-    const daysSinceActivation = (Date.now() - new Date(activationDate).getTime()) / (1000 * 60 * 60 * 24);
-    return daysSinceActivation > 31;
-}
-
-function checkSubscription() {
-    return new Promise((resolve) => {
-        chrome.storage.local.get(['subscriptionKey', 'subscriptionActive', 'subscriptionStartDate'], function(result) {
-            if (result.subscriptionActive && result.subscriptionKey && validateSubscriptionKey(result.subscriptionKey)) {
-                if (isSubscriptionExpired(result.subscriptionStartDate)) {
-                    resolve({ isPaid: false }); // Expired = show ads
-                    return;
-                }
-                resolve({ isPaid: true }); // Active = no ads
-                return;
-            }
-            resolve({ isPaid: false }); // Free user = show ads
-        });
-    });
-}
-
-// Show or hide ads based on subscription status
-function manageAdVisibility(isPaid) {
-    const adContainers = document.querySelectorAll('.ad-container');
-    adContainers.forEach(container => {
-        container.style.display = isPaid ? 'none' : 'flex';
-    });
-}
-
 // DOM Elements
 const elements = {
     applicationsList: document.getElementById('applicationsList'),
@@ -60,8 +25,8 @@ const elements = {
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async function() {
     // Check subscription and manage ad visibility
-    const subscriptionStatus = await checkSubscription();
-    manageAdVisibility(subscriptionStatus.isPaid);
+    const subscriptionStatus = await SubscriptionManager.checkStatus();
+    UIUtils.manageAdVisibility(subscriptionStatus.isPaid);
 
     setupEventListeners();
     loadApplications();
@@ -101,9 +66,9 @@ function setupEventListeners() {
     // Form submission
     elements.jobForm.addEventListener('submit', handleFormSubmit);
 
-    // Filters and search
+    // Filters and search (with debouncing for better performance)
     elements.statusFilter.addEventListener('change', renderApplications);
-    elements.searchInput.addEventListener('input', renderApplications);
+    elements.searchInput.addEventListener('input', PerformanceUtils.debounce(renderApplications, 300));
     elements.sortBy.addEventListener('change', renderApplications);
 
     // Close modals on background click
@@ -227,9 +192,9 @@ function updateTimeline(existingApp, newData) {
     return timeline;
 }
 
-// Generate unique ID
+// Generate unique ID (using shared utility)
 function generateId() {
-    return 'app_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    return DataUtils.generateId();
 }
 
 // Render applications list
@@ -369,19 +334,20 @@ function openDetailsModal(id) {
     const app = applications.find(a => a.id === id);
     if (!app) return;
 
-    document.getElementById('detailsCompany').textContent = app.company;
-    document.getElementById('detailsPosition').textContent = app.position;
+    // Use safe setTextContent method from UIUtils for consistency
+    UIUtils.setTextContent(document.getElementById('detailsCompany'), app.company);
+    UIUtils.setTextContent(document.getElementById('detailsPosition'), app.position);
 
     const statusBadge = document.getElementById('detailsStatusBadge');
-    statusBadge.textContent = app.status;
+    UIUtils.setTextContent(statusBadge, app.status);
     statusBadge.className = `status-badge status-${app.status}`;
 
-    document.getElementById('detailsLocation').textContent = app.location || '-';
-    document.getElementById('detailsSalary').textContent = app.salary || '-';
-    document.getElementById('detailsDate').textContent = formatDate(app.applicationDate);
-    document.getElementById('detailsDays').textContent = getDaysSinceApplication(app.applicationDate) + ' days';
-    document.getElementById('detailsContact').textContent = app.contactName || '-';
-    document.getElementById('detailsEmail').textContent = app.contactEmail || '-';
+    UIUtils.setTextContent(document.getElementById('detailsLocation'), app.location || '-');
+    UIUtils.setTextContent(document.getElementById('detailsSalary'), app.salary || '-');
+    UIUtils.setTextContent(document.getElementById('detailsDate'), formatDate(app.applicationDate));
+    UIUtils.setTextContent(document.getElementById('detailsDays'), getDaysSinceApplication(app.applicationDate) + ' days');
+    UIUtils.setTextContent(document.getElementById('detailsContact'), app.contactName || '-');
+    UIUtils.setTextContent(document.getElementById('detailsEmail'), app.contactEmail || '-');
 
     // Job URL
     const urlContainer = document.getElementById('detailsUrlContainer');
@@ -397,7 +363,7 @@ function openDetailsModal(id) {
     const notesContainer = document.getElementById('detailsNotesContainer');
     const notesText = document.getElementById('detailsNotes');
     if (app.notes) {
-        notesText.textContent = app.notes;
+        UIUtils.setTextContent(notesText, app.notes);
         notesContainer.style.display = 'flex';
     } else {
         notesContainer.style.display = 'none';
@@ -463,24 +429,17 @@ function updateStats() {
     elements.offerApps.textContent = applications.filter(a => a.status === 'Offer').length;
 }
 
-// Utility functions
+// Utility functions (using shared utilities)
 function getDaysSinceApplication(dateStr) {
-    const appDate = new Date(dateStr);
-    const today = new Date();
-    const diffTime = Math.abs(today - appDate);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
+    return DataUtils.getDaysSince(dateStr);
 }
 
 function formatDate(dateStr) {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    return DataUtils.formatDate(dateStr);
 }
 
 function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    return UIUtils.escapeHtml(text);
 }
 
 // Export data function (for future use)
