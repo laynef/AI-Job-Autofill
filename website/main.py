@@ -20,11 +20,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Content Security Policy - Comprehensive policy for web security
         csp_directives = [
             "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' https://www.paypal.com https://www.paypalobjects.com",
+            "script-src 'self' 'unsafe-inline' https://www.paypal.com https://www.paypalobjects.com https://pagead2.googlesyndication.com https://www.googletagmanager.com",
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: https:",
             "font-src 'self' data:",
-            "connect-src 'self' https://www.paypal.com https://www.paypalobjects.com https://generativelanguage.googleapis.com",
+            "connect-src 'self' https://www.paypal.com https://www.paypalobjects.com https://generativelanguage.googleapis.com https://pagead2.googlesyndication.com https://www.google-analytics.com",
             "frame-src https://www.paypal.com",
             "object-src 'none'",
             "base-uri 'self'",
