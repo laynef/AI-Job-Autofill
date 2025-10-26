@@ -5,6 +5,41 @@ let applications = [];
 let currentEditId = null;
 let currentViewId = null;
 
+// Subscription verification for ad management
+function validateSubscriptionKey(key) {
+    return key && key.startsWith('HA-') && key.length >= 23;
+}
+
+function isSubscriptionExpired(activationDate) {
+    if (!activationDate) return true;
+    const daysSinceActivation = (Date.now() - new Date(activationDate).getTime()) / (1000 * 60 * 60 * 24);
+    return daysSinceActivation > 31;
+}
+
+function checkSubscription() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(['subscriptionKey', 'subscriptionActive', 'subscriptionStartDate'], function(result) {
+            if (result.subscriptionActive && result.subscriptionKey && validateSubscriptionKey(result.subscriptionKey)) {
+                if (isSubscriptionExpired(result.subscriptionStartDate)) {
+                    resolve({ isPaid: false }); // Expired = show ads
+                    return;
+                }
+                resolve({ isPaid: true }); // Active = no ads
+                return;
+            }
+            resolve({ isPaid: false }); // Free user = show ads
+        });
+    });
+}
+
+// Show or hide ads based on subscription status
+function manageAdVisibility(isPaid) {
+    const adContainers = document.querySelectorAll('.ad-container');
+    adContainers.forEach(container => {
+        container.style.display = isPaid ? 'none' : 'flex';
+    });
+}
+
 // DOM Elements
 const elements = {
     applicationsList: document.getElementById('applicationsList'),
@@ -23,7 +58,11 @@ const elements = {
 };
 
 // Initialize on page load
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
+    // Check subscription and manage ad visibility
+    const subscriptionStatus = await checkSubscription();
+    manageAdVisibility(subscriptionStatus.isPaid);
+
     setupEventListeners();
     loadApplications();
 });

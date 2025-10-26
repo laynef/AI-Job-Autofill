@@ -1,6 +1,4 @@
-// Free trial and subscription verification
-const FREE_TRIAL_LIMIT = 5;
-
+// Subscription verification for ad-free experience
 function validateSubscriptionKey(key) {
     return key && key.startsWith('HA-') && key.length >= 23;
 }
@@ -11,69 +9,49 @@ function isSubscriptionExpired(activationDate) {
     return daysSinceActivation > 31;
 }
 
-async function getAutofillUsage() {
-    return new Promise((resolve) => {
-        chrome.storage.local.get(['autofillCount'], function(result) {
-            resolve(result.autofillCount || 0);
-        });
-    });
-}
-
-async function incrementAutofillUsage() {
-    const currentCount = await getAutofillUsage();
-    return new Promise((resolve) => {
-        chrome.storage.local.set({ autofillCount: currentCount + 1 }, function() {
-            resolve(currentCount + 1);
-        });
-    });
-}
-
 function checkSubscription() {
     return new Promise((resolve) => {
-        chrome.storage.local.get(['subscriptionKey', 'subscriptionActive', 'subscriptionStartDate', 'autofillCount'], function(result) {
-            // If user has active subscription, they have unlimited access
+        chrome.storage.local.get(['subscriptionKey', 'subscriptionActive', 'subscriptionStartDate'], function(result) {
+            // If user has active subscription, they get ad-free experience
             if (result.subscriptionActive && result.subscriptionKey && validateSubscriptionKey(result.subscriptionKey)) {
                 // Check if subscription expired
                 if (isSubscriptionExpired(result.subscriptionStartDate)) {
                     resolve({
-                        valid: false,
-                        reason: 'Subscription expired',
+                        valid: true, // App is always free to use
+                        isPaid: false, // Expired subscription means ads shown
                         expired: true,
-                        isPaid: true
+                        startDate: result.subscriptionStartDate
                     });
                     return;
                 }
 
                 resolve({
                     valid: true,
-                    isPaid: true,
+                    isPaid: true, // Active subscription = ad-free
                     startDate: result.subscriptionStartDate
                 });
                 return;
             }
 
-            // Free trial user - check usage count
-            const usageCount = result.autofillCount || 0;
-            const remainingUses = FREE_TRIAL_LIMIT - usageCount;
-
-            if (remainingUses > 0) {
-                resolve({
-                    valid: true,
-                    isPaid: false,
-                    isFreeTrial: true,
-                    usageCount: usageCount,
-                    remainingUses: remainingUses
-                });
-            } else {
-                resolve({
-                    valid: false,
-                    reason: 'Free trial exhausted',
-                    isFreeTrial: true,
-                    usageCount: usageCount,
-                    isPaid: false
-                });
-            }
+            // Free user with ads
+            resolve({
+                valid: true, // App is always free to use
+                isPaid: false, // Free users see ads
+                isFree: true
+            });
         });
+    });
+}
+
+// Show or hide ads based on subscription status
+function manageAdVisibility(isPaid) {
+    const adContainers = document.querySelectorAll('.ad-container');
+    adContainers.forEach(container => {
+        if (isPaid) {
+            container.style.display = 'none'; // Hide ads for subscribers
+        } else {
+            container.style.display = 'block'; // Show ads for free users
+        }
     });
 }
 
@@ -106,33 +84,26 @@ try {
         const licenseInfoEl = document.getElementById('licenseInfo');
         const autofillBtn = document.getElementById('autofill');
 
-        if (!subscriptionStatus.valid) {
-            if (subscriptionStatus.expired) {
-                licenseInfoEl.style.display = 'block';
-                licenseInfoEl.style.color = '#ef4444';
-                licenseInfoEl.innerHTML = '⚠️ Subscription Expired - <a href="https://hiredalways.com/purchase.html" target="_blank" style="text-decoration:underline">Renew</a>';
-            } else if (subscriptionStatus.isFreeTrial) {
-                // Free trial exhausted
-                licenseInfoEl.style.display = 'block';
-                licenseInfoEl.style.color = '#f59e0b';
-                licenseInfoEl.innerHTML = '⚠️ Free Trial Used (0/5) - <a href="https://hiredalways.com/purchase.html" target="_blank" style="text-decoration:underline">Upgrade</a>';
-                showLicenseModal();
+        // Manage ad visibility based on subscription
+        manageAdVisibility(subscriptionStatus.isPaid);
+
+        // Update UI based on subscription status
+        licenseInfoEl.style.display = 'block';
+        if (subscriptionStatus.isPaid) {
+            // Paid subscriber - ad-free
+            licenseInfoEl.style.color = '#10b981';
+            licenseInfoEl.innerHTML = '✓ Ad-Free Subscription Active';
+            const daysLeft = 31 - Math.floor((Date.now() - new Date(subscriptionStatus.startDate).getTime()) / (1000 * 60 * 60 * 24));
+            if (daysLeft <= 7) {
+                licenseInfoEl.innerHTML = `✓ Ad-Free (${daysLeft} days left)`;
             }
+        } else if (subscriptionStatus.expired) {
+            licenseInfoEl.style.color = '#f59e0b';
+            licenseInfoEl.innerHTML = 'Subscription Expired - <a href="https://hiredalways.com/purchase.html" target="_blank" style="text-decoration:underline">Remove Ads for $9.99/mo</a>';
         } else {
-            licenseInfoEl.style.display = 'block';
-            if (subscriptionStatus.isPaid) {
-                // Paid subscriber
-                licenseInfoEl.style.color = '#10b981';
-                licenseInfoEl.innerHTML = '✓ Subscription Active';
-                const daysLeft = 31 - Math.floor((Date.now() - new Date(subscriptionStatus.startDate).getTime()) / (1000 * 60 * 60 * 24));
-                if (daysLeft <= 7) {
-                    licenseInfoEl.innerHTML = `✓ Active (${daysLeft} days left)`;
-                }
-            } else if (subscriptionStatus.isFreeTrial) {
-                // Free trial user with uses remaining
-                licenseInfoEl.style.color = '#3b82f6';
-                licenseInfoEl.innerHTML = `🎁 Free Trial (${subscriptionStatus.remainingUses}/5 uses left)`;
-            }
+            // Free user with ads
+            licenseInfoEl.style.color = '#3b82f6';
+            licenseInfoEl.innerHTML = 'Free Version - <a href="https://hiredalways.com/purchase.html" target="_blank" style="text-decoration:underline">Remove Ads for $9.99/mo</a>';
         }
 
         // Subscription activation
@@ -156,12 +127,11 @@ try {
                 statusDiv.style.display = 'block';
                 statusDiv.style.background = '#d1fae5';
                 statusDiv.style.color = '#065f46';
-                statusDiv.innerHTML = '✓ Subscription activated! You have 31 days of access.';
+                statusDiv.innerHTML = '✓ Subscription activated! Ads removed for 31 days.';
 
                 setTimeout(() => {
                     hideLicenseModal();
-                    licenseInfoEl.style.display = 'block';
-                    licenseInfoEl.innerHTML = '✓ Subscription Active (31 days)';
+                    location.reload(); // Reload to hide ads
                 }, 1500);
             });
         });
@@ -279,41 +249,7 @@ try {
 
         // Autofill button logic
         document.getElementById('autofill').addEventListener('click', async function() {
-            // Check subscription/trial before autofilling
-            const subscriptionStatus = await checkSubscription();
-
-            if (!subscriptionStatus.valid) {
-                if (subscriptionStatus.isFreeTrial) {
-                    // Free trial exhausted
-                    statusEl.innerHTML = '🚀 Upgrade to continue using Hired Always! <a href="https://hiredalways.com/purchase.html" target="_blank" style="color: #4f46e5; text-decoration: underline;">Subscribe Now</a>';
-                    statusEl.style.color = '#f59e0b';
-                    showLicenseModal();
-                } else if (subscriptionStatus.expired) {
-                    statusEl.textContent = 'Subscription expired. Please renew.';
-                    statusEl.style.color = '#ef4444';
-                    showLicenseModal();
-                } else {
-                    statusEl.textContent = 'Please activate your subscription to use autofill.';
-                    statusEl.style.color = '#ef4444';
-                    showLicenseModal();
-                }
-                return;
-            }
-
-            // Increment usage for free trial users
-            if (subscriptionStatus.isFreeTrial && !subscriptionStatus.isPaid) {
-                const newCount = await incrementAutofillUsage();
-                const remaining = FREE_TRIAL_LIMIT - newCount;
-
-                // Update display
-                if (remaining > 0) {
-                    licenseInfoEl.innerHTML = `🎁 Free Trial (${remaining}/5 uses left)`;
-                } else {
-                    licenseInfoEl.style.color = '#f59e0b';
-                    licenseInfoEl.innerHTML = '⚠️ Free Trial Used - <a href="https://hiredalways.com/purchase.html" target="_blank" style="text-decoration:underline">Upgrade</a>';
-                }
-            }
-
+            // App is free for everyone - no restrictions
             statusEl.textContent = 'Autofilling...';
             chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
                 if (tabs.length === 0 || !tabs[0].id) {
