@@ -73,6 +73,20 @@ async def sitemap():
         content = f.read()
     return Response(content=content, media_type="application/xml")
 
+@app.get("/manifest.json")
+async def manifest():
+    """Serve web app manifest for PWA support"""
+    with open("static/manifest.json", "r") as f:
+        content = f.read()
+    return Response(content=content, media_type="application/json")
+
+@app.get("/browserconfig.xml")
+async def browserconfig():
+    """Serve browserconfig.xml for Windows tiles"""
+    with open("static/browserconfig.xml", "r") as f:
+        content = f.read()
+    return Response(content=content, media_type="application/xml")
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8080))

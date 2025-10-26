@@ -34,15 +34,35 @@
     <meta name="theme-color" content="#667eea">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Hired Always">
+    <meta name="application-name" content="Hired Always">
     <meta name="format-detection" content="telephone=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="msapplication-TileColor" content="#667eea">
+    <meta name="msapplication-TileImage" content="/static/images/icon128.png">
+    <meta name="msapplication-config" content="/static/browserconfig.xml">
 
-    <link rel="stylesheet" href="/static/css/styles.css">
-    <link rel="icon" type="image/png" href="/static/images/icon48.png">
+    <!-- Performance & DNS Prefetch -->
+    <link rel="preconnect" href="https://chromewebstore.google.com">
+    <link rel="dns-prefetch" href="https://chromewebstore.google.com">
+
+    <!-- Favicons -->
+    <link rel="icon" href="/static/favicon.ico" sizes="any">
     <link rel="icon" type="image/png" sizes="16x16" href="/static/images/icon16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/images/icon32.png">
     <link rel="icon" type="image/png" sizes="48x48" href="/static/images/icon48.png">
     <link rel="icon" type="image/png" sizes="128x128" href="/static/images/icon128.png">
-    <link rel="apple-touch-icon" href="/static/images/icon128.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/images/icon192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/static/images/icon512.png">
     <link rel="apple-touch-icon" sizes="128x128" href="/static/images/icon128.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="/static/images/icon192.png">
+    <link rel="apple-touch-icon" sizes="512x512" href="/static/images/icon512.png">
+
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="/static/manifest.json">
+
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="/static/css/styles.css">
 
     <!-- Structured Data for Google -->
     <script type="application/ld+json">
@@ -94,6 +114,96 @@
       "description": "AI-powered job application automation platform that helps job seekers save time with intelligent autofill, AI-generated cover letters, and application tracking.",
       "sameAs": [
         "https://chromewebstore.google.com/detail/free-ai-job-application-c/kedoofhdliinkiibdljbplolfnbhaiia"
+      ]
+    }
+    </script>
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "How does the free trial work?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "You get 5 free job application autofills. No credit card required, no strings attached. Just install the extension and start using it immediately. After your free applications, you can upgrade to unlimited for $9.99/month."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which job platforms are supported?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Hired Always works with the most popular job application systems including Greenhouse, Lever, Workday, Ashby, BambooHR, Gem, Jobvite, and SmartRecruiters. We're constantly adding support for more platforms."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is my data safe and private?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes! Your resume and personal information are stored securely. We don't sell your data to third parties. Usage tracking is anonymized for improving the service. You have complete control over your information."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Do I need technical skills to use this?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Not at all! Hired Always is designed to be simple. Just install the Chrome extension, fill out your profile once, and click the 'Autofill' button when you're on a job application page. It takes less than 3 minutes to get started."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How does the AI cover letter work?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Our AI analyzes the job description and your resume to create a custom cover letter for each position. You can review and edit it before submitting to ensure it matches your voice and highlights the most relevant experience."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I cancel my subscription anytime?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Absolutely! There's no long-term commitment. Cancel anytime through your PayPal account settings. You'll keep access until the end of your current billing period. No cancellation fees or hassle."
+          }
+        }
+      ]
+    }
+    </script>
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Hired Always",
+      "url": "https://hiredalways.com",
+      "description": "AI-powered job application autofill that saves time and helps you land your dream job faster",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://hiredalways.com/?q={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://hiredalways.com/"
+        }
       ]
     }
     </script>
