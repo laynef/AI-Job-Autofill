@@ -96,7 +96,7 @@ def main():
 
     # Feature checkmarks
     features_y = 490
-    features = ["✓ Instant Autofill", "✓ AI Cover Letters", "✓ 4.8★ Rated"]
+    features = ["✓ Instant Autofill", "✓ AI Cover Letters", "✓ 100% Free Trial"]
     for i, feature in enumerate(features):
         x_pos = 100 + (i * 350)
         # Draw semi-transparent circle background
