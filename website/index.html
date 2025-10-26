@@ -29,6 +29,15 @@
     <link rel="icon" type="image/png" href="images/icon48.png">
     <link rel="apple-touch-icon" href="images/icon128.png">
 
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-503051713"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-503051713');
+    </script>
+
     <!-- Google AdSense -->
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8239771564812266"
      crossorigin="anonymous"></script>
@@ -342,5 +351,34 @@
             </div>
         </div>
     </footer>
+
+    <!-- Google Analytics Event Tracking -->
+    <script>
+        // Track Chrome Web Store install clicks
+        document.querySelectorAll('a[href*="chromewebstore.google.com"]').forEach(function(link) {
+            link.addEventListener('click', function() {
+                if (typeof gtag !== 'undefined') {
+                    gtag('event', 'click', {
+                        event_category: 'Install',
+                        event_label: 'Chrome Web Store',
+                        value: 1
+                    });
+                }
+            });
+        });
+
+        // Track upgrade button clicks
+        document.querySelectorAll('a[href*="purchase.html"]').forEach(function(link) {
+            link.addEventListener('click', function() {
+                if (typeof gtag !== 'undefined') {
+                    gtag('event', 'click', {
+                        event_category: 'Upgrade',
+                        event_label: 'Go Premium',
+                        value: 1
+                    });
+                }
+            });
+        });
+    </script>
 </body>
 </html>

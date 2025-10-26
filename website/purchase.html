@@ -7,6 +7,16 @@
     <meta name="description" content="Remove ads from Hired Always - AI-powered job application assistant. Ad-free experience for $9.99/month.">
     <link rel="stylesheet" href="styles.css">
     <link rel="icon" type="image/png" href="images/icon48.png">
+
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-503051713"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-503051713');
+    </script>
+
     <!-- Google AdSense -->
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8239771564812266"
      crossorigin="anonymous"></script>
@@ -318,6 +328,21 @@
             },
             onApprove: function(data, actions) {
                 loadingDiv.classList.remove('active');
+
+                // Track subscription purchase in Google Analytics
+                if (typeof gtag !== 'undefined') {
+                    gtag('event', 'purchase', {
+                        transaction_id: data.subscriptionID,
+                        value: 9.99,
+                        currency: 'USD',
+                        items: [{
+                            item_id: 'hired-always-premium',
+                            item_name: 'Hired Always Premium Subscription',
+                            price: 9.99,
+                            quantity: 1
+                        }]
+                    });
+                }
 
                 // Generate subscription key
                 const subscriptionKey = generateSubscriptionKey(userEmail, data.subscriptionID);
