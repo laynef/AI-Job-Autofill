@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api", tags=["extension"])
 # Environment variables - MUST be set in Cloud Run
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 LICENSE_SECRET = os.environ.get("LICENSE_SECRET", secrets.token_hex(32))
-FREE_TRIAL_LIMIT = 5
+FREE_TRIAL_LIMIT = 999999  # Effectively unlimited for everyone
 
 # Whitelisted emails with unlimited free access (owner/testing)
 WHITELIST_EMAILS = {
@@ -165,133 +165,38 @@ async def validate_license(request: ValidateLicenseRequest):
 async def check_usage(request: CheckUsageRequest):
     """
     Check usage status for a device
-    Returns trial status or subscription status
+    Returns unlimited free access for everyone
     """
     usage_data = get_device_usage(request.device_fingerprint)
 
-    # Check if whitelisted user (unlimited free access)
-    if check_whitelist_from_device(request.device_fingerprint):
-        return {
-            "status": "whitelisted",
-            "valid": True,
-            "is_paid": False,
-            "is_whitelisted": True,
-            "message": "Unlimited free access (owner)"
-        }
-
-    # If license key provided, validate it
-    if request.license_key:
-        validation = validate_license_signature(request.license_key)
-        if validation["valid"]:
-            # Check if user email is whitelisted
-            email = validation.get("user_id")
-            if email and is_whitelisted_user(email):
-                return {
-                    "status": "whitelisted",
-                    "valid": True,
-                    "is_paid": False,
-                    "is_whitelisted": True,
-                    "message": "Unlimited free access (owner)"
-                }
-
-            return {
-                "status": "subscribed",
-                "valid": True,
-                "is_paid": True,
-                "expires_at": (datetime.fromisoformat(validation["start_date"]) + timedelta(days=31)).isoformat()
-            }
-        else:
-            # License invalid, fall back to trial
-            pass
-
-    # Check trial usage
-    usage_count = usage_data["count"]
-    remaining = FREE_TRIAL_LIMIT - usage_count
-
-    if remaining > 0:
-        return {
-            "status": "trial",
-            "valid": True,
-            "is_paid": False,
-            "usage_count": usage_count,
-            "remaining_uses": remaining,
-            "trial_limit": FREE_TRIAL_LIMIT
-        }
-    else:
-        return {
-            "status": "trial_exhausted",
-            "valid": False,
-            "is_paid": False,
-            "usage_count": usage_count,
-            "remaining_uses": 0,
-            "trial_limit": FREE_TRIAL_LIMIT
-        }
+    # Everyone gets unlimited free access
+    return {
+        "status": "free",
+        "valid": True,
+        "is_paid": False,
+        "is_unlimited": True,
+        "message": "Unlimited free access for everyone!"
+    }
 
 
 @router.post("/track-usage")
 async def track_usage(request: TrackUsageRequest):
     """
     Track autofill usage
-    Increments counter for trial users
-    Validates subscription for paid users
+    Unlimited free access for everyone
     """
-    usage_data = get_device_usage(request.device_fingerprint)
-
-    # Check if whitelisted user (unlimited free access)
-    if check_whitelist_from_device(request.device_fingerprint):
-        db.update_usage(request.device_fingerprint, {"last_used": datetime.now().isoformat()})
-        return {
-            "allowed": True,
-            "is_paid": False,
-            "is_whitelisted": True,
-            "message": "Autofill authorized (unlimited - owner)"
-        }
-
-    # If license key provided, validate it
-    if request.license_key:
-        validation = validate_license_signature(request.license_key)
-        if validation["valid"]:
-            # Check if whitelisted by email
-            email = validation.get("user_id")
-            if email and is_whitelisted_user(email):
-                db.update_usage(request.device_fingerprint, {
-                    "last_used": datetime.now().isoformat(),
-                    "email": email  # Store for future whitelist checks
-                })
-                return {
-                    "allowed": True,
-                    "is_paid": False,
-                    "is_whitelisted": True,
-                    "message": "Autofill authorized (unlimited - owner)"
-                }
-
-            # Paid user - no limit, just log usage
-            db.update_usage(request.device_fingerprint, {"last_used": datetime.now().isoformat()})
-            return {
-                "allowed": True,
-                "is_paid": True,
-                "message": "Autofill authorized (subscription active)"
-            }
-
-    # Trial user - check and increment
-    if usage_data["count"] >= FREE_TRIAL_LIMIT:
-        raise HTTPException(
-            status_code=403,
-            detail="Free trial exhausted. Please purchase a subscription."
-        )
-
-    # Increment usage
+    # Just log usage for analytics, no limits enforced
     db.increment_usage(request.device_fingerprint)
-    usage_data = get_device_usage(request.device_fingerprint)  # Get updated data
+    db.update_usage(request.device_fingerprint, {"last_used": datetime.now().isoformat()})
 
-    remaining = FREE_TRIAL_LIMIT - usage_data["count"]
+    usage_data = get_device_usage(request.device_fingerprint)
 
     return {
         "allowed": True,
         "is_paid": False,
+        "is_unlimited": True,
         "usage_count": usage_data["count"],
-        "remaining_uses": remaining,
-        "message": f"Autofill authorized ({remaining} trial uses remaining)"
+        "message": "Autofill authorized (unlimited free access)"
     }
 
 
@@ -300,19 +205,9 @@ async def proxy_ai(request: AIProxyRequest):
     """
     Proxy AI requests to Google Gemini
     Hides API key from client
-    Enforces usage limits
+    Free for everyone - no limits
     """
-    # Check usage first
-    usage_check = await check_usage(CheckUsageRequest(
-        device_fingerprint=request.device_fingerprint,
-        license_key=request.license_key
-    ))
-
-    if not usage_check["valid"]:
-        raise HTTPException(
-            status_code=403,
-            detail="Usage limit exceeded. Please purchase a subscription."
-        )
+    # No usage limits - everyone gets free access
 
     # Validate API key is configured
     if not GEMINI_API_KEY:
