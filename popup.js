@@ -1604,7 +1604,14 @@ async function autofillPage() {
             '[class*="input"]',
             '[class*="field"]',
             '[class*="textField"]',
-            '[class*="textarea"]'
+            '[class*="textarea"]',
+
+            // Additional common patterns
+            '[name]:not([type="hidden"])',  // Any element with a name attribute
+            'div[role="textbox"]',  // Div-based inputs
+            'span[role="textbox"]',  // Span-based inputs
+            '[aria-label]:not(button):not(a)',  // Elements with aria-label (likely form fields)
+            '[placeholder]'  // Any element with placeholder text
         ];
 
         const elements = new Set();
@@ -1633,7 +1640,8 @@ async function autofillPage() {
     for (const el of allElements) {
         try {
             const style = window.getComputedStyle(el);
-            if (el.disabled || el.readOnly || style.display === 'none' || style.visibility === 'hidden' || el.closest('[style*="display: none"]')) {
+            // More accurate visibility check - only skip truly hidden elements
+            if (el.disabled || el.readOnly || style.display === 'none' || style.visibility === 'hidden' || el.offsetParent === null) {
                 console.log(`Hired Always: Skipping disabled/hidden element:`, el);
                 continue;
             }
@@ -1660,49 +1668,8 @@ async function autofillPage() {
                 }
             }
             
-            // --- Check if already filled ---
-            const isRadioOrCheckbox = el.type === 'radio' || el.type === 'checkbox';
-            let isFilled = false;
-
-            if (isRadioOrCheckbox) {
-                if (el.name && document.querySelector(`input[name="${el.name}"]:checked`)) {
-                    isFilled = true;
-                }
-            } else if (elType === 'select') {
-                const selectedOption = el.options[el.selectedIndex];
-                if (el.selectedIndex > 0 || (selectedOption && selectedOption.value && selectedOption.text.toLowerCase().trim() !== 'select' && selectedOption.value.trim() !== '')) {
-                    isFilled = true;
-                }
-            } else if (el.isContentEditable) {
-                if (el.textContent?.trim()) {
-                    isFilled = true;
-                }
-            } else if (elType === 'textarea') {
-                // Check if textarea has content
-                if (el.value && el.value.trim() && el.value.trim().length > 0) {
-                    // Make sure it's not just the placeholder
-                    if (!el.placeholder || el.value.trim() !== el.placeholder.trim()) {
-                        isFilled = true;
-                    }
-                }
-            } else if (elType === 'button') {
-                // Check if button-based dropdown has been filled (doesn't contain "select" or "please")
-                const buttonText = el.innerText.toLowerCase().trim();
-                if (buttonText && !buttonText.includes('select') && !buttonText.includes('please') && buttonText.length > 0) {
-                    isFilled = true;
-                }
-            } else if (typeof el.value === 'string' && el.value.trim()) {
-                if (el.placeholder && el.value.trim() === el.placeholder.trim()) {
-                    isFilled = false;
-                } else {
-                    isFilled = true;
-                }
-            }
-
-            if (isFilled) {
-                console.log("Hired Always: Skipping already filled element:", el);
-                continue;
-            }
+            // Log field being processed for better debugging
+            console.log("Hired Always: Processing form element:", el);
 
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             await new Promise(resolve => setTimeout(resolve, 200));
@@ -2460,6 +2427,116 @@ ${userData.additionalInfo || 'Experienced professional seeking new opportunities
             console.error("Hired Always: Error processing element:", el, error);
         }
     }
+
+    // Post-fill verification and retry for empty fields
+    console.log("Hired Always: Verifying form completion and retrying empty fields...");
+
+    // Verify filled fields and retry empty ones
+    let retryCount = 0;
+    const maxRetries = 2;
+
+    while (retryCount < maxRetries) {
+        const emptyFields = [];
+        const elementsToCheck = discoverFormElements();
+
+        for (const el of elementsToCheck) {
+            try {
+                const style = window.getComputedStyle(el);
+                if (el.disabled || el.readOnly || style.display === 'none' || style.visibility === 'hidden' || el.offsetParent === null) {
+                    continue;
+                }
+
+                const elType = el.tagName.toLowerCase();
+                const isButton = elType === 'button' || el.getAttribute('role') === 'button';
+
+                // Skip action buttons
+                if (isButton) {
+                    const buttonText = el.innerText.toLowerCase().trim();
+                    const buttonType = el.type;
+                    if (buttonType === 'submit' || buttonType === 'reset' ||
+                        buttonText.includes('apply') || buttonText.includes('submit') ||
+                        buttonText.includes('upload') || buttonText.includes('attach') ||
+                        buttonText.includes('remove') || buttonText.includes('delete') ||
+                        buttonText.includes('cross')) {
+                        continue;
+                    }
+                }
+
+                // Check if field is actually empty and needs filling
+                let isEmpty = false;
+                if (el.type === 'radio' || el.type === 'checkbox') {
+                    if (el.name && !document.querySelector(`input[name="${el.name}"]:checked`)) {
+                        isEmpty = true;
+                    }
+                } else if (elType === 'select') {
+                    if (el.selectedIndex <= 0 || !el.options[el.selectedIndex]?.value?.trim()) {
+                        isEmpty = true;
+                    }
+                } else if (el.isContentEditable) {
+                    if (!el.textContent?.trim()) {
+                        isEmpty = true;
+                    }
+                } else if (elType === 'textarea' || elType === 'input') {
+                    if (!el.value?.trim() || (el.placeholder && el.value.trim() === el.placeholder.trim())) {
+                        isEmpty = true;
+                    }
+                } else if (isButton) {
+                    const buttonText = el.innerText.toLowerCase().trim();
+                    if (!buttonText || buttonText.includes('select') || buttonText.includes('please') || buttonText === 'choose') {
+                        isEmpty = true;
+                    }
+                }
+
+                if (isEmpty) {
+                    emptyFields.push(el);
+                }
+            } catch (error) {
+                console.warn("Hired Always: Error checking field:", el, error);
+            }
+        }
+
+        if (emptyFields.length === 0) {
+            console.log("Hired Always: All fields verified as filled!");
+            break;
+        }
+
+        console.log(`Hired Always: Found ${emptyFields.length} empty fields, retry attempt ${retryCount + 1}/${maxRetries}`);
+
+        // Retry filling empty fields
+        for (const el of emptyFields.slice(0, 10)) { // Limit to first 10 empty fields per retry
+            try {
+                console.log("Hired Always: Retrying empty field:", el);
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                const question = findQuestionForInput(el);
+                const combinedText = `${el.id} ${el.name} ${question}`.toLowerCase();
+                const fieldClassification = classifyFieldType(el, question, combinedText);
+
+                // Try to fill the field based on its classification
+                if (fieldClassification.type === 'firstName' && userData.firstName) {
+                    await simulateTyping(el, userData.firstName);
+                } else if (fieldClassification.type === 'lastName' && userData.lastName) {
+                    await simulateTyping(el, userData.lastName);
+                } else if (fieldClassification.type === 'email' && userData.email) {
+                    await simulateTyping(el, userData.email);
+                } else if (fieldClassification.type === 'phone' && userData.phone) {
+                    await simulateTyping(el, userData.phone);
+                } else if (fieldClassification.type === 'address' && userData.address) {
+                    await simulateTyping(el, userData.address);
+                }
+
+            } catch (error) {
+                console.warn("Hired Always: Error retrying field:", el, error);
+            }
+        }
+
+        retryCount++;
+        await new Promise(resolve => setTimeout(resolve, 500)); // Wait before next verification
+    }
+
     console.log("Hired Always: Process finished.");
 }
+
+
 
