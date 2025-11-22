@@ -1213,38 +1213,82 @@ async function autofillPage() {
     }
 
     async function simulateTyping(element, text) {
-        if (typeof text !== 'string') return;
-        await simulateClick(element);
-        element.focus();
-        
-        const isContentEditable = element.isContentEditable;
-        if (isContentEditable) {
-            element.textContent = '';
-        } else {
-            element.value = '';
-        }
-        element.dispatchEvent(new Event('input', { bubbles: true }));
+        if (typeof text !== 'string' || !text.trim()) return false;
 
-        for (const char of text) {
+        try {
+            // Focus the element first
+            element.focus();
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            const isContentEditable = element.isContentEditable;
+            const isReactElement = element._reactInternalFiber || element._reactInternalInstance || Object.keys(element).some(key => key.startsWith('__react'));
+
+            // Clear existing content
             if (isContentEditable) {
-                element.textContent += char;
+                element.textContent = '';
             } else {
-                element.value += char;
+                element.value = '';
             }
-            element.dispatchEvent(new Event('input', { bubbles: true }));
-            await new Promise(resolve => setTimeout(resolve, Math.random() * 30 + 15));
-        }
-        
-        // Fallback: If simulation fails, directly set the value.
-        if (!isContentEditable && !element.value) {
-            element.value = text;
-        }
-        if (isContentEditable && !element.textContent) {
-            element.textContent = text;
-        }
 
-        element.dispatchEvent(new Event('change', { bubbles: true }));
-        element.blur();
+            // Set the value using multiple methods for compatibility
+            if (isContentEditable) {
+                // For contentEditable elements
+                element.textContent = text;
+                element.innerHTML = text;
+            } else {
+                // For standard input/textarea elements
+                element.value = text;
+
+                // For React elements, also set the underlying value property
+                if (isReactElement) {
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                    const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+
+                    if (element.tagName.toLowerCase() === 'input' && nativeInputValueSetter) {
+                        nativeInputValueSetter.call(element, text);
+                    } else if (element.tagName.toLowerCase() === 'textarea' && nativeTextAreaValueSetter) {
+                        nativeTextAreaValueSetter.call(element, text);
+                    }
+                }
+            }
+
+            // Dispatch multiple events to ensure frameworks detect the change
+            const events = ['input', 'change', 'keyup', 'keydown'];
+            for (const eventType of events) {
+                const event = new Event(eventType, { bubbles: true, cancelable: true });
+                element.dispatchEvent(event);
+            }
+
+            // Trigger React-specific events if needed
+            if (isReactElement) {
+                element.dispatchEvent(new Event('input', { bubbles: true }));
+                element.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            // Brief delay to let frameworks process
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Verify the value was set
+            const currentValue = isContentEditable ? element.textContent : element.value;
+            if (currentValue !== text) {
+                console.warn(`Hired Always: Value verification failed. Expected: "${text}", Got: "${currentValue}"`);
+                // Try one more time with direct assignment
+                if (isContentEditable) {
+                    element.textContent = text;
+                } else {
+                    element.value = text;
+                }
+                element.dispatchEvent(new Event('input', { bubbles: true }));
+                element.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            element.blur();
+            return true;
+
+        } catch (error) {
+            console.error("Hired Always: Error in simulateTyping:", error);
+            return false;
+        }
     }
 
     async function base64ToFile(base64, filename, mimeType) {
@@ -1390,21 +1434,38 @@ async function autofillPage() {
         // Returns: { type: string, confidence: number, keywords: string[] }
         const classifications = [];
 
-        // Personal Information
-        if (combinedText.includes('first') && combinedText.includes('name')) {
+        // Enhanced text analysis - include all available text sources
+        const allText = [
+            combinedText,
+            element.placeholder || '',
+            element.id || '',
+            element.name || '',
+            element.className || '',
+            element.title || '',
+            question || ''
+        ].join(' ').toLowerCase();
+
+        // Personal Information - Enhanced patterns
+        if (allText.match(/\b(first\s*name|firstname|given\s*name|fname)\b/)) {
             classifications.push({ type: 'firstName', confidence: 0.95, keywords: ['first', 'name'] });
         }
-        if (combinedText.includes('last') && combinedText.includes('name')) {
+        if (allText.match(/\b(last\s*name|lastname|surname|family\s*name|lname)\b/)) {
             classifications.push({ type: 'lastName', confidence: 0.95, keywords: ['last', 'name'] });
         }
-        if (combinedText.match(/\b(full|legal)\s*name\b/i)) {
+        if (allText.match(/\b(full\s*name|fullname|legal\s*name|complete\s*name)\b/) ||
+            (allText.includes('name') && !allText.match(/\b(first|last|user|file|company)\b/))) {
             classifications.push({ type: 'fullName', confidence: 0.9, keywords: ['full', 'name'] });
         }
-        if (combinedText.match(/\b(email|e-mail)\b/i)) {
+        if (allText.match(/\b(email|e-mail|mail|email\s*address)\b/)) {
             classifications.push({ type: 'email', confidence: 0.95, keywords: ['email'] });
         }
-        if (combinedText.match(/\b(phone|mobile|telephone|contact.*number)\b/i)) {
+        if (allText.match(/\b(phone|mobile|telephone|contact\s*number|cell|tel)\b/)) {
             classifications.push({ type: 'phone', confidence: 0.9, keywords: ['phone'] });
+        }
+
+        // Additional contact fields
+        if (allText.match(/\b(website|url|homepage|site)\b/)) {
+            classifications.push({ type: 'website', confidence: 0.8, keywords: ['website'] });
         }
 
         // Location
@@ -1477,8 +1538,42 @@ async function autofillPage() {
             classifications.push({ type: 'references', confidence: 0.85, keywords: ['reference'] });
         }
 
-        // Unclassified - will need AI
+        // Enhanced fallback for unclassified fields
         if (classifications.length === 0) {
+            // Try to infer from input type and context
+            const inputType = element.type?.toLowerCase();
+            const tagName = element.tagName?.toLowerCase();
+
+            // Specific input type handling
+            if (inputType === 'email') {
+                return { type: 'email', confidence: 0.8, keywords: ['email', 'inferred'] };
+            }
+            if (inputType === 'tel') {
+                return { type: 'phone', confidence: 0.8, keywords: ['phone', 'inferred'] };
+            }
+            if (inputType === 'url') {
+                return { type: 'website', confidence: 0.8, keywords: ['url', 'inferred'] };
+            }
+            if (inputType === 'date' || inputType === 'datetime-local') {
+                return { type: 'date', confidence: 0.7, keywords: ['date', 'inferred'] };
+            }
+
+            // Pattern matching for common missed fields
+            if (allText.match(/\b(comment|note|message|description|additional|other)\b/)) {
+                return { type: 'comment', confidence: 0.6, keywords: ['comment'] };
+            }
+            if (allText.match(/\b(referr|source|how.*hear)\b/)) {
+                return { type: 'referralSource', confidence: 0.7, keywords: ['referral'] };
+            }
+            if (allText.match(/\b(start|available|date)\b/)) {
+                return { type: 'startDate', confidence: 0.6, keywords: ['date'] };
+            }
+
+            // Generic text field - might be fillable with AI
+            if (tagName === 'textarea' || inputType === 'text' || !inputType) {
+                return { type: 'unknownText', confidence: 0.3, keywords: ['text', 'ai-fillable'] };
+            }
+
             return { type: 'unknown', confidence: 0, keywords: [] };
         }
 
@@ -1633,8 +1728,32 @@ async function autofillPage() {
         return Array.from(elements);
     }
 
-    const allElements = discoverFormElements();
-    console.log(`Hired Always: Discovered ${allElements.length} form elements`);
+    // Wait for dynamic content to load (important for SPAs)
+    console.log('Hired Always: Waiting for dynamic content to load...');
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    let allElements = discoverFormElements();
+    console.log(`Hired Always: Initial discovery found ${allElements.length} form elements`);
+
+    // Check for dynamic content loading (React/Vue/Angular apps)
+    let attempts = 0;
+    let lastElementCount = allElements.length;
+
+    while (attempts < 3) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const newElements = discoverFormElements();
+
+        if (newElements.length > lastElementCount) {
+            console.log(`Hired Always: Found ${newElements.length - lastElementCount} additional dynamic elements`);
+            allElements = newElements;
+            lastElementCount = newElements.length;
+            attempts = 0; // Reset attempts if we found new elements
+        } else {
+            attempts++;
+        }
+    }
+
+    console.log(`Hired Always: Final discovery found ${allElements.length} form elements`);
     console.log('Hired Always: Element types found:', allElements.map(el => `${el.tagName.toLowerCase()}[${el.type || el.getAttribute('role') || 'no-type'}]`).join(', '));
 
     for (const el of allElements) {
@@ -1778,15 +1897,39 @@ async function autofillPage() {
                             console.log("Hired Always: Resume attached successfully!");
                         } else {
                             console.log("Hired Always: Could not automatically attach resume. User will need to upload manually.");
-                            el.style.border = '2px solid #8B5CF6';
+
+                            // Enhanced file upload guidance
+                            el.style.border = '3px solid #8B5CF6';
+                            el.style.backgroundColor = '#F3F4F6';
+
                             let notice = el.parentElement.querySelector('p.autofill-notice');
                             if (!notice) {
                                 notice = document.createElement('p');
                                 notice.className = 'autofill-notice';
-                                notice.textContent = 'Please attach your resume file here.';
-                                notice.style.cssText = 'color: #8B5CF6; font-size: 12px; margin-top: 4px;';
+                                notice.innerHTML = `📄 <strong>Resume Upload Required</strong><br>` +
+                                    `Please click here to upload your resume file.<br>` +
+                                    `<small>Supported formats: PDF, DOC, DOCX</small>`;
+                                notice.style.cssText = `
+                                    color: #8B5CF6;
+                                    font-size: 13px;
+                                    margin: 8px 0;
+                                    padding: 8px;
+                                    background: #F8FAFC;
+                                    border: 1px solid #E5E7EB;
+                                    border-radius: 4px;
+                                    cursor: pointer;
+                                `;
+
+                                // Make notice clickable to trigger file input
+                                notice.addEventListener('click', () => {
+                                    el.click();
+                                });
+
                                 el.parentElement.insertBefore(notice, el.nextSibling);
                             }
+
+                            // Scroll to file input for user attention
+                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         }
                     }
                     continue;
@@ -2136,52 +2279,131 @@ Provide a concise answer.`;
             if (elType === 'input' || elType === 'textarea' || el.isContentEditable) {
                 let valueToType = '';
 
-                // Name fields
-                if ((combinedText.includes('first') && combinedText.includes('name')) ||
-                    combinedText.includes('firstname') || combinedText.includes('given name')) {
-                    valueToType = userData.firstName;
+                // Use the improved field classification system
+                switch (fieldClassification.type) {
+                    case 'firstName':
+                        valueToType = userData.firstName;
+                        break;
+                    case 'lastName':
+                        valueToType = userData.lastName;
+                        break;
+                    case 'fullName':
+                        valueToType = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                        break;
+                    case 'email':
+                        valueToType = userData.email;
+                        break;
+                    case 'phone':
+                        valueToType = userData.phone;
+                        break;
+                    case 'address':
+                        valueToType = userData.address;
+                        break;
+                    case 'city':
+                        valueToType = userData.city;
+                        break;
+                    case 'state':
+                        valueToType = userData.state;
+                        break;
+                    case 'zipCode':
+                        valueToType = userData.zipCode;
+                        break;
+                    case 'country':
+                        valueToType = userData.country;
+                        break;
+                    case 'linkedinUrl':
+                        valueToType = userData.linkedinUrl;
+                        break;
+                    case 'portfolioUrl':
+                        valueToType = userData.portfolioUrl;
+                        break;
+                    case 'website':
+                        valueToType = userData.website || userData.portfolioUrl;
+                        break;
+                    case 'yearsExperience':
+                        valueToType = userData.yearsExperience;
+                        break;
+                    case 'company':
+                        valueToType = userData.company;
+                        break;
+                    case 'jobTitle':
+                        valueToType = userData.jobTitle;
+                        break;
+                    case 'university':
+                        valueToType = userData.university;
+                        break;
+                    case 'degree':
+                        valueToType = userData.degree;
+                        break;
+                    case 'graduationYear':
+                        valueToType = userData.graduationYear;
+                        break;
+                    case 'referralSource':
+                        valueToType = userData.referralSource || "Online job board";
+                        break;
+                    case 'comment':
+                        valueToType = userData.additionalInfo || "Thank you for considering my application.";
+                        break;
+                    case 'startDate':
+                        valueToType = userData.startDate || "Immediately";
+                        break;
+                    case 'unknownText':
+                        // Use AI for unknown text fields if question is present
+                        if (question && question.length > 3) {
+                            console.log(`Hired Always: Using AI for unknown text field: "${question}"`);
+                            try {
+                                const aiResponse = await getAIResponse(question, userData);
+                                if (aiResponse && aiResponse.trim() &&
+                                    !aiResponse.toLowerCase().includes('not applicable') &&
+                                    !aiResponse.toLowerCase().includes('unable to') &&
+                                    aiResponse.length > 3) {
+                                    valueToType = aiResponse.trim();
+                                    console.log(`Hired Always: AI provided answer: "${valueToType}"`);
+                                } else {
+                                    console.log(`Hired Always: AI provided unhelpful answer: "${aiResponse}"`);
+                                }
+                            } catch (error) {
+                                console.warn(`Hired Always: AI request failed for question: "${question}"`, error);
+                            }
+                        }
+                        break;
+                    default:
+                        // Fallback to old keyword matching for backward compatibility
+                        if ((combinedText.includes('first') && combinedText.includes('name')) ||
+                            combinedText.includes('firstname') || combinedText.includes('given name')) {
+                            valueToType = userData.firstName;
+                        }
+                        else if ((combinedText.includes('last') && combinedText.includes('name')) ||
+                                 combinedText.includes('lastname') || combinedText.includes('surname') ||
+                                 combinedText.includes('family name')) {
+                            valueToType = userData.lastName;
+                        }
+                        break;
                 }
-                else if ((combinedText.includes('last') && combinedText.includes('name')) ||
-                         combinedText.includes('lastname') || combinedText.includes('surname') ||
-                         combinedText.includes('family name')) {
-                    valueToType = userData.lastName;
-                }
-                else if ((combinedText.includes('full') && combinedText.includes('name')) ||
-                         combinedText.includes('fullname') || combinedText.includes('legal name') ||
-                         (combinedText.includes('name') && !combinedText.includes('user') && !combinedText.includes('file'))) {
-                    valueToType = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
-                }
-                // Contact information
-                else if (combinedText.includes('email') || combinedText.includes('e-mail')) {
-                    valueToType = userData.email;
-                }
-                else if (combinedText.includes('phone') || combinedText.includes('mobile') ||
-                         combinedText.includes('telephone') || combinedText.includes('contact number')) {
-                    // Handle intl-tel-input library if present
-                    if (el.classList.contains('iti__tel-input') || el.hasAttribute('data-intl-tel-input-id')) {
-                        // Find the country dropdown if it exists
-                        const itiContainer = el.closest('.iti');
-                        if (itiContainer && userData.country) {
-                            const countryButton = itiContainer.querySelector('.iti__selected-country');
-                            if (countryButton) {
-                                await simulateClick(countryButton);
-                                await new Promise(resolve => setTimeout(resolve, 300));
 
-                                const countryList = itiContainer.querySelector('.iti__country-list');
-                                if (countryList) {
-                                    const countryOptions = Array.from(countryList.querySelectorAll('.iti__country'));
-                                    const targetCountry = countryOptions.find(opt =>
-                                        opt.querySelector('.iti__country-name')?.innerText.toLowerCase().includes(userData.country.toLowerCase())
-                                    );
-                                    if (targetCountry) {
-                                        await simulateClick(targetCountry);
-                                        await new Promise(resolve => setTimeout(resolve, 300));
-                                    }
+                // Special handling for international phone inputs
+                if (fieldClassification.type === 'phone' &&
+                    (el.classList.contains('iti__tel-input') || el.hasAttribute('data-intl-tel-input-id'))) {
+                    const itiContainer = el.closest('.iti');
+                    if (itiContainer && userData.country) {
+                        const countryButton = itiContainer.querySelector('.iti__selected-country');
+                        if (countryButton) {
+                            await simulateClick(countryButton);
+                            await new Promise(resolve => setTimeout(resolve, 300));
+
+                            const countryList = itiContainer.querySelector('.iti__country-list');
+                            if (countryList) {
+                                const countryOptions = Array.from(countryList.querySelectorAll('.iti__country'));
+                                const targetCountry = countryOptions.find(opt =>
+                                    opt.querySelector('.iti__country-name')?.innerText.toLowerCase().includes(userData.country.toLowerCase())
+                                );
+                                if (targetCountry) {
+                                    await simulateClick(targetCountry);
+                                    await new Promise(resolve => setTimeout(resolve, 300));
                                 }
                             }
                         }
                     }
-                    valueToType = userData.phone;
                 }
                 else if (combinedText.includes('pronoun')) {
                     valueToType = userData.pronouns;
@@ -2345,7 +2567,12 @@ Provide a concise answer.`;
                 }
 
                 if (valueToType) {
-                     await simulateTyping(el, valueToType);
+                    const success = await simulateTyping(el, valueToType);
+                    if (success) {
+                        console.log(`✅ Successfully filled field (${fieldClassification.type}): "${valueToType}"`);
+                    } else {
+                        console.warn(`❌ Failed to fill field (${fieldClassification.type}): "${valueToType}"`);
+                    }
                 } else {
                     const cleanQuestion = question.replace(/[*:]$/, '').trim();
                     if (cleanQuestion.length > 10 && !isDemographic) {
