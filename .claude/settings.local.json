@@ -22,7 +22,20 @@
       "Bash(convert:*)",
       "Bash(zip:*)",
       "Bash(unzip:*)",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "Bash(manifest.json )",
+      "Bash(popup.html )",
+      "Bash(popup.js )",
+      "Bash(tracker.html )",
+      "Bash(tracker.js )",
+      "Bash(tracker.css )",
+      "Bash(form-handler.js )",
+      "Bash(job-extractor.js )",
+      "Bash(rating-manager.js )",
+      "Bash(utils.js )",
+      "Bash(ats-config.js )",
+      "Bash(images/ )",
+      "Bash(icons/ )"
     ],
     "deny": [],
     "ask": []
