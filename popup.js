@@ -662,10 +662,20 @@ async function extractJobInfo() {
         }
     }
 
+    // Helper function to validate company names
+    function isValidCompany(companyName) {
+        if (!companyName) return false;
+        const trimmed = companyName.trim();
+        return trimmed.length > 2 &&
+               trimmed.length < 100 &&
+               !trimmed.toLowerCase().includes('apply') &&
+               !trimmed.toLowerCase().includes('application');
+    }
+
     // Extract company name with enhanced selectors
     let company = '';
 
-    // NEW: First try to extract from filled form fields (since autofill just ran)
+    // First try to extract from filled form fields (since autofill just ran)
     const companyInputSelectors = [
         'input[name*="company"]',
         'input[id*="company"]',
@@ -679,10 +689,13 @@ async function extractJobInfo() {
             const input = document.querySelector(selector);
             if (input) {
                 const value = input.value || input.textContent || input.innerText;
-                if (value && value.trim().length > 2 && value.trim().length < 100) {
-                    company = value.trim();
-                    console.log('Company extracted from form field:', company);
-                    break;
+                if (value && value.trim()) {
+                    const trimmed = value.trim();
+                    if (isValidCompany(trimmed)) {
+                        company = trimmed;
+                        console.log('Company extracted from form field:', company);
+                        break;
+                    }
                 }
             }
         } catch (e) {
@@ -690,22 +703,21 @@ async function extractJobInfo() {
         }
     }
 
-    // First, try Greenhouse-specific selectors
-    const greenhouseCompany = document.querySelector('.company-name')?.innerText ||
-                             document.querySelector('[class*="app-title"]')?.innerText ||
-                             document.querySelector('div[class*="application--header"] h2')?.innerText;
+    // Try Greenhouse-specific selectors if no company found yet
+    if (!company) {
+        const greenhouseCompany = document.querySelector('.company-name')?.innerText ||
+                                 document.querySelector('[class*="app-title"]')?.innerText ||
+                                 document.querySelector('div[class*="application--header"] h2')?.innerText;
 
-    if (greenhouseCompany && greenhouseCompany.length > 2 && greenhouseCompany.length < 100) {
-        company = greenhouseCompany.trim();
-        // Clean up if it says "Apply for this job" or similar
-        if (!company.toLowerCase().includes('apply') && !company.toLowerCase().includes('application')) {
-            company = company.replace(/\s*\(.*?\)\s*/g, '').trim();
-        } else {
-            company = ''; // Reset if it's just a generic header
+        if (greenhouseCompany) {
+            const cleaned = greenhouseCompany.trim().replace(/\s*\(.*?\)\s*/g, '').trim();
+            if (isValidCompany(cleaned)) {
+                company = cleaned;
+            }
         }
     }
 
-    // Try standard selectors if Greenhouse didn't work
+    // Try standard selectors if still no company found
     if (!company) {
         const companySelectors = [
             '[class*="company-name"]',
@@ -724,16 +736,12 @@ async function extractJobInfo() {
 
         for (const selector of companySelectors) {
             const el = document.querySelector(selector);
-            if (el && el.innerText && el.innerText.length < 100 && el.innerText.length > 2) {
-                company = el.innerText.trim();
-                // Clean up common patterns
-                company = company.replace(/\s*\(.*?\)\s*/g, '').trim();
-                if (company && company !== jobTitle.trim() &&
-                    !company.toLowerCase().includes('apply') &&
-                    !company.toLowerCase().includes('application')) {
+            if (el && el.innerText) {
+                const cleaned = el.innerText.trim().replace(/\s*\(.*?\)\s*/g, '').trim();
+                if (isValidCompany(cleaned) && cleaned !== jobTitle.trim()) {
+                    company = cleaned;
                     break;
                 }
-                company = ''; // Reset if invalid
             }
         }
     }
