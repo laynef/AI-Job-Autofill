@@ -1612,13 +1612,26 @@ async function autofillPage() {
         try {
             const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             if (!response.ok) {
-                 console.error("AI API Error:", response.status, await response.text());
-                 return "";
+                const errorText = await response.text();
+                console.error("AI API Error:", response.status, errorText);
+                console.error("Failed prompt preview:", prompt.substring(0, 200) + "...");
+                return "";
             }
             const result = await response.json();
-            return result.candidates?.[0]?.content?.parts?.[0]?.text.trim() || "";
+            const aiResponse = result.candidates?.[0]?.content?.parts?.[0]?.text.trim() || "";
+
+            // Log successful AI responses for debugging
+            if (aiResponse) {
+                console.log('✅ AI Response received:', aiResponse.substring(0, 100) + (aiResponse.length > 100 ? '...' : ''));
+            } else {
+                console.warn('⚠️ Empty AI response received');
+                console.log('Raw AI result:', JSON.stringify(result, null, 2));
+            }
+
+            return aiResponse;
         } catch (error) {
             console.error("AI Fetch Error:", error);
+            console.error("Failed prompt preview:", prompt.substring(0, 200) + "...");
             return "";
         }
     }
@@ -1648,25 +1661,108 @@ async function autofillPage() {
     // userData was already loaded at the start of the function
     console.log("Hired Always: Starting form filling process...");
 
-    const workHistoryPrompt = "Analyze the attached resume and extract the work experience. Return a JSON array where each object has 'jobTitle', 'company', 'startDate', 'endDate', and 'responsibilities' keys. The responsibilities should be a single string with key achievements separated by newlines.";
+    const workHistoryPrompt = `Extract work experience from the resume with MAXIMUM ACCURACY. Only include information explicitly stated in the resume.
+
+**CRITICAL REQUIREMENTS:**
+- Extract ONLY positions explicitly mentioned in the resume
+- Use exact job titles, company names, and dates as written
+- For dates: Use format "MM/YYYY" or "Month YYYY" as shown in resume
+- If start/end dates unclear, use "Present" for current positions or leave empty if unknown
+- Responsibilities: Extract exact bullet points or descriptions from resume
+
+**RESPONSE FORMAT:**
+Return ONLY a valid JSON array with this exact structure:
+[
+  {
+    "jobTitle": "exact title from resume",
+    "company": "exact company name",
+    "startDate": "MM/YYYY or Month YYYY",
+    "endDate": "MM/YYYY or Month YYYY or Present",
+    "responsibilities": "key achievements and duties as stated in resume"
+  }
+]
+
+**VALIDATION RULES:**
+- NO fictional companies or positions
+- NO estimated dates if not in resume
+- NO enhanced job titles
+- Include ALL positions mentioned in resume
+- If resume shows gaps, don't fill them with assumptions
+
+**JSON RESPONSE:**`;
     let workHistory = [];
     try {
         const historyJson = await getAIResponse(workHistoryPrompt, userData);
         if (historyJson) {
             const cleanedJson = historyJson.replace(/```json/g, '').replace(/```/g, '').trim();
-            workHistory = JSON.parse(cleanedJson);
-        }
-    } catch(e) { console.error("Hired Always: Could not parse work history from resume.", e); }
+            const parsedHistory = JSON.parse(cleanedJson);
 
-    const educationPrompt = "Analyze the attached resume and extract education history. Return a JSON array where each object has 'degree', 'school', 'fieldOfStudy', 'startDate', 'endDate', and 'gpa' keys. If GPA is not mentioned, use an empty string.";
+            // Validate the extracted data
+            if (Array.isArray(parsedHistory)) {
+                workHistory = parsedHistory.filter(job =>
+                    job.jobTitle && job.jobTitle.trim() &&
+                    job.company && job.company.trim() &&
+                    typeof job.jobTitle === 'string' &&
+                    typeof job.company === 'string'
+                );
+            }
+        }
+    } catch(e) {
+        console.error("Hired Always: Could not parse work history from resume.", e);
+        console.log("Raw AI response for debugging:", historyJson);
+    }
+
+    const educationPrompt = `Extract education information from the resume with COMPLETE ACCURACY. Only include education explicitly mentioned in the resume.
+
+**CRITICAL REQUIREMENTS:**
+- Extract ONLY degrees/education explicitly stated in the resume
+- Use exact degree names, school names, and dates as written
+- For GPA: Only include if explicitly mentioned in resume, otherwise leave empty
+- Field of study: Extract exact major/concentration if mentioned
+- Dates: Use exact format from resume (MM/YYYY or Month YYYY)
+
+**RESPONSE FORMAT:**
+Return ONLY a valid JSON array with this structure:
+[
+  {
+    "degree": "exact degree name from resume",
+    "school": "exact institution name",
+    "fieldOfStudy": "exact major/field if mentioned",
+    "startDate": "MM/YYYY or Month YYYY or empty if not specified",
+    "endDate": "MM/YYYY or Month YYYY or empty if not specified",
+    "gpa": "exact GPA if mentioned, otherwise empty string"
+  }
+]
+
+**VALIDATION RULES:**
+- NO fictional schools or degrees
+- NO estimated GPAs if not stated
+- NO standardized degree names if resume uses different format
+- Include certifications only if they're academic degrees
+- If multiple degrees, include all that are explicitly mentioned
+
+**JSON RESPONSE:**`;
     let educationHistory = [];
     try {
         const educationJson = await getAIResponse(educationPrompt, userData);
         if (educationJson) {
             const cleanedJson = educationJson.replace(/```json/g, '').replace(/```/g, '').trim();
-            educationHistory = JSON.parse(cleanedJson);
+            const parsedEducation = JSON.parse(cleanedJson);
+
+            // Validate the extracted education data
+            if (Array.isArray(parsedEducation)) {
+                educationHistory = parsedEducation.filter(edu =>
+                    edu.degree && edu.degree.trim() &&
+                    edu.school && edu.school.trim() &&
+                    typeof edu.degree === 'string' &&
+                    typeof edu.school === 'string'
+                );
+            }
         }
-    } catch(e) { console.error("Hired Always: Could not parse education from resume.", e); }
+    } catch(e) {
+        console.error("Hired Always: Could not parse education from resume.", e);
+        console.log("Raw AI education response for debugging:", educationJson);
+    }
 
     await new Promise(resolve => setTimeout(resolve, 500)); // Wait for the page to finish loading dynamic content
     
@@ -1771,6 +1867,35 @@ async function autofillPage() {
             if (el.disabled || el.readOnly || style.display === 'none' || style.visibility === 'hidden' || el.offsetParent === null) {
                 console.log(`Hired Always: Skipping disabled/hidden element:`, el);
                 continue;
+            }
+
+            // Skip elements that already have values (unless they're default/placeholder values)
+            if (el.value && el.value.trim() !== '' &&
+                el.value.trim() !== 'Select' &&
+                el.value.trim() !== 'Choose' &&
+                el.value.trim() !== 'Please select' &&
+                el.value.trim() !== '-- Select --') {
+                console.log('⏭️ Skipping field with existing value:', el.value.substring(0, 50));
+                continue;
+            }
+
+            // For checkboxes and radio buttons, skip if already selected
+            if ((el.type === 'checkbox' || el.type === 'radio') && el.checked) {
+                console.log('⏭️ Skipping already selected radio/checkbox');
+                continue;
+            }
+
+            // For select dropdowns, skip if a meaningful option is already selected
+            if (el.tagName.toLowerCase() === 'select' && el.selectedIndex > 0) {
+                const selectedText = el.options[el.selectedIndex].text.trim();
+                if (selectedText &&
+                    selectedText !== 'Select' &&
+                    selectedText !== 'Choose' &&
+                    selectedText !== 'Please select' &&
+                    selectedText !== '-- Select --') {
+                    console.log('⏭️ Skipping dropdown with existing selection:', selectedText);
+                    continue;
+                }
             }
 
             const elType = el.tagName.toLowerCase();
@@ -1979,20 +2104,33 @@ async function autofillPage() {
                     } else {
                         // Generate cover letter with AI
                         console.log('🤖 Generating AI cover letter');
-                        const coverLetterPrompt = `You are a helpful career assistant. Based on the provided resume, user profile, and job description, write a compelling cover letter.
-                        ---
-                        **CONTEXT:**
-                        - Job Title: ${jobTitle || 'Not found.'}
-                        - Job Description: ${jobDescription || 'Not found.'}
-                        - My Profile & Skills: ${userData.additionalInfo || 'Not provided.'}
-                        ---
-                        **INSTRUCTIONS:**
-                        - The cover letter should be professional, concise, and tailored to the job.
-                        - Highlight relevant skills and experiences from my profile.
-                        - Address it to the hiring manager if possible, otherwise use a generic salutation.
-                        - Keep it to 3-4 paragraphs.
-                        - Return only the cover letter text.
-                        **COVER LETTER:**`;
+                        const coverLetterPrompt = `You are a professional career writer crafting a cover letter. Create a compelling, ACCURATE cover letter based ONLY on the provided information.
+
+**CRITICAL REQUIREMENTS:**
+- Use ONLY information from the resume and user profile - never invent experience or skills
+- Tailor the letter specifically to the job title and requirements
+- Maintain professional tone and proper business letter format
+- Be truthful about qualifications while highlighting strengths
+- Keep to 3-4 concise paragraphs
+
+**JOB APPLICATION DETAILS:**
+- Position: ${jobTitle || 'Not specified'}
+- Job Requirements: ${jobDescription || 'Not available'}
+- Candidate Background: ${userData.additionalInfo || 'See resume for details'}
+
+**COVER LETTER STRUCTURE:**
+1. Opening: Express interest in the specific position and company
+2. Body (1-2 paragraphs): Connect resume experience to job requirements
+3. Closing: Reiterate interest and request for interview
+
+**WRITING GUIDELINES:**
+- Start with "Dear Hiring Manager," if no specific name available
+- Use specific examples from the resume when possible
+- Focus on how the candidate can contribute to the company
+- End with "Sincerely, [Candidate Name]" or similar professional closing
+- NO fictional experiences, skills, or achievements
+
+**COVER LETTER:**`;
                         coverLetterText = await getAIResponse(coverLetterPrompt, userData);
                     }
 
@@ -2014,33 +2152,31 @@ async function autofillPage() {
 
             if (isWorkExperienceField && experienceIndex < workHistory.length) {
                 const currentJob = workHistory[experienceIndex];
-                let filled = false;
 
                 // Job title
                 if (combinedText.includes('title') || combinedText.includes('position') || combinedText.includes('role')) {
                     await simulateTyping(el, currentJob.jobTitle);
-                    filled = true;
+                    continue;
                 }
                 // Company/Employer
                 else if (combinedText.includes('company') || combinedText.includes('employer') || combinedText.includes('organization')) {
                     await simulateTyping(el, currentJob.company);
-                    filled = true;
+                    continue;
                 }
                 // Start date
                 else if (combinedText.includes('start') && (combinedText.includes('date') || combinedText.includes('from'))) {
                     await simulateTyping(el, currentJob.startDate);
-                    filled = true;
+                    continue;
                 }
                 // End date
                 else if (combinedText.includes('end') && (combinedText.includes('date') || combinedText.includes('to'))) {
                     await simulateTyping(el, currentJob.endDate || 'Present');
-                    filled = true;
+                    continue;
                 }
                 // Responsibilities/Description
                 else if (combinedText.includes('responsibilit') || combinedText.includes('dut') ||
                          combinedText.includes('description') || combinedText.includes('achievement')) {
                     await simulateTyping(el, currentJob.responsibilities);
-                    filled = true;
 
                     // Move to next job and look for "Add Another" button
                     experienceIndex++;
@@ -2058,9 +2194,8 @@ async function autofillPage() {
                             await new Promise(resolve => setTimeout(resolve, 800)); // Wait for new fields to appear
                         }
                     }
+                    continue;
                 }
-
-                if (filled) continue;
             }
 
             // --- Education ---
@@ -2072,43 +2207,41 @@ async function autofillPage() {
 
             if (isEducationField && educationIndex < educationHistory.length) {
                 const currentEd = educationHistory[educationIndex];
-                let filled = false;
 
                 // School/University name
                 if (combinedText.includes('school') || combinedText.includes('university') ||
                     combinedText.includes('college') || combinedText.includes('institution')) {
                     await simulateTyping(el, currentEd.school);
-                    filled = true;
+                    continue;
                 }
                 // Degree
                 else if (combinedText.includes('degree') || combinedText.includes('qualification') ||
                          combinedText.includes('level of education')) {
                     await simulateTyping(el, currentEd.degree);
-                    filled = true;
+                    continue;
                 }
                 // Field of study/Major
                 else if (combinedText.includes('major') || combinedText.includes('field') ||
                          combinedText.includes('study') || combinedText.includes('concentration')) {
                     await simulateTyping(el, currentEd.fieldOfStudy);
-                    filled = true;
+                    continue;
                 }
                 // GPA
                 else if (combinedText.includes('gpa') || combinedText.includes('grade point')) {
                     if (currentEd.gpa) {
                         await simulateTyping(el, currentEd.gpa);
-                        filled = true;
+                        continue;
                     }
                 }
                 // Start date
                 else if (combinedText.includes('start') && (combinedText.includes('date') || combinedText.includes('from'))) {
                     await simulateTyping(el, currentEd.startDate);
-                    filled = true;
+                    continue;
                 }
                 // End date / Graduation date
                 else if ((combinedText.includes('end') || combinedText.includes('graduation') || combinedText.includes('completion')) &&
                          (combinedText.includes('date') || combinedText.includes('year'))) {
                     await simulateTyping(el, currentEd.endDate || 'Expected 2024');
-                    filled = true;
 
                     // Move to next education entry
                     educationIndex++;
@@ -2126,19 +2259,33 @@ async function autofillPage() {
                             await new Promise(resolve => setTimeout(resolve, 800));
                         }
                     }
+                    continue;
                 }
-
-                if (filled) continue;
             }
 
             // --- Certifications and Skills ---
             if ((combinedText.includes('certification') || combinedText.includes('license') ||
                  combinedText.includes('credential')) && !isDemographic) {
-                const certPrompt = `Based on my resume, list any professional certifications, licenses, or credentials I have. If the question asks for a specific certification like "${question}", respond with whether I have it (Yes/No) or provide the certification details if I have it.
+                const certPrompt = `You are analyzing a resume to answer a certification/license question ACCURATELY.
 
-Question: ${question}
+**CRITICAL INSTRUCTION**: Only mention certifications, licenses, or credentials that are EXPLICITLY stated in the resume. DO NOT assume or infer certifications that are not clearly mentioned.
 
-Provide a concise answer.`;
+**QUESTION TO ANSWER:**
+"${question}"
+
+**ANALYSIS REQUIREMENTS:**
+1. Search the resume for exact mentions of certifications, licenses, professional credentials
+2. If the question asks for a specific certification, respond "Yes" ONLY if it's explicitly listed in the resume
+3. If asking to list certifications, only include those explicitly mentioned
+4. If no relevant certifications are found, respond with "None currently" or "Not specified"
+5. Never guess or suggest certifications based on job experience alone
+
+**RESPONSE FORMAT:**
+- For yes/no questions: Answer "Yes" or "No" based on explicit resume content
+- For listing questions: Provide comma-separated list of exact certifications found
+- If none found: State "None currently listed"
+
+**ACCURATE RESPONSE:**`;
                 const certAnswer = await getAIResponse(certPrompt, userData);
                 if (certAnswer) {
                     await simulateTyping(el, certAnswer);
@@ -2151,7 +2298,31 @@ Provide a concise answer.`;
                  combinedText.includes('framework') || combinedText.includes('tool')) &&
                 (combinedText.includes('skill') || combinedText.includes('familiar') ||
                  combinedText.includes('proficien') || combinedText.includes('experience'))) {
-                const techSkillsPrompt = `Based on my resume and profile, list the relevant technical skills, programming languages, frameworks, or tools that match this question: "${question}". Provide a concise, comma-separated list or a brief answer.`;
+                const techSkillsPrompt = `You are analyzing a resume to identify technical skills that ACCURATELY match the question.
+
+**CRITICAL REQUIREMENTS:**
+- Only list skills, languages, frameworks, or tools that are EXPLICITLY mentioned in the resume
+- Match the question's specific requirements (don't list irrelevant skills)
+- Be honest about skill level - don't oversell or undersell abilities
+- If asking for years of experience, base it on resume work history dates
+
+**QUESTION TO ANSWER:**
+"${question}"
+
+**ANALYSIS PROCESS:**
+1. Identify what specific technical skills the question is asking for
+2. Search the resume for exact mentions of these technologies
+3. Consider context - work projects, education, or explicitly listed skills sections
+4. If years of experience requested, calculate based on resume dates
+5. Format response appropriately for the question type
+
+**RESPONSE GUIDELINES:**
+- For skill lists: Provide comma-separated list of relevant skills found in resume
+- For yes/no questions: Answer based on explicit resume evidence
+- For experience years: Calculate from actual work history dates
+- If no relevant skills found: Respond "Not specified in resume"
+
+**ACCURATE RESPONSE:**`;
                 const techAnswer = await getAIResponse(techSkillsPrompt, userData);
                 if (techAnswer) {
                     await simulateTyping(el, techAnswer);
@@ -2172,42 +2343,92 @@ Provide a concise answer.`;
                 else if (combinedText.includes('status') || combinedText.includes('citizenship')) questionType = 'work-status';
                 else if (combinedText.includes('notice') || combinedText.includes('period')) questionType = 'notice-period';
 
-                const prompt = `You are a helpful career assistant. Your task is to select the single best option from a list to answer a job application question.
-                    ---
-                    **CONTEXT:**
-                    - Job Title: ${jobTitle || 'Not specified'}
-                    - Job Description: ${jobDescription || 'Not specified'}
-                    - My Profile: ${userData.additionalInfo || 'Not provided'}
-                    - Question Type: ${questionType}
-                    - Answers Already Used: ${Array.from(usedAnswers).join(", ") || 'None'}
-                    ---
-                    **TASK:**
-                    - Question: "${cleanQuestion}"
-                    - Available Options:
-                    ${options.map((opt, idx) => `${idx + 1}. ${opt}`).join('\n')}
-                    ---
-                    **INSTRUCTIONS:**
-                    - Return ONLY the exact text of the best option from the list above.
-                    - Do not add any explanation or preamble.
-                    - Choose the most professional and appropriate answer.
-                    - For yes/no questions, choose based on what would make me the strongest candidate.
-                    - If unsure, prefer options that show flexibility and willingness.
-                    **BEST OPTION:**`;
+                const prompt = `You are an expert career advisor helping with job application forms. You must select the MOST ACCURATE and TRUTHFUL option from the provided list.
+
+**CRITICAL REQUIREMENTS:**
+- ACCURACY: Choose the option that best reflects the candidate's actual qualifications and situation
+- TRUTH: Never select misleading answers that could lead to job application rejection
+- CONTEXT AWARENESS: Consider the specific job requirements and how they match the candidate's background
+
+**CANDIDATE PROFILE:**
+- Job Title Applied For: ${jobTitle || 'Not specified'}
+- Job Requirements: ${jobDescription || 'Not specified'}
+- Candidate Background: ${userData.additionalInfo || 'Not provided'}
+- Question Category: ${questionType}
+- Previously Selected: ${Array.from(usedAnswers).join(", ") || 'None'}
+
+**QUESTION TO ANSWER:**
+"${cleanQuestion}"
+
+**AVAILABLE OPTIONS:**
+${options.map((opt, idx) => `${idx + 1}. ${opt}`).join('\n')}
+
+**SELECTION CRITERIA:**
+1. FIRST PRIORITY: Choose the most truthful option based on the candidate's actual background
+2. SECOND PRIORITY: If multiple truthful options exist, choose the most professionally favorable
+3. THIRD PRIORITY: For ambiguous cases, choose options showing competence and reliability
+4. NEVER select obviously false information (wrong location, impossible experience levels, etc.)
+
+**RESPONSE FORMAT:**
+Return ONLY the exact text of the selected option. No explanation, no additional text.
+
+**SELECTED OPTION:**`;
 
                 let aiChoice = await getAIResponse(prompt, userData);
 
                 // Clean up the AI response to match an option exactly
                 aiChoice = aiChoice.trim();
 
-                // Try fuzzy matching if exact match fails
-                let bestMatch = options.find(opt => opt.trim().toLowerCase() === aiChoice.toLowerCase());
+                // Advanced option matching with validation
+                let bestMatch = null;
+
+                // Step 1: Try exact match (case insensitive)
+                bestMatch = options.find(opt => opt.trim().toLowerCase() === aiChoice.toLowerCase());
+
+                // Step 2: Try partial match - AI choice contains option or vice versa
                 if (!bestMatch) {
-                    // Try partial match
-                    bestMatch = options.find(opt => opt.toLowerCase().includes(aiChoice.toLowerCase()) || aiChoice.toLowerCase().includes(opt.toLowerCase()));
+                    bestMatch = options.find(opt => {
+                        const optLower = opt.toLowerCase();
+                        const choiceLower = aiChoice.toLowerCase();
+                        return optLower.includes(choiceLower) || choiceLower.includes(optLower);
+                    });
                 }
+
+                // Step 3: Try word-based matching for better accuracy
+                if (!bestMatch && aiChoice.length > 2) {
+                    const aiWords = aiChoice.toLowerCase().split(/\s+/);
+                    bestMatch = options.find(opt => {
+                        const optWords = opt.toLowerCase().split(/\s+/);
+                        return aiWords.some(aiWord =>
+                            optWords.some(optWord =>
+                                aiWord.length > 2 && optWord.includes(aiWord)
+                            )
+                        );
+                    });
+                }
+
+                // Step 4: Intelligent fallback based on question type
                 if (!bestMatch) {
-                    // Fallback to first non-empty option
-                    bestMatch = options.find(opt => opt.trim() && opt.toLowerCase() !== 'select' && opt.toLowerCase() !== 'choose') || options[0];
+                    console.warn(`⚠️ AI choice "${aiChoice}" doesn't match any option. Question type: ${questionType}`);
+
+                    // Context-aware fallback selection
+                    if (questionType === 'work-status') {
+                        bestMatch = options.find(opt => opt.toLowerCase().includes('authorized') || opt.toLowerCase().includes('citizen')) ||
+                                   options.find(opt => opt.toLowerCase().includes('yes'));
+                    } else if (questionType === 'relocation') {
+                        bestMatch = options.find(opt => opt.toLowerCase().includes('yes') || opt.toLowerCase().includes('willing'));
+                    } else if (questionType === 'notice-period') {
+                        bestMatch = options.find(opt => opt.includes('2') || opt.includes('weeks') || opt.includes('immediately'));
+                    } else {
+                        // Generic fallback: avoid negative options, prefer professional responses
+                        bestMatch = options.find(opt =>
+                            opt.trim() &&
+                            opt.toLowerCase() !== 'select' &&
+                            opt.toLowerCase() !== 'choose' &&
+                            opt.toLowerCase() !== 'none' &&
+                            !opt.toLowerCase().includes('prefer not')
+                        ) || options[0];
+                    }
                 }
 
                 usedAnswers.add(bestMatch);
@@ -2548,20 +2769,33 @@ Provide a concise answer.`;
                     } else {
                         // Generate cover letter with AI
                         console.log('🤖 Generating AI cover letter');
-                        const coverLetterPrompt = `You are a helpful career assistant. Based on the provided resume, user profile, and job description, write a compelling cover letter.
-                        ---
-                        **CONTEXT:**
-                        - Job Title: ${jobTitle || 'Not found.'}
-                        - Job Description: ${jobDescription || 'Not found.'}
-                        - My Profile & Skills: ${userData.additionalInfo || 'Not provided.'}
-                        ---
-                        **INSTRUCTIONS:**
-                        - The cover letter should be professional, concise, and tailored to the job.
-                        - Highlight relevant skills and experiences from my profile.
-                        - Address it to the hiring manager if possible, otherwise use a generic salutation.
-                        - Keep it to 3-4 paragraphs.
-                        - Return only the cover letter text.
-                        **COVER LETTER:**`;
+                        const coverLetterPrompt = `You are a professional career writer crafting a cover letter. Create a compelling, ACCURATE cover letter based ONLY on the provided information.
+
+**CRITICAL REQUIREMENTS:**
+- Use ONLY information from the resume and user profile - never invent experience or skills
+- Tailor the letter specifically to the job title and requirements
+- Maintain professional tone and proper business letter format
+- Be truthful about qualifications while highlighting strengths
+- Keep to 3-4 concise paragraphs
+
+**JOB APPLICATION DETAILS:**
+- Position: ${jobTitle || 'Not specified'}
+- Job Requirements: ${jobDescription || 'Not available'}
+- Candidate Background: ${userData.additionalInfo || 'See resume for details'}
+
+**COVER LETTER STRUCTURE:**
+1. Opening: Express interest in the specific position and company
+2. Body (1-2 paragraphs): Connect resume experience to job requirements
+3. Closing: Reiterate interest and request for interview
+
+**WRITING GUIDELINES:**
+- Start with "Dear Hiring Manager," if no specific name available
+- Use specific examples from the resume when possible
+- Focus on how the candidate can contribute to the company
+- End with "Sincerely, [Candidate Name]" or similar professional closing
+- NO fictional experiences, skills, or achievements
+
+**COVER LETTER:**`;
                         valueToType = await getAIResponse(coverLetterPrompt, userData);
                     }
                 }
