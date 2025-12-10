@@ -1475,6 +1475,20 @@ async function autofillPage() {
         if (allText.match(/\b(website|url|homepage|site)\b/)) {
             classifications.push({ type: 'website', confidence: 0.8, keywords: ['website'] });
         }
+        if (allText.match(/\b(pronouns|pronoun|he\/him|she\/her|they\/them)\b/)) {
+            classifications.push({ type: 'pronouns', confidence: 0.9, keywords: ['pronouns'] });
+        }
+
+        // Personal statements and summaries
+        if (allText.match(/\b(summary|about.*me|professional.*summary|objective|personal.*statement)\b/)) {
+            classifications.push({ type: 'summary', confidence: 0.85, keywords: ['summary'] });
+        }
+        if (allText.match(/\b(cover.*letter|covering.*letter|motivation.*letter)\b/)) {
+            classifications.push({ type: 'coverLetter', confidence: 0.9, keywords: ['cover', 'letter'] });
+        }
+        if (allText.match(/\b(additional.*info|additional.*information|tell.*us.*more|anything.*else)\b/)) {
+            classifications.push({ type: 'additionalInfo', confidence: 0.85, keywords: ['additional', 'info'] });
+        }
 
         // Location
         if (combinedText.match(/\b(city|town)\b/i) && !combinedText.includes('work') && !combinedText.includes('job')) {
@@ -2351,9 +2365,14 @@ Return ONLY a valid JSON array with this structure:
 - CONTEXT AWARENESS: Consider the specific job requirements and how they match the candidate's background
 
 **CANDIDATE PROFILE:**
+- Name: ${userData.firstName || ''} ${userData.lastName || ''}
+- Location: ${userData.city || ''} ${userData.state || ''} ${userData.country || ''}
+- Email: ${userData.email || 'Not provided'}
+- Phone: ${userData.phone || 'Not provided'}
+- Professional Links: ${userData.linkedinUrl || userData.portfolioUrl || 'Not provided'}
 - Job Title Applied For: ${jobTitle || 'Not specified'}
 - Job Requirements: ${jobDescription || 'Not specified'}
-- Candidate Background: ${userData.additionalInfo || 'Not provided'}
+- Additional Information: ${userData.additionalInfo || 'Not provided'}
 - Question Category: ${questionType}
 - Previously Selected: ${Array.from(usedAnswers).join(", ") || 'None'}
 
@@ -2576,16 +2595,51 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                     case 'startDate':
                         valueToType = userData.startDate || "Immediately";
                         break;
+                    case 'pronouns':
+                        valueToType = userData.pronouns;
+                        break;
+                    case 'additionalInfo':
+                        valueToType = userData.additionalInfo;
+                        break;
+                    case 'coverLetter':
+                        valueToType = userData.coverLetter;
+                        break;
+                    case 'summary':
+                        valueToType = userData.additionalInfo || "Experienced professional seeking new opportunities";
+                        break;
                     case 'unknownText':
                         // Use AI for unknown text fields if question is present
                         if (question && question.length > 3) {
                             console.log(`Hired Always: Using AI for unknown text field: "${question}"`);
                             try {
-                                const aiResponse = await getAIResponse(question, userData);
+                                const unknownTextPrompt = `You are helping fill out a job application form. Provide a professional, concise answer based on the candidate's profile.
+
+**CANDIDATE PROFILE:**
+- Name: ${userData.firstName || ''} ${userData.lastName || ''}
+- Location: ${userData.city || ''} ${userData.state || ''} ${userData.country || ''}
+- Email: ${userData.email || 'Not provided'}
+- Professional Links: ${userData.linkedinUrl || userData.portfolioUrl || 'Not provided'}
+- Additional Info: ${userData.additionalInfo || 'Not provided'}
+- Job Applied For: ${jobTitle || 'Not specified'}
+
+**QUESTION:**
+"${question}"
+
+**REQUIREMENTS:**
+- Provide a brief, professional response (1-3 sentences)
+- Base answer on the candidate's actual background when possible
+- If the question can't be answered from the profile, provide a reasonable professional default
+- Avoid saying "not provided" or "not applicable" - be constructive
+- Keep response under 100 words
+
+**RESPONSE:**`;
+
+                                const aiResponse = await getAIResponse(unknownTextPrompt, userData);
                                 if (aiResponse && aiResponse.trim() &&
                                     !aiResponse.toLowerCase().includes('not applicable') &&
                                     !aiResponse.toLowerCase().includes('unable to') &&
-                                    aiResponse.length > 3) {
+                                    !aiResponse.toLowerCase().includes('not provided') &&
+                                    aiResponse.length > 3 && aiResponse.length < 300) {
                                     valueToType = aiResponse.trim();
                                     console.log(`Hired Always: AI provided answer: "${valueToType}"`);
                                 } else {
@@ -2982,17 +3036,98 @@ ${userData.additionalInfo || 'Experienced professional seeking new opportunities
                 const combinedText = `${el.id} ${el.name} ${question}`.toLowerCase();
                 const fieldClassification = classifyFieldType(el, question, combinedText);
 
-                // Try to fill the field based on its classification
-                if (fieldClassification.type === 'firstName' && userData.firstName) {
-                    await simulateTyping(el, userData.firstName);
-                } else if (fieldClassification.type === 'lastName' && userData.lastName) {
-                    await simulateTyping(el, userData.lastName);
-                } else if (fieldClassification.type === 'email' && userData.email) {
-                    await simulateTyping(el, userData.email);
-                } else if (fieldClassification.type === 'phone' && userData.phone) {
-                    await simulateTyping(el, userData.phone);
-                } else if (fieldClassification.type === 'address' && userData.address) {
-                    await simulateTyping(el, userData.address);
+                // Try to fill the field based on its classification with comprehensive data mapping
+                let retryValue = null;
+
+                switch (fieldClassification.type) {
+                    case 'firstName':
+                        retryValue = userData.firstName;
+                        break;
+                    case 'lastName':
+                        retryValue = userData.lastName;
+                        break;
+                    case 'fullName':
+                        retryValue = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+                        break;
+                    case 'email':
+                        retryValue = userData.email;
+                        break;
+                    case 'phone':
+                        retryValue = userData.phone;
+                        break;
+                    case 'pronouns':
+                        retryValue = userData.pronouns;
+                        break;
+                    case 'address':
+                        retryValue = userData.address;
+                        break;
+                    case 'city':
+                        retryValue = userData.city;
+                        break;
+                    case 'state':
+                        retryValue = userData.state;
+                        break;
+                    case 'zipCode':
+                        retryValue = userData.zipCode;
+                        break;
+                    case 'country':
+                        retryValue = userData.country;
+                        break;
+                    case 'linkedinUrl':
+                        retryValue = userData.linkedinUrl;
+                        break;
+                    case 'portfolioUrl':
+                        retryValue = userData.portfolioUrl;
+                        break;
+                    case 'website':
+                        retryValue = userData.portfolioUrl;
+                        break;
+                    case 'additionalInfo':
+                        retryValue = userData.additionalInfo;
+                        break;
+                    case 'coverLetter':
+                        retryValue = userData.coverLetter;
+                        break;
+                    case 'summary':
+                        retryValue = userData.additionalInfo;
+                        break;
+                    default:
+                        // Use AI for unknown fields during retry
+                        if (question && question.length > 3) {
+                            console.log(`Hired Always: Using AI for retry field: "${question}"`);
+                            try {
+                                const aiPrompt = `You are helping fill out a job application form. Based on the candidate's background, provide a brief, professional answer to this question.
+
+**Candidate Background:**
+- Name: ${userData.firstName || ''} ${userData.lastName || ''}
+- Email: ${userData.email || 'Not provided'}
+- Location: ${userData.city || ''} ${userData.state || ''}
+- Additional Info: ${userData.additionalInfo || 'Not provided'}
+
+**Question to Answer:**
+"${question}"
+
+**Requirements:**
+- Keep answer concise (1-3 sentences max)
+- Be professional and truthful
+- If uncertain, provide a reasonable professional response
+- Don't make up specific details not in the background
+
+**Response:**`;
+                                const aiResponse = await getAIResponse(aiPrompt, userData);
+                                if (aiResponse && aiResponse.trim() && aiResponse.length > 3 && aiResponse.length < 200) {
+                                    retryValue = aiResponse.trim();
+                                    console.log(`Hired Always: AI provided retry answer: "${retryValue}"`);
+                                }
+                            } catch (error) {
+                                console.warn(`Hired Always: AI retry failed for question: "${question}"`, error);
+                            }
+                        }
+                        break;
+                }
+
+                if (retryValue && retryValue.trim()) {
+                    await simulateTyping(el, retryValue);
                 }
 
             } catch (error) {
