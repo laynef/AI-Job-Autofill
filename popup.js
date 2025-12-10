@@ -1824,7 +1824,28 @@ Return ONLY a valid JSON array with this structure:
             'div[role="textbox"]',  // Div-based inputs
             'span[role="textbox"]',  // Span-based inputs
             '[aria-label]:not(button):not(a)',  // Elements with aria-label (likely form fields)
-            '[placeholder]'  // Any element with placeholder text
+            '[placeholder]',  // Any element with placeholder text
+
+            // Modern framework patterns
+            '[data-field]', '[data-input]', '[data-form-field]',
+            'input[id*="field"]', 'input[id*="input"]',
+            'textarea[id*="field"]', 'textarea[id*="input"]',
+            '[class*="FormField"]', '[class*="form-field"]', '[class*="form_field"]',
+            '[class*="Input"]', '[class*="TextArea"]', '[class*="Select"]',
+
+            // Common form library patterns (Formik, React Hook Form, etc)
+            '[id^="formik-"]', '[name^="formik-"]',
+            '[id*="react-hook-form"]', '[name*="react-hook-form"]',
+
+            // Additional ARIA patterns
+            '[role="spinbutton"]', '[role="slider"]',
+
+            // MUI/Material-UI specific
+            '.MuiTextField-root input', '.MuiTextArea-root textarea',
+            '.MuiSelect-root', '.MuiAutocomplete-root input',
+
+            // Bootstrap and common CSS framework patterns
+            '.form-control', '.form-select', '.form-check-input'
         ];
 
         const elements = new Set();
@@ -2660,6 +2681,33 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                                  combinedText.includes('lastname') || combinedText.includes('surname') ||
                                  combinedText.includes('family name')) {
                             valueToType = userData.lastName;
+                        }
+                        // If no match found and we have a good question, use AI
+                        else if (question && question.length > 5 && question.includes('?')) {
+                            console.log(`Hired Always: Using AI for unclassified field: "${question}"`);
+                            try {
+                                const fallbackPrompt = `You are helping fill out a job application form. Provide a brief, professional answer based on the candidate's profile.
+
+**CANDIDATE PROFILE:**
+- Name: ${userData.firstName || ''} ${userData.lastName || ''}
+- Location: ${userData.city || ''} ${userData.state || ''} ${userData.country || ''}
+- Professional Info: ${userData.additionalInfo || 'Not provided'}
+- Job Applied For: ${jobTitle || 'Not specified'}
+
+**QUESTION:**
+"${question}"
+
+**RESPONSE (keep under 50 words):**`;
+
+                                const fallbackResponse = await getAIResponse(fallbackPrompt, userData);
+                                if (fallbackResponse && fallbackResponse.trim() &&
+                                    fallbackResponse.length > 3 && fallbackResponse.length < 200) {
+                                    valueToType = fallbackResponse.trim();
+                                    console.log(`Hired Always: AI fallback answer: "${valueToType}"`);
+                                }
+                            } catch (error) {
+                                console.warn(`Hired Always: AI fallback failed for question: "${question}"`, error);
+                            }
                         }
                         break;
                 }
