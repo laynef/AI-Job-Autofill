@@ -4,7 +4,7 @@ try {
         const statusEl = document.getElementById('status');
         const resumeFileNameEl = document.getElementById('resumeFileName');
         const resumeFileInput = document.getElementById('resumeFile');
-        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'additionalInfo', 'coverLetter', 'gender', 'hispanic', 'race', 'veteran', 'disability'];
+        const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'additionalInfo', 'coverLetter', 'gender', 'hispanic', 'race', 'veteran', 'disability', 'citizenship', 'sponsorship'];
 
         // Show free app badge - extension is now 100% free!
         const appStatus = await AppManager.getStatus();
@@ -96,7 +96,7 @@ try {
             statusEl.textContent = 'Loading your data...';
 
             // FIRST: Load user data from storage (in popup context where it's reliable)
-            const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'resume', 'resumeFileName', 'additionalInfo', 'coverLetter', 'gender', 'hispanic', 'race', 'veteran', 'disability'];
+            const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'resume', 'resumeFileName', 'additionalInfo', 'coverLetter', 'gender', 'hispanic', 'race', 'veteran', 'disability', 'citizenship', 'sponsorship'];
 
             chrome.storage.local.get(fields, function(userData) {
                 if (chrome.runtime.lastError) {
@@ -1535,10 +1535,13 @@ async function autofillPage() {
         }
 
         // Authorization
+        if (combinedText.match(/\b(citizen|citizenship|u\.?s\.? citizen)\b/i)) {
+            classifications.push({ type: 'citizenship', confidence: 0.95, keywords: ['citizen'] });
+        }
         if (combinedText.match(/\b(authorized|authorization|eligible.*work|work.*permit)\b/i)) {
             classifications.push({ type: 'workAuthorization', confidence: 0.9, keywords: ['authorized'] });
         }
-        if (combinedText.match(/\b(sponsor|visa)\b/i)) {
+        if (combinedText.match(/\b(sponsor|sponsorship|visa)\b/i)) {
             classifications.push({ type: 'sponsorship', confidence: 0.9, keywords: ['sponsor'] });
         }
 
@@ -2391,6 +2394,8 @@ Return ONLY a valid JSON array with this structure:
 - Email: ${userData.email || 'Not provided'}
 - Phone: ${userData.phone || 'Not provided'}
 - Professional Links: ${userData.linkedinUrl || userData.portfolioUrl || 'Not provided'}
+- Citizenship/Work Auth: ${userData.citizenship || 'Not provided'}
+- Sponsorship Status: ${userData.sponsorship || 'Not provided'}
 - Job Title Applied For: ${jobTitle || 'Not specified'}
 - Job Requirements: ${jobDescription || 'Not specified'}
 - Additional Information: ${userData.additionalInfo || 'Not provided'}
@@ -2628,6 +2633,15 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                     case 'summary':
                         valueToType = userData.additionalInfo || "Experienced professional seeking new opportunities";
                         break;
+                    case 'citizenship':
+                        valueToType = userData.citizenship || "Yes, I am authorized to work in the U.S.";
+                        break;
+                    case 'workAuthorization':
+                        valueToType = userData.citizenship || "Yes, I am authorized to work in the U.S.";
+                        break;
+                    case 'sponsorship':
+                        valueToType = userData.sponsorship || "No, I do not require sponsorship";
+                        break;
                     case 'unknownText':
                         // Use AI for unknown text fields if question is present
                         if (question && question.length > 3) {
@@ -2640,6 +2654,8 @@ Return ONLY the exact text of the selected option. No explanation, no additional
 - Location: ${userData.city || ''} ${userData.state || ''} ${userData.country || ''}
 - Email: ${userData.email || 'Not provided'}
 - Professional Links: ${userData.linkedinUrl || userData.portfolioUrl || 'Not provided'}
+- Work Authorization: ${userData.citizenship || 'Not provided'}
+- Visa Sponsorship: ${userData.sponsorship || 'Not provided'}
 - Additional Info: ${userData.additionalInfo || 'Not provided'}
 - Job Applied For: ${jobTitle || 'Not specified'}
 
@@ -2691,6 +2707,8 @@ Return ONLY the exact text of the selected option. No explanation, no additional
 **CANDIDATE PROFILE:**
 - Name: ${userData.firstName || ''} ${userData.lastName || ''}
 - Location: ${userData.city || ''} ${userData.state || ''} ${userData.country || ''}
+- Work Authorization: ${userData.citizenship || 'Not provided'}
+- Visa Sponsorship: ${userData.sponsorship || 'Not provided'}
 - Professional Info: ${userData.additionalInfo || 'Not provided'}
 - Job Applied For: ${jobTitle || 'Not specified'}
 
@@ -3139,6 +3157,15 @@ ${userData.additionalInfo || 'Experienced professional seeking new opportunities
                     case 'summary':
                         retryValue = userData.additionalInfo;
                         break;
+                    case 'citizenship':
+                        retryValue = userData.citizenship;
+                        break;
+                    case 'workAuthorization':
+                        retryValue = userData.citizenship;
+                        break;
+                    case 'sponsorship':
+                        retryValue = userData.sponsorship;
+                        break;
                     default:
                         // Use AI for unknown fields during retry
                         if (question && question.length > 3) {
@@ -3150,6 +3177,8 @@ ${userData.additionalInfo || 'Experienced professional seeking new opportunities
 - Name: ${userData.firstName || ''} ${userData.lastName || ''}
 - Email: ${userData.email || 'Not provided'}
 - Location: ${userData.city || ''} ${userData.state || ''}
+- Work Authorization: ${userData.citizenship || 'Not provided'}
+- Visa Sponsorship: ${userData.sponsorship || 'Not provided'}
 - Additional Info: ${userData.additionalInfo || 'Not provided'}
 
 **Question to Answer:**

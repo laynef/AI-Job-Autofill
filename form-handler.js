@@ -9,7 +9,8 @@ const FormHandler = {
         'firstName', 'lastName', 'email', 'phone', 'pronouns',
         'address', 'city', 'state', 'zipCode', 'country',
         'linkedinUrl', 'portfolioUrl', 'additionalInfo', 'coverLetter',
-        'gender', 'hispanic', 'race', 'veteran', 'disability'
+        'gender', 'hispanic', 'race', 'veteran', 'disability',
+        'citizenship', 'sponsorship'
     ],
 
     /**
