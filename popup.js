@@ -1224,14 +1224,33 @@ async function autofillPage() {
         if (typeof text !== 'string' || !text.trim()) return false;
 
         try {
-            // Focus the element first
-            element.focus();
-            await new Promise(resolve => setTimeout(resolve, 50));
-
             const isContentEditable = element.isContentEditable;
             const isReactElement = element._reactInternalFiber || element._reactInternalInstance || Object.keys(element).some(key => key.startsWith('__react'));
 
-            // Clear existing content
+            // Check if field already has the correct value - don't touch it if so
+            const currentValue = isContentEditable ? (element.textContent || '').trim() : (element.value || '').trim();
+            const newValue = text.trim();
+
+            if (currentValue === newValue) {
+                console.log('⏭️ Field already has correct value, skipping:', newValue.substring(0, 50));
+                return true; // Already correct, no need to modify
+            }
+
+            // Skip if field already has a substantial value (user may have entered it)
+            if (currentValue.length > 0 &&
+                currentValue !== 'Select' &&
+                currentValue !== 'Choose' &&
+                currentValue !== 'Please select' &&
+                currentValue !== '-- Select --') {
+                console.log('⏭️ Field already has value, not overwriting:', currentValue.substring(0, 50));
+                return true; // Don't overwrite existing meaningful values
+            }
+
+            // Focus the element only if we need to modify it
+            element.focus();
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // Clear existing content only if it's empty or placeholder
             if (isContentEditable) {
                 element.textContent = '';
             } else {
@@ -2856,11 +2875,15 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                 // Authorization to work
                 else if (combinedText.includes('authorized') || combinedText.includes('authorization') ||
                          combinedText.includes('eligible to work') || combinedText.includes('work permit')) {
-                    valueToType = "Yes";
+                    // Use user's saved citizenship preference, default to "Yes" if not set
+                    valueToType = userData.citizenship || "Yes";
+                    console.log('🏷️ Using saved work authorization:', valueToType);
                 }
                 // Sponsorship
                 else if (combinedText.includes('sponsor') || combinedText.includes('visa')) {
-                    valueToType = "No";
+                    // Use user's saved sponsorship preference, default to "No" if not set
+                    valueToType = userData.sponsorship || "No";
+                    console.log('🏷️ Using saved sponsorship status:', valueToType);
                 }
                 // Notice period / Current employment
                 else if (combinedText.includes('notice period') || combinedText.includes('notice required')) {
