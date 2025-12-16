@@ -37,9 +37,133 @@ try {
             });
         }
 
+        // Parse Resume button - extract info from resume and autofill form
+        const parseResumeBtn = document.getElementById('parseResume');
+        const parseStatusEl = document.getElementById('parseStatus');
+
+        if (parseResumeBtn) {
+            parseResumeBtn.addEventListener('click', async function() {
+                try {
+                    parseStatusEl.textContent = 'Parsing resume...';
+                    parseStatusEl.style.color = '#8b5cf6';
+
+                    // Get the resume from storage or from the file input
+                    let resumeContent = null;
+                    const newFile = resumeFileInput?.files[0];
+
+                    if (newFile) {
+                        // Parse the newly selected file
+                        resumeContent = await readFileAsText(newFile);
+                    } else {
+                        // Try to get from storage
+                        const stored = await new Promise(resolve => {
+                            chrome.storage.local.get(['resume', 'resumeFileName'], resolve);
+                        });
+
+                        if (stored.resume) {
+                            // Decode base64 if it's a data URL
+                            if (stored.resume.startsWith('data:')) {
+                                const base64 = stored.resume.split(',')[1];
+                                if (stored.resumeFileName?.endsWith('.txt')) {
+                                    resumeContent = atob(base64);
+                                } else {
+                                    parseStatusEl.textContent = 'Note: PDF/DOCX parsing is limited. For best results, upload a .txt version of your resume.';
+                                    parseStatusEl.style.color = '#f59e0b';
+                                    // Try to extract any readable text from the base64
+                                    resumeContent = extractTextFromBase64(base64);
+                                }
+                            }
+                        }
+                    }
+
+                    if (!resumeContent) {
+                        parseStatusEl.textContent = 'Please upload a resume file first.';
+                        parseStatusEl.style.color = '#ef4444';
+                        return;
+                    }
+
+                    // Parse the resume content
+                    const extracted = parseResumeContent(resumeContent);
+
+                    // Populate the form fields
+                    let fieldsPopulated = 0;
+
+                    if (extracted.firstName) {
+                        const el = document.getElementById('firstName');
+                        if (el && !el.value) { el.value = extracted.firstName; fieldsPopulated++; }
+                    }
+                    if (extracted.lastName) {
+                        const el = document.getElementById('lastName');
+                        if (el && !el.value) { el.value = extracted.lastName; fieldsPopulated++; }
+                    }
+                    if (extracted.email) {
+                        const el = document.getElementById('email');
+                        if (el && !el.value) { el.value = extracted.email; fieldsPopulated++; }
+                    }
+                    if (extracted.phone) {
+                        const el = document.getElementById('phone');
+                        if (el && !el.value) { el.value = extracted.phone; fieldsPopulated++; }
+                    }
+                    if (extracted.address) {
+                        const el = document.getElementById('address');
+                        if (el && !el.value) { el.value = extracted.address; fieldsPopulated++; }
+                    }
+                    if (extracted.city) {
+                        const el = document.getElementById('city');
+                        if (el && !el.value) { el.value = extracted.city; fieldsPopulated++; }
+                    }
+                    if (extracted.state) {
+                        const el = document.getElementById('state');
+                        if (el && !el.value) { el.value = extracted.state; fieldsPopulated++; }
+                    }
+                    if (extracted.zipCode) {
+                        const el = document.getElementById('zipCode');
+                        if (el && !el.value) { el.value = extracted.zipCode; fieldsPopulated++; }
+                    }
+                    if (extracted.linkedinUrl) {
+                        const el = document.getElementById('linkedinUrl');
+                        if (el && !el.value) { el.value = extracted.linkedinUrl; fieldsPopulated++; }
+                    }
+                    if (extracted.portfolioUrl) {
+                        const el = document.getElementById('portfolioUrl');
+                        if (el && !el.value) { el.value = extracted.portfolioUrl; fieldsPopulated++; }
+                    }
+                    if (extracted.skills) {
+                        const el = document.getElementById('additionalInfo');
+                        if (el && !el.value) { el.value = extracted.skills; fieldsPopulated++; }
+                    }
+
+                    if (fieldsPopulated > 0) {
+                        parseStatusEl.textContent = `Extracted ${fieldsPopulated} field(s) from resume. Click Save to keep changes.`;
+                        parseStatusEl.style.color = '#10b981';
+                    } else {
+                        parseStatusEl.textContent = 'Could not extract new information. Fields may already be filled.';
+                        parseStatusEl.style.color = '#f59e0b';
+                    }
+
+                } catch (error) {
+                    console.error('Error parsing resume:', error);
+                    parseStatusEl.textContent = 'Error parsing resume: ' + error.message;
+                    parseStatusEl.style.color = '#ef4444';
+                }
+            });
+        }
+
         // Save data when the save button is clicked
-        document.getElementById('save').addEventListener('click', function() {
+        const saveBtn = document.getElementById('save');
+        if (!saveBtn) {
+            console.error('Save button not found!');
+            return;
+        }
+
+        saveBtn.addEventListener('click', function() {
             try {
+                // Show saving status immediately
+                if (statusEl) {
+                    statusEl.textContent = 'Saving...';
+                    statusEl.style.color = '#6b7280';
+                }
+
                 let dataToSave = {};
                 textFields.forEach(field => {
                     const el = document.getElementById(field);
@@ -51,10 +175,16 @@ try {
                 const saveDataToStorage = (data) => {
                     chrome.storage.local.set(data, function() {
                         if (chrome.runtime.lastError) {
-                            statusEl.textContent = `Error: ${chrome.runtime.lastError.message}`;
+                            if (statusEl) {
+                                statusEl.textContent = `Error: ${chrome.runtime.lastError.message}`;
+                                statusEl.style.color = '#ef4444';
+                            }
                             console.error("Save error:", chrome.runtime.lastError);
                         } else {
-                            statusEl.textContent = 'Information saved!';
+                            if (statusEl) {
+                                statusEl.textContent = 'Information saved!';
+                                statusEl.style.color = '#16a34a';
+                            }
                             if (data.resumeFileName && resumeFileNameEl) {
                                 resumeFileNameEl.textContent = `Saved file: ${data.resumeFileName}`;
                                 resumeFileNameEl.style.color = '';
@@ -85,7 +215,10 @@ try {
                     });
                 }
             } catch (error) {
-                statusEl.textContent = 'A critical error occurred during save.';
+                if (statusEl) {
+                    statusEl.textContent = 'A critical error occurred during save.';
+                    statusEl.style.color = '#ef4444';
+                }
                 console.error("Critical error in save handler:", error);
             }
         });
@@ -331,15 +464,18 @@ try {
         });
 
         // Increment usage count when saving or autofilling
-        const originalSaveHandler = document.getElementById('save').onclick;
-        document.getElementById('save').addEventListener('click', function() {
-            incrementUsageCount();
-        }, { once: false });
+        if (saveBtn) {
+            saveBtn.addEventListener('click', function() {
+                incrementUsageCount();
+            }, { once: false });
+        }
 
-        const originalAutofillHandler = document.getElementById('autofill').onclick;
-        document.getElementById('autofill').addEventListener('click', function() {
-            incrementUsageCount();
-        }, { once: false });
+        const autofillBtn = document.getElementById('autofill');
+        if (autofillBtn) {
+            autofillBtn.addEventListener('click', function() {
+                incrementUsageCount();
+            }, { once: false });
+        }
 
         // Check if we should show rating modal on load
         chrome.storage.local.get(['usageCount', 'hasRated', 'ratingDismissed'], function(result) {
@@ -1296,9 +1432,9 @@ async function autofillPage() {
             await new Promise(resolve => setTimeout(resolve, 100));
 
             // Verify the value was set
-            const currentValue = isContentEditable ? element.textContent : element.value;
-            if (currentValue !== text) {
-                console.warn(`Hired Always: Value verification failed. Expected: "${text}", Got: "${currentValue}"`);
+            const verifyValue = isContentEditable ? element.textContent : element.value;
+            if (verifyValue !== text) {
+                console.warn(`Hired Always: Value verification failed. Expected: "${text}", Got: "${verifyValue}"`);
                 // Try one more time with direct assignment
                 if (isContentEditable) {
                     element.textContent = text;
@@ -3242,5 +3378,237 @@ ${userData.additionalInfo || 'Experienced professional seeking new opportunities
     console.log("Hired Always: Process finished.");
 }
 
+// Helper function to read file as text
+function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = (e) => reject(e);
+
+        if (file.name.endsWith('.txt')) {
+            reader.readAsText(file);
+        } else if (file.name.endsWith('.pdf')) {
+            // For PDF, we read as ArrayBuffer and try to extract text
+            reader.readAsArrayBuffer(file);
+            reader.onload = (e) => {
+                const text = extractTextFromPDF(e.target.result);
+                resolve(text);
+            };
+        } else if (file.name.endsWith('.docx')) {
+            // For DOCX, read as ArrayBuffer and extract text
+            reader.readAsArrayBuffer(file);
+            reader.onload = (e) => {
+                const text = extractTextFromDOCX(e.target.result);
+                resolve(text);
+            };
+        } else {
+            reader.readAsText(file);
+        }
+    });
+}
+
+// Extract text from PDF (basic extraction)
+function extractTextFromPDF(arrayBuffer) {
+    try {
+        const uint8Array = new Uint8Array(arrayBuffer);
+        let text = '';
+
+        // Convert to string and look for text between BT and ET markers
+        const pdfString = String.fromCharCode.apply(null, uint8Array);
+
+        // Look for text streams
+        const textMatches = pdfString.match(/\(([^)]+)\)/g);
+        if (textMatches) {
+            text = textMatches.map(m => m.slice(1, -1)).join(' ');
+        }
+
+        // Also try to find plain text sections
+        const plainText = pdfString.match(/[\x20-\x7E]{4,}/g);
+        if (plainText) {
+            text += ' ' + plainText.join(' ');
+        }
+
+        return cleanExtractedText(text);
+    } catch (e) {
+        console.warn('PDF extraction error:', e);
+        return '';
+    }
+}
+
+// Extract text from DOCX (basic extraction)
+function extractTextFromDOCX(arrayBuffer) {
+    try {
+        const uint8Array = new Uint8Array(arrayBuffer);
+        const text = String.fromCharCode.apply(null, uint8Array);
+
+        // DOCX is a ZIP file containing XML, try to extract text from document.xml
+        // Look for text between <w:t> tags
+        const matches = text.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
+        if (matches) {
+            return cleanExtractedText(matches.map(m => m.replace(/<[^>]+>/g, '')).join(' '));
+        }
+
+        // Fallback: extract readable ASCII
+        const plainText = text.match(/[\x20-\x7E]{4,}/g);
+        return cleanExtractedText(plainText ? plainText.join(' ') : '');
+    } catch (e) {
+        console.warn('DOCX extraction error:', e);
+        return '';
+    }
+}
+
+// Extract text from base64 encoded content
+function extractTextFromBase64(base64) {
+    try {
+        const binaryString = atob(base64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        // Try to extract readable text
+        let text = '';
+        const str = String.fromCharCode.apply(null, bytes);
+
+        // Extract text from PDF-like content
+        const textMatches = str.match(/\(([^)]+)\)/g);
+        if (textMatches) {
+            text += textMatches.map(m => m.slice(1, -1)).join(' ');
+        }
+
+        // Extract XML text content (for DOCX)
+        const xmlMatches = str.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
+        if (xmlMatches) {
+            text += ' ' + xmlMatches.map(m => m.replace(/<[^>]+>/g, '')).join(' ');
+        }
+
+        // Extract plain readable text
+        const plainText = str.match(/[\x20-\x7E]{4,}/g);
+        if (plainText) {
+            text += ' ' + plainText.join(' ');
+        }
+
+        return cleanExtractedText(text);
+    } catch (e) {
+        console.warn('Base64 extraction error:', e);
+        return '';
+    }
+}
+
+// Clean extracted text
+function cleanExtractedText(text) {
+    return text
+        .replace(/\s+/g, ' ')
+        .replace(/[^\x20-\x7E\n]/g, '')
+        .trim();
+}
+
+// Parse resume content and extract structured data
+function parseResumeContent(text) {
+    const result = {};
+
+    // Extract email
+    const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    if (emailMatch) {
+        result.email = emailMatch[0].toLowerCase();
+    }
+
+    // Extract phone number
+    const phonePatterns = [
+        /\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/,
+        /\+?1?[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/,
+        /\d{3}[-.\s]\d{3}[-.\s]\d{4}/
+    ];
+    for (const pattern of phonePatterns) {
+        const phoneMatch = text.match(pattern);
+        if (phoneMatch) {
+            result.phone = phoneMatch[0].replace(/[^\d+()-\s]/g, '').trim();
+            break;
+        }
+    }
+
+    // Extract LinkedIn URL
+    const linkedinMatch = text.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[a-zA-Z0-9_-]+\/?/i);
+    if (linkedinMatch) {
+        let url = linkedinMatch[0];
+        if (!url.startsWith('http')) {
+            url = 'https://' + url;
+        }
+        result.linkedinUrl = url;
+    }
+
+    // Extract portfolio/website URL
+    const urlPatterns = [
+        /(?:https?:\/\/)?(?:www\.)?github\.com\/[a-zA-Z0-9_-]+/i,
+        /(?:https?:\/\/)?[a-zA-Z0-9-]+\.(?:com|io|dev|me|co|org)(?:\/[a-zA-Z0-9_/-]*)?/i
+    ];
+    for (const pattern of urlPatterns) {
+        const urlMatch = text.match(pattern);
+        if (urlMatch && !urlMatch[0].includes('linkedin.com') && !urlMatch[0].includes('google.com')) {
+            let url = urlMatch[0];
+            if (!url.startsWith('http')) {
+                url = 'https://' + url;
+            }
+            result.portfolioUrl = url;
+            break;
+        }
+    }
+
+    // Extract name (usually at the beginning)
+    const lines = text.split(/[\n\r]+/).filter(l => l.trim());
+    if (lines.length > 0) {
+        // First non-empty line is often the name
+        const firstLine = lines[0].trim();
+        // Check if it looks like a name (2-4 words, no numbers, not too long)
+        const nameMatch = firstLine.match(/^([A-Z][a-zA-Z]+)\s+([A-Z][a-zA-Z]+)(?:\s+([A-Z][a-zA-Z]+))?$/);
+        if (nameMatch && firstLine.length < 50 && !/\d/.test(firstLine)) {
+            result.firstName = nameMatch[1];
+            result.lastName = nameMatch[nameMatch[3] ? 3 : 2];
+        } else {
+            // Try to find a name-like pattern anywhere in the first few lines
+            for (let i = 0; i < Math.min(5, lines.length); i++) {
+                const line = lines[i].trim();
+                const namePattern = line.match(/^([A-Z][a-z]+)\s+([A-Z][a-z]+)$/);
+                if (namePattern && line.length < 40) {
+                    result.firstName = namePattern[1];
+                    result.lastName = namePattern[2];
+                    break;
+                }
+            }
+        }
+    }
+
+    // Extract address components
+    // Look for city, state zip pattern
+    const addressMatch = text.match(/([A-Z][a-zA-Z\s]+),\s*([A-Z]{2})\s*(\d{5}(?:-\d{4})?)/);
+    if (addressMatch) {
+        result.city = addressMatch[1].trim();
+        result.state = addressMatch[2];
+        result.zipCode = addressMatch[3];
+    }
+
+    // Extract skills (look for common skill keywords or a skills section)
+    const skillKeywords = [
+        'JavaScript', 'Python', 'Java', 'C++', 'C#', 'Ruby', 'Go', 'Rust', 'TypeScript',
+        'React', 'Angular', 'Vue', 'Node.js', 'Django', 'Flask', 'Spring', 'Rails',
+        'AWS', 'Azure', 'GCP', 'Docker', 'Kubernetes', 'Git', 'SQL', 'MongoDB',
+        'HTML', 'CSS', 'REST', 'GraphQL', 'Agile', 'Scrum', 'Machine Learning', 'AI',
+        'Data Science', 'Project Management', 'Leadership', 'Communication'
+    ];
+
+    const foundSkills = [];
+    const lowerText = text.toLowerCase();
+    for (const skill of skillKeywords) {
+        if (lowerText.includes(skill.toLowerCase())) {
+            foundSkills.push(skill);
+        }
+    }
+
+    if (foundSkills.length > 0) {
+        result.skills = foundSkills.slice(0, 15).join(', ');
+    }
+
+    return result;
+}
 
 
