@@ -1351,13 +1351,33 @@ async function autofillPage() {
                 }
 
                 if (matchingOption) {
+                    // Set by value
                     selectElement.value = matchingOption.value;
+
+                    // Also set by selectedIndex for frameworks that need it
+                    const optionIndex = options.indexOf(matchingOption);
+                    if (optionIndex >= 0) {
+                        selectElement.selectedIndex = optionIndex;
+                    }
+
+                    // Fire multiple events for maximum compatibility
                     selectElement.dispatchEvent(new Event('change', { bubbles: true }));
                     selectElement.dispatchEvent(new Event('input', { bubbles: true }));
-                    console.log(`   ✓ Selected: "${matchingOption.text}"`);
+                    selectElement.dispatchEvent(new Event('blur', { bubbles: true }));
+
+                    // For React/Angular - fire native events
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+                    if (nativeInputValueSetter) {
+                        nativeInputValueSetter.call(selectElement, matchingOption.value);
+                        selectElement.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+
+                    console.log(`   ✓ Selected: "${matchingOption.text}" (index: ${optionIndex})`);
                     return true;
                 } else {
                     console.warn(`   ✗ Could not find matching option for: "${optionText}"`);
+                    // Log available options for debugging
+                    console.log(`   Available options: ${options.map(o => o.text).join(', ')}`);
                     return false;
                 }
             }
@@ -1752,11 +1772,28 @@ async function autofillPage() {
         if (combinedText.match(/\b(citizen|citizenship|u\.?s\.? citizen)\b/i)) {
             classifications.push({ type: 'citizenship', confidence: 0.95, keywords: ['citizen'] });
         }
-        if (combinedText.match(/\b(authorized|authorization|eligible.*work|work.*permit)\b/i)) {
+        if (combinedText.match(/\b(authorized|authorization|eligible.*work|work.*permit|legally.*work|right.*work)\b/i)) {
             classifications.push({ type: 'workAuthorization', confidence: 0.9, keywords: ['authorized'] });
         }
-        if (combinedText.match(/\b(sponsor|sponsorship|visa)\b/i)) {
+        if (combinedText.match(/\b(sponsor|sponsorship|visa|require.*sponsorship|need.*sponsorship)\b/i)) {
             classifications.push({ type: 'sponsorship', confidence: 0.9, keywords: ['sponsor'] });
+        }
+
+        // Demographic / EEOC Questions
+        if (combinedText.match(/\b(gender|sex)\b/i) && !combinedText.includes('transgender')) {
+            classifications.push({ type: 'gender', confidence: 0.95, keywords: ['gender'] });
+        }
+        if (combinedText.match(/\b(race|ethnicity|ethnic)\b/i)) {
+            classifications.push({ type: 'race', confidence: 0.95, keywords: ['race', 'ethnicity'] });
+        }
+        if (combinedText.match(/\b(veteran|military|armed\s*forces|served)\b/i)) {
+            classifications.push({ type: 'veteran', confidence: 0.95, keywords: ['veteran'] });
+        }
+        if (combinedText.match(/\b(disability|disabled|handicap|impairment)\b/i)) {
+            classifications.push({ type: 'disability', confidence: 0.95, keywords: ['disability'] });
+        }
+        if (combinedText.match(/\b(hispanic|latino|latina|latinx)\b/i)) {
+            classifications.push({ type: 'hispanic', confidence: 0.95, keywords: ['hispanic', 'latino'] });
         }
 
         // Motivation
@@ -2191,8 +2228,41 @@ Return ONLY a valid JSON array with this structure:
                 const inputRole = el.getAttribute('role');
                 const elType = el.tagName.toLowerCase();
 
+                // Helper function to check if dropdown already has a meaningful value
+                function isDropdownAlreadyAnswered(element) {
+                    const tagName = element.tagName.toLowerCase();
+                    let currentValue = '';
+
+                    if (tagName === 'select') {
+                        const selectedOption = element.options[element.selectedIndex];
+                        if (selectedOption && element.selectedIndex > 0) {
+                            currentValue = selectedOption.text.toLowerCase().trim();
+                        }
+                    } else {
+                        currentValue = (element.value || element.innerText || element.textContent || '').toLowerCase().trim();
+                    }
+
+                    // Check if it's a placeholder or empty
+                    const isPlaceholder = !currentValue ||
+                        currentValue.includes('select') ||
+                        currentValue.includes('choose') ||
+                        currentValue.includes('please') ||
+                        currentValue === '--' ||
+                        currentValue === '-' ||
+                        currentValue === '';
+
+                    if (!isPlaceholder && currentValue.length > 0) {
+                        console.log(`⏭️ Dropdown already answered with: "${currentValue}", skipping`);
+                        return true;
+                    }
+                    return false;
+                }
+
                 // Handle race/ethnicity dropdown
                 if (combinedText.includes('race') || combinedText.includes('ethnicity')) {
+                    if (isDropdownAlreadyAnswered(el)) {
+                        continue;
+                    }
                     const raceValue = userData.race || 'Decline To Self Identify';
                     console.log('🏷️ Using saved race/ethnicity:', raceValue);
 
@@ -2208,6 +2278,9 @@ Return ONLY a valid JSON array with this structure:
 
                 // Handle gender dropdown
                 if (combinedText.includes('gender') && !combinedText.includes('transgender')) {
+                    if (isDropdownAlreadyAnswered(el)) {
+                        continue;
+                    }
                     const genderValue = userData.gender || 'Decline to Self-Identify';
                     console.log('🏷️ Using saved gender:', genderValue);
 
@@ -2223,6 +2296,9 @@ Return ONLY a valid JSON array with this structure:
 
                 // Handle veteran status dropdown
                 if (combinedText.includes('veteran')) {
+                    if (isDropdownAlreadyAnswered(el)) {
+                        continue;
+                    }
                     const veteranValue = userData.veteran || 'I don\'t wish to answer';
                     console.log('🏷️ Using saved veteran status:', veteranValue);
 
@@ -2238,6 +2314,9 @@ Return ONLY a valid JSON array with this structure:
 
                 // Handle disability status dropdown
                 if (combinedText.includes('disability')) {
+                    if (isDropdownAlreadyAnswered(el)) {
+                        continue;
+                    }
                     const disabilityValue = userData.disability || 'I don\'t wish to answer';
                     console.log('🏷️ Using saved disability status:', disabilityValue);
 
@@ -2253,6 +2332,9 @@ Return ONLY a valid JSON array with this structure:
 
                 // Handle hispanic/latino dropdown
                 if (combinedText.includes('hispanic') || combinedText.includes('latino')) {
+                    if (isDropdownAlreadyAnswered(el)) {
+                        continue;
+                    }
                     const hispanicValue = userData.hispanic || 'I don\'t wish to answer';
                     console.log('🏷️ Using saved hispanic/latino status:', hispanicValue);
 
@@ -2262,6 +2344,44 @@ Return ONLY a valid JSON array with this structure:
                         await selectDropdownOption(el, hispanicValue);
                     } else if (elType === 'button') {
                         await selectReactSelectOption(el, hispanicValue);
+                    }
+                    continue;
+                }
+
+                // Handle citizenship/work authorization dropdown
+                if (combinedText.includes('authorized') || combinedText.includes('authorization') ||
+                    combinedText.includes('eligible') || combinedText.includes('legally') ||
+                    combinedText.includes('citizen')) {
+                    if (isDropdownAlreadyAnswered(el)) {
+                        continue;
+                    }
+                    const authValue = userData.citizenship || 'Yes';
+                    console.log('🏷️ Using saved work authorization:', authValue);
+
+                    if (inputRole === 'combobox') {
+                        await selectReactSelectOption(el, authValue);
+                    } else if (elType === 'select') {
+                        await selectDropdownOption(el, authValue);
+                    } else if (elType === 'button') {
+                        await selectReactSelectOption(el, authValue);
+                    }
+                    continue;
+                }
+
+                // Handle sponsorship dropdown
+                if (combinedText.includes('sponsor') || combinedText.includes('visa')) {
+                    if (isDropdownAlreadyAnswered(el)) {
+                        continue;
+                    }
+                    const sponsorValue = userData.sponsorship || 'No';
+                    console.log('🏷️ Using saved sponsorship status:', sponsorValue);
+
+                    if (inputRole === 'combobox') {
+                        await selectReactSelectOption(el, sponsorValue);
+                    } else if (elType === 'select') {
+                        await selectDropdownOption(el, sponsorValue);
+                    } else if (elType === 'button') {
+                        await selectReactSelectOption(el, sponsorValue);
                     }
                     continue;
                 }
@@ -2856,6 +2976,26 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                     case 'sponsorship':
                         valueToType = userData.sponsorship || "No, I do not require sponsorship";
                         break;
+                    case 'gender':
+                        valueToType = userData.gender || "Decline to Self-Identify";
+                        console.log('🏷️ Using saved gender preference:', valueToType);
+                        break;
+                    case 'race':
+                        valueToType = userData.race || "Decline To Self Identify";
+                        console.log('🏷️ Using saved race/ethnicity preference:', valueToType);
+                        break;
+                    case 'veteran':
+                        valueToType = userData.veteran || "I don't wish to answer";
+                        console.log('🏷️ Using saved veteran status preference:', valueToType);
+                        break;
+                    case 'disability':
+                        valueToType = userData.disability || "I don't wish to answer";
+                        console.log('🏷️ Using saved disability status preference:', valueToType);
+                        break;
+                    case 'hispanic':
+                        valueToType = userData.hispanic || "I don't wish to answer";
+                        console.log('🏷️ Using saved hispanic/latino preference:', valueToType);
+                        break;
                     case 'unknownText':
                         // Use AI for unknown text fields if question is present
                         if (question && question.length > 3) {
@@ -2870,6 +3010,11 @@ Return ONLY the exact text of the selected option. No explanation, no additional
 - Professional Links: ${userData.linkedinUrl || userData.portfolioUrl || 'Not provided'}
 - Work Authorization: ${userData.citizenship || 'Not provided'}
 - Visa Sponsorship: ${userData.sponsorship || 'Not provided'}
+- Gender: ${userData.gender || 'Not provided'}
+- Race/Ethnicity: ${userData.race || 'Not provided'}
+- Veteran Status: ${userData.veteran || 'Not provided'}
+- Disability Status: ${userData.disability || 'Not provided'}
+- Hispanic/Latino: ${userData.hispanic || 'Not provided'}
 - Additional Info: ${userData.additionalInfo || 'Not provided'}
 - Job Applied For: ${jobTitle || 'Not specified'}
 
@@ -2878,7 +3023,8 @@ Return ONLY the exact text of the selected option. No explanation, no additional
 
 **REQUIREMENTS:**
 - Provide a brief, professional response (1-3 sentences)
-- Base answer on the candidate's actual background when possible
+- Base answer on the candidate's actual background and saved preferences
+- Use the candidate's saved demographic preferences when answering EEOC questions
 - If the question can't be answered from the profile, provide a reasonable professional default
 - Avoid saying "not provided" or "not applicable" - be constructive
 - Keep response under 100 words
@@ -3385,6 +3531,21 @@ ${userData.additionalInfo || 'Experienced professional seeking new opportunities
                     case 'sponsorship':
                         retryValue = userData.sponsorship;
                         break;
+                    case 'gender':
+                        retryValue = userData.gender;
+                        break;
+                    case 'race':
+                        retryValue = userData.race;
+                        break;
+                    case 'veteran':
+                        retryValue = userData.veteran;
+                        break;
+                    case 'disability':
+                        retryValue = userData.disability;
+                        break;
+                    case 'hispanic':
+                        retryValue = userData.hispanic;
+                        break;
                     default:
                         // Use AI for unknown fields during retry
                         if (question && question.length > 3) {
@@ -3398,6 +3559,11 @@ ${userData.additionalInfo || 'Experienced professional seeking new opportunities
 - Location: ${userData.city || ''} ${userData.state || ''}
 - Work Authorization: ${userData.citizenship || 'Not provided'}
 - Visa Sponsorship: ${userData.sponsorship || 'Not provided'}
+- Gender: ${userData.gender || 'Not provided'}
+- Race/Ethnicity: ${userData.race || 'Not provided'}
+- Veteran Status: ${userData.veteran || 'Not provided'}
+- Disability Status: ${userData.disability || 'Not provided'}
+- Hispanic/Latino: ${userData.hispanic || 'Not provided'}
 - Additional Info: ${userData.additionalInfo || 'Not provided'}
 
 **Question to Answer:**
@@ -3406,6 +3572,7 @@ ${userData.additionalInfo || 'Experienced professional seeking new opportunities
 **Requirements:**
 - Keep answer concise (1-3 sentences max)
 - Be professional and truthful
+- Use the candidate's saved preferences when answering demographic questions
 - If uncertain, provide a reasonable professional response
 - Don't make up specific details not in the background
 
