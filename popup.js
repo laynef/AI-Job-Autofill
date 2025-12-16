@@ -1168,6 +1168,29 @@ async function autofillPage() {
             console.log(`🔍 Attempting to select dropdown option: "${optionText}"`);
             console.log(`   Element:`, inputElement);
 
+            // Check if already has correct value - skip if so
+            const currentValue = inputElement.value || inputElement.innerText || inputElement.textContent || '';
+            const currentValueLower = currentValue.toLowerCase().trim();
+            const targetValueLower = optionText.toLowerCase().trim();
+
+            if (currentValueLower === targetValueLower ||
+                currentValueLower.includes(targetValueLower) ||
+                targetValueLower.includes(currentValueLower)) {
+                console.log(`⏭️ Dropdown already has correct value: "${currentValue}", skipping`);
+                return true;
+            }
+
+            // Also check if a meaningful value is already selected (not placeholder)
+            if (currentValue.length > 0 &&
+                !currentValueLower.includes('select') &&
+                !currentValueLower.includes('choose') &&
+                !currentValueLower.includes('please') &&
+                currentValueLower !== '--' &&
+                currentValueLower !== '-') {
+                console.log(`⏭️ Dropdown already has a value: "${currentValue}", not overwriting`);
+                return true;
+            }
+
             // Click to open dropdown
             inputElement.focus();
             await simulateClick(inputElement);
@@ -1279,6 +1302,32 @@ async function autofillPage() {
             // For regular <select> elements
             if (selectElement.tagName.toLowerCase() === 'select') {
                 const options = Array.from(selectElement.options);
+
+                // Check if already has correct value - skip if so
+                const currentOption = selectElement.options[selectElement.selectedIndex];
+                if (currentOption) {
+                    const currentText = currentOption.text.toLowerCase().trim();
+                    const currentValue = currentOption.value.toLowerCase().trim();
+                    const targetLower = optionText.toLowerCase().trim();
+
+                    if (currentText === targetLower ||
+                        currentValue === targetLower ||
+                        currentText.includes(targetLower) ||
+                        targetLower.includes(currentText)) {
+                        console.log(`⏭️ Select already has correct value: "${currentOption.text}", skipping`);
+                        return true;
+                    }
+
+                    // Also skip if a meaningful value is already selected (not placeholder)
+                    if (selectElement.selectedIndex > 0 &&
+                        currentValue.length > 0 &&
+                        !currentText.includes('select') &&
+                        !currentText.includes('choose') &&
+                        !currentText.includes('please')) {
+                        console.log(`⏭️ Select already has a value: "${currentOption.text}", not overwriting`);
+                        return true;
+                    }
+                }
 
                 // Try exact match first
                 let matchingOption = options.find(opt => opt.text.trim() === optionText || opt.value === optionText);
@@ -1431,10 +1480,17 @@ async function autofillPage() {
             // Brief delay to let frameworks process
             await new Promise(resolve => setTimeout(resolve, 100));
 
-            // Verify the value was set
-            const verifyValue = isContentEditable ? element.textContent : element.value;
-            if (verifyValue !== text) {
-                console.warn(`Hired Always: Value verification failed. Expected: "${text}", Got: "${verifyValue}"`);
+            // Verify the value was set - but only retry if completely empty
+            const verifyValue = (isContentEditable ? element.textContent : element.value) || '';
+            const verifyTrimmed = verifyValue.trim();
+            const textTrimmed = text.trim();
+
+            // Only retry if the field is empty or has a placeholder-like value
+            // Don't retry if there's any meaningful content (to avoid messing up correct answers)
+            if (verifyTrimmed.length === 0 ||
+                verifyTrimmed.toLowerCase() === 'select' ||
+                verifyTrimmed.toLowerCase() === 'choose') {
+                console.warn(`Hired Always: Field empty after fill, retrying. Expected: "${textTrimmed.substring(0, 30)}..."`);
                 // Try one more time with direct assignment
                 if (isContentEditable) {
                     element.textContent = text;
@@ -1443,6 +1499,9 @@ async function autofillPage() {
                 }
                 element.dispatchEvent(new Event('input', { bubbles: true }));
                 element.dispatchEvent(new Event('change', { bubbles: true }));
+            } else if (verifyTrimmed !== textTrimmed) {
+                // Field has some value but not exact match - log but don't overwrite
+                console.log(`Hired Always: Field has value "${verifyTrimmed.substring(0, 30)}..." (expected "${textTrimmed.substring(0, 30)}..."), keeping existing`);
             }
 
             element.blur();
@@ -3180,8 +3239,9 @@ ${userData.additionalInfo || 'Experienced professional seeking new opportunities
     console.log("Hired Always: Verifying form completion and retrying empty fields...");
 
     // Verify filled fields and retry empty ones
+    // Reduced to 1 retry to avoid messing up already correct answers
     let retryCount = 0;
-    const maxRetries = 2;
+    const maxRetries = 1;
 
     while (retryCount < maxRetries) {
         const emptyFields = [];
