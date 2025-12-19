@@ -19,6 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY main.py .
 COPY api.py .
 COPY db.py .
+COPY adcash_config.py .
 
 # Copy templates and static files
 COPY templates/ templates/
