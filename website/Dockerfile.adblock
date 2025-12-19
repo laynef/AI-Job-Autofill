@@ -1,0 +1,90 @@
+# Use Python 3.11 slim image
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies including cron and curl for anti-adblock functionality
+RUN apt-get update && apt-get install -y \
+    gcc \
+    curl \
+    cron \
+    supervisor \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY main.py .
+COPY api.py .
+COPY db.py .
+
+# Copy templates and static files
+COPY templates/ templates/
+COPY static/ static/
+
+# Create required directories
+RUN mkdir -p /data && chmod 777 /data
+RUN mkdir -p /app/static/js
+
+# Create data directory for database
+RUN mkdir -p /data && chmod 777 /data
+
+# Create anti-adblock directory and download installer
+RUN mkdir -p /adblock-setup
+WORKDIR /adblock-setup
+
+# Download the Adcash anti-adblock installer script
+RUN curl -o anti-adblock.sh https://raw.githubusercontent.com/adcash/customer-scripts/master/linux/anti-adblock.sh && \
+    chmod +x anti-adblock.sh
+
+# Generate random filename for anti-adblock library
+RUN RANDOM_NAME=$(openssl rand -hex 8) && \
+    echo "Generated random name: lib-$RANDOM_NAME.js" && \
+    ./anti-adblock.sh --install /app/static/js/lib-$RANDOM_NAME.js 5 && \
+    echo "/app/static/js/lib-$RANDOM_NAME.js" > /app/adblock-lib-path.txt
+
+# Create supervisor configuration for managing processes
+RUN echo '[supervisord]\n\
+nodaemon=true\n\
+user=root\n\
+\n\
+[program:cron]\n\
+command=/usr/sbin/cron -f\n\
+autostart=true\n\
+autorestart=true\n\
+user=root\n\
+\n\
+[program:webapp]\n\
+command=uvicorn main:app --host 0.0.0.0 --port %(ENV_PORT)s\n\
+directory=/app\n\
+autostart=true\n\
+autorestart=true\n\
+user=appuser\n\
+environment=PYTHONUNBUFFERED=1' > /etc/supervisor/conf.d/supervisord.conf
+
+# Create a non-root user
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app /data
+
+# Set up cron job for anti-adblock library updates (every 5 minutes)
+RUN echo '*/5 * * * * root cd /adblock-setup && ./anti-adblock.sh --update' >> /etc/crontab
+
+WORKDIR /app
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8080
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"
+
+# Run supervisor to manage both cron and webapp
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

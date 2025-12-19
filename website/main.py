@@ -5,12 +5,26 @@ from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 import os
+import glob
+from adcash_config import get_zone_id, get_primary_zone_id, ANTI_ADBLOCK_CONFIG
 
 app = FastAPI(
     title="Hired Always",
     description="AI-powered job application assistant",
     version="1.0.0"
 )
+
+def get_adblock_lib_path():
+    """Get the dynamically generated anti-adblock library path"""
+    try:
+        # Look for the adblock library file in static/js/
+        adblock_files = glob.glob("static/js/lib-*.js")
+        if adblock_files:
+            # Return the path relative to static folder
+            return adblock_files[0].replace("static/", "/static/")
+        return None
+    except:
+        return None
 
 # Security Headers Middleware
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -20,12 +34,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Content Security Policy - Comprehensive policy for web security
         csp_directives = [
             "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' https://www.paypal.com https://www.paypalobjects.com https://pagead2.googlesyndication.com https://www.googletagmanager.com",
+            "script-src 'self' 'unsafe-inline' https://www.paypal.com https://www.paypalobjects.com https://pagead2.googlesyndication.com https://www.googletagmanager.com https://cdn.adcash.com https://*.adcash.com",
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: https:",
             "font-src 'self' data:",
-            "connect-src 'self' https://www.paypal.com https://www.paypalobjects.com https://generativelanguage.googleapis.com https://pagead2.googlesyndication.com https://www.google-analytics.com",
-            "frame-src https://www.paypal.com",
+            "connect-src 'self' https://www.paypal.com https://www.paypalobjects.com https://generativelanguage.googleapis.com https://pagead2.googlesyndication.com https://www.google-analytics.com https://cdn.adcash.com https://*.adcash.com",
+            "frame-src https://www.paypal.com https://cdn.adcash.com https://*.adcash.com",
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self' https://www.paypal.com",
@@ -97,12 +111,34 @@ templates = Jinja2Templates(directory="templates")
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """Home page - Main landing page"""
-    return templates.TemplateResponse("index.html", {"request": request})
+    adblock_lib_path = get_adblock_lib_path()
+    # Get zone ID based on the host domain
+    host = request.headers.get("host", "hiredalways.com")
+    domain = host.split(':')[0]  # Remove port if present
+    zone_id = get_zone_id(domain) or get_primary_zone_id()
+
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "adblock_lib_path": adblock_lib_path,
+        "adcash_zone_id": zone_id,
+        "adblock_enabled": ANTI_ADBLOCK_CONFIG.get('enabled', True)
+    })
 
 @app.get("/index.html", response_class=HTMLResponse)
 async def home_alt(request: Request):
     """Home page - Alternative route with .html extension"""
-    return templates.TemplateResponse("index.html", {"request": request})
+    adblock_lib_path = get_adblock_lib_path()
+    # Get zone ID based on the host domain
+    host = request.headers.get("host", "hiredalways.com")
+    domain = host.split(':')[0]  # Remove port if present
+    zone_id = get_zone_id(domain) or get_primary_zone_id()
+
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "adblock_lib_path": adblock_lib_path,
+        "adcash_zone_id": zone_id,
+        "adblock_enabled": ANTI_ADBLOCK_CONFIG.get('enabled', True)
+    })
 
 @app.get("/purchase.html", response_class=HTMLResponse)
 async def purchase(request: Request):

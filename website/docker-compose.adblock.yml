@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  website-adblock:
+    build:
+      context: .
+      dockerfile: Dockerfile.adblock
+    container_name: hired-always-website-adblock
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    volumes:
+      # Mount for persistent data
+      - website-data:/data
+      # Optional: Mount for development (uncomment for hot reload)
+      # - ./main.py:/app/main.py
+      # - ./templates:/app/templates
+      # - ./static:/app/static
+      # - ./adcash-config.py:/app/adcash-config.py
+    networks:
+      - web
+    labels:
+      - "com.example.description=Hired Always Website with Anti-Adblock"
+      - "com.example.version=1.0.0"
+      - "com.example.features=anti-adblock,adcash"
+    # Add health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: nginx reverse proxy with caching for better performance
+  nginx:
+    image: nginx:alpine
+    container_name: hired-always-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # Uncomment if you have SSL certificates
+      # - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - website-adblock
+    restart: unless-stopped
+    networks:
+      - web
+    labels:
+      - "com.example.description=Nginx reverse proxy for Hired Always"
+
+volumes:
+  website-data:
+    driver: local
+
+networks:
+  web:
+    driver: bridge
