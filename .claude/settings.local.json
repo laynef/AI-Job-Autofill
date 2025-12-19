@@ -43,7 +43,8 @@
       "Bash(done)",
       "Bash(python:*)",
       "Bash(git rm:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(file:*)"
     ],
     "deny": [],
     "ask": []
