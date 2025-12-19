@@ -46,7 +46,8 @@
       "Bash(test:*)",
       "Bash(file:*)",
       "Bash(tree:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(docker-compose:*)"
     ],
     "deny": [],
     "ask": []
