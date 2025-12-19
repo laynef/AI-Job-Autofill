@@ -17,13 +17,31 @@ app = FastAPI(
 def get_adblock_lib_path():
     """Get the dynamically generated anti-adblock library path"""
     try:
-        # Look for the adblock library file in static/js/
-        adblock_files = glob.glob("static/js/lib-*.js")
-        if adblock_files:
-            # Return the path relative to static folder
-            return adblock_files[0].replace("static/", "/static/")
+        # First, try to read from the path file created by Docker
+        if os.path.exists("adblock-lib-path.txt"):
+            with open("adblock-lib-path.txt", "r") as f:
+                lib_path = f.read().strip()
+                if lib_path and os.path.exists(lib_path):
+                    # Convert absolute path to relative URL path
+                    return lib_path.replace("/app/static", "/static")
+
+        # Fallback: Look for adblock library files with various patterns
+        patterns = [
+            "static/js/lib-*.js",
+            "static/js/*lib*.js",
+            "static/js/[a-z][0-9][a-z][0-9][a-z][0-9]*.js",  # Pattern like x7n4vw...
+            "static/js/[tmzwk]*[0-9a-f]*.js"  # Pattern matching the prefix + hex
+        ]
+
+        for pattern in patterns:
+            adblock_files = glob.glob(pattern)
+            if adblock_files:
+                # Return the path relative to static folder
+                return adblock_files[0].replace("static", "/static")
+
         return None
-    except:
+    except Exception as e:
+        print(f"Error in get_adblock_lib_path: {e}")
         return None
 
 # Security Headers Middleware
@@ -205,30 +223,37 @@ async def browserconfig():
         content = f.read()
     return Response(content=content, media_type="application/xml")
 
-@app.get("/static/js/lib.js")
+@app.get("/js/lib.js")
 async def adblock_library():
     """Serve the anti-adblock library at a consistent endpoint"""
     try:
-        # Find the actual anti-adblock library file
-        adblock_files = glob.glob("static/js/lib-*.js") + glob.glob("static/js/*lib*.js")
-        if adblock_files:
-            # Serve the first matching file
-            with open(adblock_files[0], "r") as f:
-                content = f.read()
-            return Response(content=content, media_type="text/javascript")
-        else:
-            # Fallback: try to read from the path file created by Docker
-            try:
-                with open("adblock-lib-path.txt", "r") as f:
-                    lib_path = f.read().strip()
-                    if lib_path and os.path.exists(lib_path):
-                        with open(lib_path, "r") as f:
-                            content = f.read()
-                        return Response(content=content, media_type="text/javascript")
-            except:
-                pass
-            # Final fallback: return empty script (won't break page)
-            return Response(content="// Anti-adblock library not found", media_type="text/javascript")
+        # First, try to read from the path file created by Docker
+        if os.path.exists("adblock-lib-path.txt"):
+            with open("adblock-lib-path.txt", "r") as f:
+                lib_path = f.read().strip()
+                if lib_path and os.path.exists(lib_path):
+                    with open(lib_path, "r") as f:
+                        content = f.read()
+                    return Response(content=content, media_type="text/javascript")
+
+        # Fallback: Look for adblock library files with various patterns
+        patterns = [
+            "static/js/lib-*.js",
+            "static/js/*lib*.js",
+            "static/js/[a-z][0-9][a-z][0-9][a-z][0-9]*.js",  # Pattern like x7n4vw...
+            "static/js/[tmzwk]*[0-9a-f]*.js"  # Pattern matching the prefix + hex
+        ]
+
+        for pattern in patterns:
+            adblock_files = glob.glob(pattern)
+            if adblock_files:
+                # Serve the first matching file
+                with open(adblock_files[0], "r") as f:
+                    content = f.read()
+                return Response(content=content, media_type="text/javascript")
+
+        # Final fallback: return empty script (won't break page)
+        return Response(content="// Anti-adblock library not found", media_type="text/javascript")
     except Exception as e:
         # Return empty script on error to prevent page breaking
         return Response(content=f"// Error loading anti-adblock library: {str(e)}", media_type="text/javascript")
