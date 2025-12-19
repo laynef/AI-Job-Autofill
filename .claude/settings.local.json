@@ -35,7 +35,8 @@
       "Bash(utils.js )",
       "Bash(ats-config.js )",
       "Bash(images/ )",
-      "Bash(icons/ )"
+      "Bash(icons/ )",
+      "Bash(git pull:*)"
     ],
     "deny": [],
     "ask": []
