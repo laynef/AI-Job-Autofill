@@ -50,7 +50,9 @@
       "Bash(docker-compose:*)",
       "Bash(ls:*)",
       "Bash(wc:*)",
-      "Bash(docker:*)"
+      "Bash(docker:*)",
+      "Bash(chmod:*)",
+      "Bash(./anti-adblock.sh:*)"
     ],
     "deny": [],
     "ask": []
