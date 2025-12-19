@@ -44,7 +44,8 @@
       "Bash(python:*)",
       "Bash(git rm:*)",
       "Bash(test:*)",
-      "Bash(file:*)"
+      "Bash(file:*)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []
