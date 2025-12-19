@@ -317,9 +317,11 @@
 
         <h2 class="section-header">Resume & Information</h2>
         <div>
-            <label for="resumeFile">Upload Resume/CV (.pdf, .docx)</label>
-            <input type="file" id="resumeFile" accept=".pdf,.docx">
+            <label for="resumeFile">Upload Resume/CV (.pdf, .docx, .txt)</label>
+            <input type="file" id="resumeFile" accept=".pdf,.docx,.txt">
             <p id="resumeFileName"></p>
+            <button type="button" id="parseResume" style="margin-top: 0.5rem; padding: 0.375rem 0.75rem; font-size: 0.75rem; background-color: #8b5cf6; color: white; border: none; border-radius: 0.375rem; cursor: pointer;">Auto-fill from Resume</button>
+            <p id="parseStatus" style="font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem;"></p>
         </div>
         <div>
             <label for="additionalInfo">Key Skills / Additional Info</label>
