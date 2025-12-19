@@ -40,7 +40,9 @@
       "Bash(powershell.exe:*)",
       "Bash(for file in *.js)",
       "Bash(do echo \"Checking $file...\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(python:*)",
+      "Bash(git rm:*)"
     ],
     "deny": [],
     "ask": []
