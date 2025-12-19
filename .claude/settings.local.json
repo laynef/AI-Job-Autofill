@@ -36,14 +36,11 @@
       "Bash(ats-config.js )",
       "Bash(images/ )",
       "Bash(icons/ )",
-<<<<<<< HEAD
-      "Bash(git pull:*)"
-=======
+      "Bash(git pull:*)",
       "Bash(powershell.exe:*)",
       "Bash(for file in *.js)",
       "Bash(do echo \"Checking $file...\")",
       "Bash(done)"
->>>>>>> c65fe3c79d39523539d9bf98bf3534468da7e19c
     ],
     "deny": [],
     "ask": []
