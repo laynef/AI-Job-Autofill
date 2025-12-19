@@ -60,6 +60,11 @@
     <!-- Stylesheet -->
     <link rel="stylesheet" href="/static/css/styles.css">
 
+    <!-- Anti-Adblock Library -->
+    {% if adblock_lib_path and adblock_enabled and adcash_zone_id %}
+    <script type="text/javascript" src="{{ adblock_lib_path }}"></script>
+    {% endif %}
+
     <script src="https://www.paypal.com/sdk/js?client-id=Afi-D_TFUCNLZun1AEyBNjJGEeKNuhDcDsUgchF1kR1zPnmxlrHGGP29h8Y--RlXFSth7Ge83FJuOacF&currency=USD"></script>
     <style>
         .purchase-container {
@@ -500,5 +505,12 @@
             });
         }
     </script>
+
+    <!-- Anti-Adblock Initialization -->
+    {% if adblock_lib_path and adblock_enabled and adcash_zone_id %}
+    <script>
+        aclib.runAutoTag({zoneId: '{{ adcash_zone_id }}'});
+    </script>
+    {% endif %}
 </body>
 </html>

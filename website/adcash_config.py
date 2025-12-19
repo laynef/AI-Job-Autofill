@@ -10,7 +10,8 @@ ADCASH_ZONES = {
     'collegeaibots.com': 'bpvwjuoecq',
     'collegeaibot.com': '7pbozszikc',
     'ingredienthelper.com': 'ie9ycjapmy',
-    'graphixcamera.com': '2fsehinytl'
+    'graphixcamera.com': '2fsehinytl',
+    'lowbudgetbuddy.com': 'hnhupo6pwv'
 }
 
 # Configuration settings

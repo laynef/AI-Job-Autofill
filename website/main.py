@@ -143,12 +143,34 @@ async def home_alt(request: Request):
 @app.get("/purchase.html", response_class=HTMLResponse)
 async def purchase(request: Request):
     """Purchase page - Subscription checkout"""
-    return templates.TemplateResponse("purchase.html", {"request": request})
+    adblock_lib_path = get_adblock_lib_path()
+    # Get zone ID based on the host domain
+    host = request.headers.get("host", "hiredalways.com")
+    domain = host.split(':')[0]  # Remove port if present
+    zone_id = get_zone_id(domain) or get_primary_zone_id()
+
+    return templates.TemplateResponse("purchase.html", {
+        "request": request,
+        "adblock_lib_path": adblock_lib_path,
+        "adcash_zone_id": zone_id,
+        "adblock_enabled": ANTI_ADBLOCK_CONFIG.get('enabled', True)
+    })
 
 @app.get("/purchase", response_class=HTMLResponse)
 async def purchase_alt(request: Request):
     """Purchase page - Alternative route without .html extension"""
-    return templates.TemplateResponse("purchase.html", {"request": request})
+    adblock_lib_path = get_adblock_lib_path()
+    # Get zone ID based on the host domain
+    host = request.headers.get("host", "hiredalways.com")
+    domain = host.split(':')[0]  # Remove port if present
+    zone_id = get_zone_id(domain) or get_primary_zone_id()
+
+    return templates.TemplateResponse("purchase.html", {
+        "request": request,
+        "adblock_lib_path": adblock_lib_path,
+        "adcash_zone_id": zone_id,
+        "adblock_enabled": ANTI_ADBLOCK_CONFIG.get('enabled', True)
+    })
 
 @app.get("/health")
 async def health_check():
