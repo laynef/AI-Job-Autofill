@@ -43,11 +43,12 @@ WORKDIR /adblock-setup
 RUN curl -o anti-adblock.sh https://raw.githubusercontent.com/adcash/customer-scripts/master/linux/anti-adblock.sh && \
     chmod +x anti-adblock.sh
 
-# Generate random filename for anti-adblock library
-RUN RANDOM_NAME=$(openssl rand -hex 8) && \
-    echo "Generated random name: lib-$RANDOM_NAME.js" && \
-    ./anti-adblock.sh --install /app/static/js/lib-$RANDOM_NAME.js 5 && \
-    echo "/app/static/js/lib-$RANDOM_NAME.js" > /app/adblock-lib-path.txt
+# Generate random filename for anti-adblock library (more obscure)
+RUN RANDOM_NAME=$(openssl rand -hex 6) && \
+    RANDOM_PREFIX=$(shuf -n1 -e "t48s7z" "m9k2pq" "x7n4vw" "z8q3ry" "k5j9fp" "w2l6dx") && \
+    echo "Generated random name: $RANDOM_PREFIX$RANDOM_NAME.js" && \
+    ./anti-adblock.sh --install /app/static/js/$RANDOM_PREFIX$RANDOM_NAME.js 5 && \
+    echo "/app/static/js/$RANDOM_PREFIX$RANDOM_NAME.js" > /app/adblock-lib-path.txt
 
 # Create supervisor configuration for managing processes
 RUN echo '[supervisord]\n\
