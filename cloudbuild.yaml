@@ -4,7 +4,7 @@ steps:
     args:
       - 'build'
       - '-f'
-      - 'website/Dockerfile'
+      - 'website/Dockerfile.adblock'
       - '-t'
       - 'gcr.io/$PROJECT_ID/hiredalways:$COMMIT_SHA'
       - '-t'
