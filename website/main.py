@@ -52,12 +52,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Content Security Policy - Comprehensive policy for web security
         csp_directives = [
             "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' https://www.paypal.com https://www.paypalobjects.com https://pagead2.googlesyndication.com https://www.googletagmanager.com https://cdn.adcash.com https://*.adcash.com",
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.paypal.com https://www.paypalobjects.com https://pagead2.googlesyndication.com https://www.googletagmanager.com https://cdn.adcash.com https://*.adcash.com https://adbpage.com",
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: https:",
             "font-src 'self' data:",
-            "connect-src 'self' https://www.paypal.com https://www.paypalobjects.com https://generativelanguage.googleapis.com https://pagead2.googlesyndication.com https://www.google-analytics.com https://cdn.adcash.com https://*.adcash.com",
-            "frame-src https://www.paypal.com https://cdn.adcash.com https://*.adcash.com",
+            "connect-src 'self' https://www.paypal.com https://www.paypalobjects.com https://generativelanguage.googleapis.com https://pagead2.googlesyndication.com https://www.google-analytics.com https://cdn.adcash.com https://*.adcash.com https://adbpage.com",
+            "frame-src https://www.paypal.com https://cdn.adcash.com https://*.adcash.com https://adbpage.com",
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self' https://www.paypal.com",
