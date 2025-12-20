@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -223,7 +223,7 @@ async def browserconfig():
         content = f.read()
     return Response(content=content, media_type="application/xml")
 
-@app.get("/js/lib.js")
+@app.get("/js/lib.js", response_class=Response)
 async def adblock_library():
     """Serve the anti-adblock library at a consistent endpoint"""
     try:
