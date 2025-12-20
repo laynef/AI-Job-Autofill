@@ -8,6 +8,8 @@ services:
     container_name: hired-always-website-adblock
     ports:
       - "8080:8080"
+    env_file:
+      - .env
     environment:
       - PORT=8080
       - PYTHONUNBUFFERED=1
