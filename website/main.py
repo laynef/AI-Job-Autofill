@@ -50,23 +50,23 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
 
-        # Content Security Policy - Comprehensive policy for web security
-        csp_directives = [
-            "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://www.paypal.com https://www.paypalobjects.com https://pagead2.googlesyndication.com https://www.googletagmanager.com https://cdn.adcash.com https://*.adcash.com https://adbpage.com",
-            "style-src 'self' 'unsafe-inline'",
-            "img-src 'self' data: https:",
-            "font-src 'self' data:",
-            "connect-src 'self' https://www.paypal.com https://www.paypalobjects.com https://generativelanguage.googleapis.com https://pagead2.googlesyndication.com https://www.google-analytics.com https://cdn.adcash.com https://*.adcash.com https://adbpage.com https://adexchangeclear.com https://*.space https://usrpubtrk.com",
-            "frame-src https://www.paypal.com https://cdn.adcash.com https://*.adcash.com https://adbpage.com https://adexchangeclear.com https://*.space https://usrpubtrk.com",
-            "worker-src 'self' blob:",
-            "object-src 'none'",
-            "base-uri 'self'",
-            "form-action 'self' https://www.paypal.com",
-            "frame-ancestors 'none'",
-            "upgrade-insecure-requests"
-        ]
-        response.headers["Content-Security-Policy"] = "; ".join(csp_directives)
+        # Content Security Policy - DISABLED to allow ads to load freely
+        # csp_directives = [
+        #     "default-src 'self'",
+        #     "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://www.paypal.com https://www.paypalobjects.com https://pagead2.googlesyndication.com https://www.googletagmanager.com https://cdn.adcash.com https://*.adcash.com https://adbpage.com",
+        #     "style-src 'self' 'unsafe-inline'",
+        #     "img-src 'self' data: https:",
+        #     "font-src 'self' data:",
+        #     "connect-src 'self' https://www.paypal.com https://www.paypalobjects.com https://generativelanguage.googleapis.com https://pagead2.googlesyndication.com https://www.google-analytics.com https://cdn.adcash.com https://*.adcash.com https://adbpage.com https://adexchangeclear.com https://*.space https://usrpubtrk.com",
+        #     "frame-src https://www.paypal.com https://cdn.adcash.com https://*.adcash.com https://adbpage.com https://adexchangeclear.com https://*.space https://usrpubtrk.com",
+        #     "worker-src 'self' blob:",
+        #     "object-src 'none'",
+        #     "base-uri 'self'",
+        #     "form-action 'self' https://www.paypal.com",
+        #     "frame-ancestors 'none'",
+        #     "upgrade-insecure-requests"
+        # ]
+        # response.headers["Content-Security-Policy"] = "; ".join(csp_directives)
 
         # Prevent MIME type sniffing
         response.headers["X-Content-Type-Options"] = "nosniff"
