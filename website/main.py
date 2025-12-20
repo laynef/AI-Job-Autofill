@@ -258,6 +258,13 @@ async def adblock_library():
         # Return empty script on error to prevent page breaking
         return Response(content=f"// Error loading anti-adblock library: {str(e)}", media_type="text/javascript")
 
+@app.get("/test-ads.html", response_class=HTMLResponse)
+async def test_ads():
+    """Debug page for testing ad functionality"""
+    with open("test-ads.html", "r") as f:
+        content = f.read()
+    return HTMLResponse(content=content)
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8080))

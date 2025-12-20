@@ -535,7 +535,44 @@
     <!-- Anti-Adblock Initialization -->
     {% if adblock_lib_path and adblock_enabled and adcash_zone_id %}
     <script>
-        aclib.runAutoTag({zoneId: '{{ adcash_zone_id }}'});
+        // Debug information
+        console.log('=== ADCASH DEBUG ===');
+        console.log('aclib exists:', typeof aclib !== 'undefined');
+        console.log('Zone ID:', '{{ adcash_zone_id }}');
+        console.log('Library path:', '{{ adblock_lib_path }}');
+
+        if (typeof aclib !== 'undefined') {
+            console.log('aclib object keys:', Object.keys(aclib));
+            console.log('runAutoTag function exists:', typeof aclib.runAutoTag === 'function');
+
+            try {
+                console.log('Attempting to run aclib.runAutoTag...');
+                aclib.runAutoTag({zoneId: '{{ adcash_zone_id }}'});
+                console.log('aclib.runAutoTag executed successfully');
+
+                // Monitor ad containers for changes
+                setTimeout(function() {
+                    const container1 = document.getElementById('acm-ad-tag');
+                    const container2 = document.getElementById('acm-ad-tag-2');
+                    console.log('Ad container 1 content after 5s:', container1 ? container1.innerHTML : 'NOT FOUND');
+                    console.log('Ad container 2 content after 5s:', container2 ? container2.innerHTML : 'NOT FOUND');
+
+                    // Check for iframes
+                    const iframes = document.querySelectorAll('iframe');
+                    console.log('Number of iframes found:', iframes.length);
+                    iframes.forEach((iframe, index) => {
+                        console.log('Iframe', index, 'src:', iframe.src);
+                    });
+                }, 5000);
+
+            } catch (error) {
+                console.error('Error running aclib.runAutoTag:', error);
+            }
+        } else {
+            console.error('aclib object not found!');
+            console.log('Window keys containing "aclib" or "adcash":',
+                Object.keys(window).filter(k => k.toLowerCase().includes('aclib') || k.toLowerCase().includes('adcash')));
+        }
     </script>
     {% endif %}
 </body>

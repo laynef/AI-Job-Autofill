@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Adcash Test Page</title>
+    <style>
+        .test-container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background: #f5f5f5;
+            border-radius: 8px;
+        }
+        .ad-container {
+            background: #fff;
+            padding: 2rem;
+            margin: 2rem 0;
+            border: 2px dashed #ccc;
+            text-align: center;
+            min-height: 250px;
+        }
+        .debug {
+            background: #e8f4f8;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-left: 4px solid #0066cc;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>Adcash Anti-Adblock Test</h1>
+
+        <h2>Debug Information:</h2>
+        <div id="debug-info" class="debug">Loading...</div>
+
+        <h2>Ad Container 1:</h2>
+        <div class="ad-container">
+            <p>Advertisement space - Ad should appear below</p>
+            <div id="acm-ad-tag"></div>
+        </div>
+
+        <h2>Ad Container 2:</h2>
+        <div class="ad-container">
+            <p>Advertisement space - Ad should appear below</p>
+            <div id="acm-ad-tag-2"></div>
+        </div>
+    </div>
+
+    <!-- Load the anti-adblock library -->
+    <script type="text/javascript" src="/static/js/x7n4vw80e9a54bd9f3.js"></script>
+
+    <!-- Debug Script -->
+    <script>
+        function updateDebug(message) {
+            const debugDiv = document.getElementById('debug-info');
+            debugDiv.textContent += message + '\n';
+            console.log(message);
+        }
+
+        // Wait for library to load
+        setTimeout(function() {
+            updateDebug('=== Adcash Library Debug ===');
+            updateDebug('aclib object exists: ' + (typeof aclib !== 'undefined'));
+
+            if (typeof aclib !== 'undefined') {
+                updateDebug('aclib object: ' + Object.keys(aclib));
+                updateDebug('runAutoTag function exists: ' + (typeof aclib.runAutoTag === 'function'));
+
+                // Try to initialize ads
+                try {
+                    updateDebug('Attempting to run aclib.runAutoTag...');
+                    aclib.runAutoTag({zoneId: 'hkqscsmnjy'});
+                    updateDebug('aclib.runAutoTag executed successfully');
+                } catch (error) {
+                    updateDebug('Error running aclib.runAutoTag: ' + error.message);
+                }
+            } else {
+                updateDebug('ERROR: aclib object not found!');
+                updateDebug('Window keys: ' + Object.keys(window).filter(k => k.includes('aclib') || k.includes('adcash') || k.includes('Zpq')));
+            }
+
+            // Check ad containers
+            const container1 = document.getElementById('acm-ad-tag');
+            const container2 = document.getElementById('acm-ad-tag-2');
+            updateDebug('Ad container 1 innerHTML: "' + container1.innerHTML + '"');
+            updateDebug('Ad container 2 innerHTML: "' + container2.innerHTML + '"');
+
+            // Monitor for changes
+            setTimeout(function() {
+                updateDebug('=== After 5 seconds ===');
+                updateDebug('Ad container 1 innerHTML: "' + container1.innerHTML + '"');
+                updateDebug('Ad container 2 innerHTML: "' + container2.innerHTML + '"');
+
+                // Check for any iframes or scripts that might have been injected
+                const iframes = document.querySelectorAll('iframe');
+                updateDebug('Number of iframes found: ' + iframes.length);
+                iframes.forEach((iframe, index) => {
+                    updateDebug('Iframe ' + index + ' src: ' + iframe.src);
+                });
+            }, 5000);
+
+        }, 1000);
+    </script>
+</body>
+</html>
