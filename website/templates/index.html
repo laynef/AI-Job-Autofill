@@ -532,14 +532,19 @@
         </div>
     </footer>
 
+    <!-- Debug template variables -->
+    <script>
+        console.log('=== TEMPLATE DEBUG ===');
+        console.log('adblock_lib_path: {{ adblock_lib_path }}');
+        console.log('adcash_zone_id: {{ adcash_zone_id }}');
+        console.log('adblock_enabled: {{ adblock_enabled }}');
+    </script>
+
     <!-- Anti-Adblock Initialization -->
     {% if adblock_lib_path and adblock_enabled and adcash_zone_id %}
     <script>
-        // Debug information
         console.log('=== ADCASH DEBUG ===');
         console.log('aclib exists:', typeof aclib !== 'undefined');
-        console.log('Zone ID:', '{{ adcash_zone_id }}');
-        console.log('Library path:', '{{ adblock_lib_path }}');
 
         if (typeof aclib !== 'undefined') {
             console.log('aclib object keys:', Object.keys(aclib));
@@ -570,9 +575,15 @@
             }
         } else {
             console.error('aclib object not found!');
-            console.log('Window keys containing "aclib" or "adcash":',
-                Object.keys(window).filter(k => k.toLowerCase().includes('aclib') || k.toLowerCase().includes('adcash')));
+            console.log('Window object keys:', Object.keys(window).filter(k => k.includes('aclib') || k.includes('adcash') || k.includes('Zpq')));
         }
+    </script>
+    {% else %}
+    <script>
+        console.log('=== CONDITIONAL FAILED ===');
+        console.log('adblock_lib_path: {{ adblock_lib_path }}');
+        console.log('adcash_zone_id: {{ adcash_zone_id }}');
+        console.log('adblock_enabled: {{ adblock_enabled }}');
     </script>
     {% endif %}
 </body>
