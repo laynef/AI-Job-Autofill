@@ -30,7 +30,8 @@ def get_adblock_lib_path():
             "static/js/lib-*.js",
             "static/js/*lib*.js",
             "static/js/[a-z][0-9][a-z][0-9][a-z][0-9]*.js",  # Pattern like x7n4vw...
-            "static/js/[tmzwk]*[0-9a-f]*.js"  # Pattern matching the prefix + hex
+            "static/js/[tmzwk]*[0-9a-f]*.js",  # Pattern matching the prefix + hex
+            "static/js/[a-z0-9]*.js"  # Pattern for any alphanumeric filename
         ]
 
         for pattern in patterns:
@@ -241,7 +242,8 @@ async def adblock_library():
             "static/js/lib-*.js",
             "static/js/*lib*.js",
             "static/js/[a-z][0-9][a-z][0-9][a-z][0-9]*.js",  # Pattern like x7n4vw...
-            "static/js/[tmzwk]*[0-9a-f]*.js"  # Pattern matching the prefix + hex
+            "static/js/[tmzwk]*[0-9a-f]*.js",  # Pattern matching the prefix + hex
+            "static/js/[a-z0-9]*.js"  # Pattern for any alphanumeric filename
         ]
 
         for pattern in patterns:

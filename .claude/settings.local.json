@@ -52,7 +52,13 @@
       "Bash(wc:*)",
       "Bash(docker:*)",
       "Bash(chmod:*)",
-      "Bash(./anti-adblock.sh:*)"
+      "Bash(./anti-adblock.sh:*)",
+      "Bash(mkdir:*)",
+      "Bash(touch:*)",
+      "Bash(PORT=8081 python:*)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)",
+      "Bash(PORT=8082 python:*)"
     ],
     "deny": [],
     "ask": []
