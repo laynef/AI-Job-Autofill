@@ -24,15 +24,22 @@ const elements = {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async function() {
-    // Show free app status
-    const appStatus = await AppManager.getStatus();
-    const licenseInfoEl = document.getElementById('licenseInfo');
-    if (licenseInfoEl) {
-        UIUtils.showFreeBadge(licenseInfoEl);
-    }
-
+    // Setup event listeners first to ensure UI is responsive
     setupEventListeners();
+
+    // Load applications immediately
     loadApplications();
+
+    // Show free app status - Non-blocking
+    try {
+        const appStatus = await AppManager.getStatus();
+        const licenseInfoEl = document.getElementById('licenseInfo');
+        if (licenseInfoEl) {
+            UIUtils.showFreeBadge(licenseInfoEl);
+        }
+    } catch (e) {
+        console.error("AppManager init error:", e);
+    }
 });
 
 // Load applications from storage

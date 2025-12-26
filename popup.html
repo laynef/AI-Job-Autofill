@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Hired Always - AI Job Application Assistant</title>
     <style>
@@ -10,28 +11,92 @@
             padding: 1rem;
             font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
         }
-        .space-y-3 > :not([hidden]) ~ :not([hidden]) {
+
+        .space-y-3> :not([hidden])~ :not([hidden]) {
             margin-top: 0.75rem;
         }
+
         /* Scrollbar */
-        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
         /* Header */
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-        .header h1 { font-size: 1.25rem; font-weight: 700; color: #1f2937; }
-        .header img { width: 2rem; height: 2rem; border-radius: 0.5rem; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06); }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .header h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .header img {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
 
         /* Form Elements */
-        .form-container { max-height: 24rem; overflow-y: auto; padding-right: 0.5rem; }
-        .section-header { font-size: 1.125rem; font-weight: 600; color: #374151; padding-top: 0.5rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.25rem; }
-        .grid-cols-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
-        .grid-cols-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
+        .form-container {
+            max-height: 24rem;
+            overflow-y: auto;
+            padding-right: 0.5rem;
+        }
 
-        label { display: block; font-size: 0.875rem; font-weight: 500; color: #4b5563; }
-        input[type="text"], input[type="email"], input[type="tel"], input[type="url"], input[type="password"], textarea, select {
+        .section-header {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #374151;
+            padding-top: 0.5rem;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 0.25rem;
+        }
+
+        .grid-cols-2 {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.75rem;
+        }
+
+        .grid-cols-3 {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.75rem;
+        }
+
+        label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #4b5563;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="tel"],
+        input[type="url"],
+        input[type="password"],
+        textarea,
+        select {
             margin-top: 0.25rem;
             display: block;
             width: 100%;
@@ -41,35 +106,110 @@
             border-radius: 0.375rem;
             box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
         }
-        input:focus, textarea:focus, select:focus { outline: 2px solid transparent; outline-offset: 2px; --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color); --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(3px + var(--tw-ring-offset-width)) var(--tw-ring-color); box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000); border-color: #4f46e5; }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: 2px solid transparent;
+            outline-offset: 2px;
+            --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+            --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(3px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+            box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+            border-color: #4f46e5;
+        }
 
         input[type="file"] {
-             margin-top: 0.25rem; display: block; width: 100%; font-size: 0.875rem; color: #6b7280;
+            margin-top: 0.25rem;
+            display: block;
+            width: 100%;
+            font-size: 0.875rem;
+            color: #6b7280;
         }
-        input[type="file"]::file-selector-button {
-            margin-right: 1rem; padding: 0.5rem 1rem; border-radius: 0.375rem; border-width: 0; font-size: 0.875rem; font-weight: 600; background-color: #eef2ff; color: #4338ca;
-        }
-         input[type="file"]::file-selector-button:hover {
-            background-color: #e0e7ff;
-         }
 
-        #resumeFileName { font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem; }
+        input[type="file"]::file-selector-button {
+            margin-right: 1rem;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            border-width: 0;
+            font-size: 0.875rem;
+            font-weight: 600;
+            background-color: #eef2ff;
+            color: #4338ca;
+        }
+
+        input[type="file"]::file-selector-button:hover {
+            background-color: #e0e7ff;
+        }
+
+        #resumeFileName {
+            font-size: 0.75rem;
+            color: #6b7280;
+            margin-top: 0.25rem;
+        }
 
         /* Footer & Buttons */
-        .footer { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; }
-        #status { text-align: center; margin-bottom: 0.5rem; height: 1.25rem; font-size: 0.875rem; font-weight: 500; color: #16a34a; }
-        .button-container { display: flex; gap: 0.75rem; }
-        button { flex: 1; font-weight: 700; padding: 0.5rem 1rem; border-radius: 0.375rem; transition: background-color 0.15s ease-in-out; }
-        button:focus { outline: 2px solid transparent; outline-offset: 2px; --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color); --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(3px + var(--tw-ring-offset-width)) var(--tw-ring-color); box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000); }
-        
-        #save { background-color: #4f46e5; color: white; }
-        #save:hover { background-color: #4338ca; }
-        
-        #autofill { background-color: #374151; color: white; }
-        #autofill:hover { background-color: #1f2937; }
+        .footer {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e5e7eb;
+        }
 
-        #viewTracker { background-color: #10b981; color: white; }
-        #viewTracker:hover { background-color: #059669; }
+        #status {
+            text-align: center;
+            margin-bottom: 0.5rem;
+            height: 1.25rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #16a34a;
+        }
+
+        .button-container {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        button {
+            flex: 1;
+            font-weight: 700;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            transition: background-color 0.15s ease-in-out;
+        }
+
+        button:focus {
+            outline: 2px solid transparent;
+            outline-offset: 2px;
+            --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+            --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(3px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+            box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+        }
+
+        #save {
+            background-color: #4f46e5;
+            color: white;
+        }
+
+        #save:hover {
+            background-color: #4338ca;
+        }
+
+        #autofill {
+            background-color: #374151;
+            color: white;
+        }
+
+        #autofill:hover {
+            background-color: #1f2937;
+        }
+
+        #viewTracker {
+            background-color: #10b981;
+            color: white;
+        }
+
+        #viewTracker:hover {
+            background-color: #059669;
+        }
 
         .tracker-link {
             text-align: center;
@@ -172,9 +312,9 @@
         .rating-btn-secondary:hover {
             color: #374151;
         }
-
     </style>
 </head>
+
 <body>
 
     <div class="header">
@@ -195,7 +335,8 @@
                 <span class="star" data-rating="5">★</span>
             </div>
             <div class="rating-buttons">
-                <button id="rateNowBtn" class="rating-btn rating-btn-primary" style="display: none;">Rate on Chrome Web Store</button>
+                <button id="rateNowBtn" class="rating-btn rating-btn-primary" style="display: none;">Rate on Chrome Web
+                    Store</button>
                 <button id="remindLaterBtn" class="rating-btn rating-btn-secondary">Maybe Later</button>
                 <button id="dontAskAgainBtn" class="rating-btn rating-btn-secondary">Don't Ask Again</button>
             </div>
@@ -219,16 +360,17 @@
         <input type="tel" id="phone" placeholder="Phone">
         <input type="text" id="address" placeholder="Address">
         <div class="grid-cols-3">
-             <input type="text" id="city" placeholder="City">
-             <input type="text" id="state" placeholder="State/Province">
-             <input type="text" id="zipCode" placeholder="Zip/Postal Code">
+            <input type="text" id="city" placeholder="City">
+            <input type="text" id="state" placeholder="State/Province">
+            <input type="text" id="zipCode" placeholder="Zip/Postal Code">
         </div>
         <input type="text" id="country" placeholder="Country">
         <input type="url" id="linkedinUrl" placeholder="LinkedIn URL">
         <input type="url" id="portfolioUrl" placeholder="Portfolio/Website URL">
-        
+
         <h2 class="section-header">Demographic Information (Optional)</h2>
-        <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">These fields are optional and will only be used to autofill EEOC/demographic questions on job applications. Leave blank to decline answering.</p>
+        <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">These fields are optional and will only
+            be used to autofill EEOC/demographic questions on job applications. Leave blank to decline answering.</p>
 
         <div>
             <label for="gender">Gender</label>
@@ -260,7 +402,8 @@
                 <option value="Asian">Asian</option>
                 <option value="Black or African American">Black or African American</option>
                 <option value="Hispanic or Latino">Hispanic or Latino</option>
-                <option value="Native Hawaiian or Other Pacific Islander">Native Hawaiian or Other Pacific Islander</option>
+                <option value="Native Hawaiian or Other Pacific Islander">Native Hawaiian or Other Pacific Islander
+                </option>
                 <option value="White">White</option>
                 <option value="Two or More Races">Two or More Races</option>
                 <option value="Decline To Self Identify">Decline To Self Identify</option>
@@ -273,7 +416,8 @@
                 <option value="">Prefer not to answer</option>
                 <option value="I am a veteran">I am a veteran</option>
                 <option value="I am not a veteran">I am not a veteran</option>
-                <option value="I identify as one or more of the classifications of protected veteran">I identify as one or more of the classifications of protected veteran</option>
+                <option value="I identify as one or more of the classifications of protected veteran">I identify as one
+                    or more of the classifications of protected veteran</option>
                 <option value="I don't wish to answer">I don't wish to answer</option>
             </select>
         </div>
@@ -282,22 +426,26 @@
             <label for="disability">Disability Status</label>
             <select id="disability">
                 <option value="">Prefer not to answer</option>
-                <option value="Yes, I have a disability">Yes, I have a disability (or previously had a disability)</option>
+                <option value="Yes, I have a disability">Yes, I have a disability (or previously had a disability)
+                </option>
                 <option value="No, I don't have a disability">No, I don't have a disability</option>
                 <option value="I don't wish to answer">I don't wish to answer</option>
             </select>
         </div>
 
         <h2 class="section-header">Work Authorization</h2>
-        <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">These preferences help answer citizenship and visa sponsorship questions on job applications.</p>
+        <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">These preferences help answer citizenship
+            and visa sponsorship questions on job applications.</p>
 
         <div>
             <label for="citizenship">Are you a U.S. citizen or authorized to work in the U.S.?</label>
             <select id="citizenship">
                 <option value="">Select status</option>
                 <option value="Yes, I am a U.S. citizen">Yes, I am a U.S. citizen</option>
-                <option value="Yes, I am authorized to work in the U.S.">Yes, I am authorized to work in the U.S.</option>
-                <option value="No, I am not authorized to work in the U.S.">No, I am not authorized to work in the U.S.</option>
+                <option value="Yes, I am authorized to work in the U.S.">Yes, I am authorized to work in the U.S.
+                </option>
+                <option value="No, I am not authorized to work in the U.S.">No, I am not authorized to work in the U.S.
+                </option>
                 <option value="I am authorized to work in the U.S.">I am authorized to work in the U.S.</option>
                 <option value="Yes, I have work authorization">Yes, I have work authorization</option>
             </select>
@@ -309,7 +457,8 @@
                 <option value="">Select sponsorship status</option>
                 <option value="No, I do not require sponsorship">No, I do not require sponsorship</option>
                 <option value="Yes, I require sponsorship now">Yes, I require sponsorship now</option>
-                <option value="Yes, I will require sponsorship in the future">Yes, I will require sponsorship in the future</option>
+                <option value="Yes, I will require sponsorship in the future">Yes, I will require sponsorship in the
+                    future</option>
                 <option value="No">No</option>
                 <option value="Yes">Yes</option>
             </select>
@@ -320,16 +469,20 @@
             <label for="resumeFile">Upload Resume/CV (.pdf, .docx, .txt)</label>
             <input type="file" id="resumeFile" accept=".pdf,.docx,.txt">
             <p id="resumeFileName"></p>
-            <button type="button" id="parseResume" style="margin-top: 0.5rem; padding: 0.375rem 0.75rem; font-size: 0.75rem; background-color: #8b5cf6; color: white; border: none; border-radius: 0.375rem; cursor: pointer;">Auto-fill from Resume</button>
+            <button type="button" id="parseResume"
+                style="margin-top: 0.5rem; padding: 0.375rem 0.75rem; font-size: 0.75rem; background-color: #8b5cf6; color: white; border: none; border-radius: 0.375rem; cursor: pointer;">Auto-fill
+                from Resume</button>
             <p id="parseStatus" style="font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem;"></p>
         </div>
         <div>
             <label for="additionalInfo">Key Skills / Additional Info</label>
-            <textarea id="additionalInfo" rows="3" placeholder="e.g., Expert in Python, 10+ years of experience in project management..."></textarea>
+            <textarea id="additionalInfo" rows="3"
+                placeholder="e.g., Expert in Python, 10+ years of experience in project management..."></textarea>
         </div>
         <div>
             <label for="coverLetter">Cover Letter (optional - will be used instead of AI-generated)</label>
-            <textarea id="coverLetter" rows="6" placeholder="Enter your cover letter here. If provided, this will be used instead of generating one with AI..."></textarea>
+            <textarea id="coverLetter" rows="6"
+                placeholder="Enter your cover letter here. If provided, this will be used instead of generating one with AI..."></textarea>
         </div>
     </div>
 
@@ -354,5 +507,5 @@
     <script src="rating-manager.js"></script>
     <script src="popup.js"></script>
 </body>
-</html>
 
+</html>

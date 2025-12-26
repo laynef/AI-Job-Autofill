@@ -1,67 +1,277 @@
 // This top-level try...catch block prevents the entire script from failing if an unexpected error occurs during setup.
 try {
-    document.addEventListener('DOMContentLoaded', async function() {
+    document.addEventListener('DOMContentLoaded', async function () {
+        // Initialize core UI elements first (Button Listeners) to ensure basic functionality
         const statusEl = document.getElementById('status');
         const resumeFileNameEl = document.getElementById('resumeFileName');
         const resumeFileInput = document.getElementById('resumeFile');
         const textFields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'additionalInfo', 'coverLetter', 'gender', 'hispanic', 'race', 'veteran', 'disability', 'citizenship', 'sponsorship'];
 
-        // Show free app badge - extension is now 100% free!
-        const appStatus = await AppManager.getStatus();
-        const licenseInfoEl = document.getElementById('licenseInfo');
-        if (licenseInfoEl) {
-            licenseInfoEl.style.display = 'block';
+        // --- Event Listeners Setup (Critical) ---
+
+        // Save data when the save button is clicked
+        const saveBtn = document.getElementById('save');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', function () {
+                try {
+                    // Show saving status immediately
+                    if (statusEl) {
+                        statusEl.textContent = 'Saving...';
+                        statusEl.style.color = '#6b7280';
+                    }
+
+                    let dataToSave = {};
+                    textFields.forEach(field => {
+                        const el = document.getElementById(field);
+                        if (el) dataToSave[field] = el.value;
+                    });
+
+                    const newResumeFile = resumeFileInput?.files[0];
+
+                    const saveDataToStorage = (data) => {
+                        chrome.storage.local.set(data, function () {
+                            if (chrome.runtime.lastError) {
+                                if (statusEl) {
+                                    statusEl.textContent = `Error: ${chrome.runtime.lastError.message}`;
+                                    statusEl.style.color = '#ef4444';
+                                }
+                                console.error("Save error:", chrome.runtime.lastError);
+                            } else {
+                                if (statusEl) {
+                                    statusEl.textContent = 'Information saved!';
+                                    statusEl.style.color = '#16a34a';
+                                }
+                                if (data.resumeFileName && resumeFileNameEl) {
+                                    resumeFileNameEl.textContent = `Saved file: ${data.resumeFileName}`;
+                                    resumeFileNameEl.style.color = '';
+                                }
+                                // Increment usage count on save
+                                incrementUsageCount();
+                            }
+                            setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2500);
+                        });
+                    };
+
+                    if (newResumeFile) {
+                        const reader = new FileReader();
+                        reader.onload = function (e) {
+                            dataToSave.resume = e.target.result; // The Base64 string
+                            dataToSave.resumeFileName = newResumeFile.name;
+                            saveDataToStorage(dataToSave);
+                        };
+                        reader.onerror = function (err) {
+                            statusEl.textContent = 'Error reading file.';
+                            console.error("File reading error:", err);
+                        };
+                        reader.readAsDataURL(newResumeFile);
+                    } else {
+                        // Preserve existing resume if no new file is chosen
+                        chrome.storage.local.get(['resume', 'resumeFileName'], (result) => {
+                            if (result.resume) dataToSave.resume = result.resume;
+                            if (result.resumeFileName) dataToSave.resumeFileName = result.resumeFileName;
+                            saveDataToStorage(dataToSave);
+                        });
+                    }
+                } catch (error) {
+                    if (statusEl) {
+                        statusEl.textContent = 'A critical error occurred during save.';
+                        statusEl.style.color = '#ef4444';
+                    }
+                    console.error("Critical error in save handler:", error);
+                }
+            });
+        } else {
+            console.error('Save button not found!');
         }
 
-        // Initialize rating system
-        await RatingManager.init();
+        // Autofill button logic
+        const autofillBtn = document.getElementById('autofill');
+        if (autofillBtn) {
+            autofillBtn.addEventListener('click', async function () {
+                try {
+                    // App is free for everyone - no restrictions
+                    statusEl.textContent = 'Loading your data...';
+                    incrementUsageCount();
 
-        // Load saved data when the popup opens
-        chrome.storage.local.get([...textFields, 'resumeFileName', 'resume'], function(result) {
-            if (chrome.runtime.lastError) { return console.error("Error loading data:", chrome.runtime.lastError.message); }
-            textFields.forEach(field => {
-                const el = document.getElementById(field);
-                if (el && result[field]) el.value = result[field];
-            });
-            if (result.resumeFileName && resumeFileNameEl) resumeFileNameEl.textContent = `Saved file: ${result.resumeFileName}`;
-        });
+                    // FIRST: Load user data from storage (in popup context where it's reliable)
+                    const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'resume', 'resumeFileName', 'additionalInfo', 'coverLetter', 'gender', 'hispanic', 'race', 'veteran', 'disability', 'citizenship', 'sponsorship'];
 
-        if (resumeFileInput) {
-            resumeFileInput.addEventListener('change', function() {
-                if (this.files && this.files[0]) {
-                    if (resumeFileNameEl) {
-                        resumeFileNameEl.textContent = `Selected: ${this.files[0].name} (click Save)`;
-                        resumeFileNameEl.style.color = '#D97706';
-                    }
+                    chrome.storage.local.get(fields, function (userData) {
+                        if (chrome.runtime.lastError) {
+                            statusEl.textContent = 'Error: Could not load your saved data.';
+                            console.error("Hired Always: Error loading user data:", chrome.runtime.lastError);
+                            setTimeout(() => statusEl.textContent = '', 3000);
+                            return;
+                        }
+
+                        // Check if user has saved any data
+                        if (!Object.keys(userData).length || !userData.firstName) {
+                            statusEl.textContent = 'Please save your information first!';
+                            setTimeout(() => statusEl.textContent = '', 3000);
+                            return;
+                        }
+
+                        console.log('✓ User data loaded successfully');
+                        statusEl.textContent = 'Autofilling...';
+
+                        chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+                            if (tabs.length === 0 || !tabs[0].id) {
+                                statusEl.textContent = 'Could not find active tab.';
+                                return;
+                            }
+
+                            // First, check if the page contains an iframe-based application form
+                            // BUT ONLY if we're not already on a known ATS domain
+                            const currentUrl = tabs[0].url || '';
+                            const isAlreadyOnATS = currentUrl.includes('greenhouse.io') ||
+                                currentUrl.includes('lever.co') ||
+                                currentUrl.includes('myworkdayjobs.com') ||
+                                currentUrl.includes('ashbyhq.com') ||
+                                currentUrl.includes('bamboohr.com') ||
+                                currentUrl.includes('workable.com') ||
+                                currentUrl.includes('jobvite.com') ||
+                                currentUrl.includes('smartrecruiters.com');
+
+                            if (!isAlreadyOnATS) {
+                                chrome.scripting.executeScript({
+                                    target: { tabId: tabs[0].id },
+                                    function: detectIframeForm,
+                                }).then((results) => {
+                                    const iframeDetected = results && results[0] && results[0].result;
+
+                                    if (iframeDetected && iframeDetected.hasIframe) {
+                                        // Display helpful message about iframe form
+                                        statusEl.innerHTML = `<div style="color: #8B5CF6; font-size: 11px;">
+                                            <strong>Iframe-based form detected!</strong><br>
+                                            This form is embedded from ${iframeDetected.domain}.<br><br>
+                                            <span style="color: #666;">Opening the application form directly...</span>
+                                        </div>`;
+
+                                        // Open the iframe URL in a new tab
+                                        chrome.tabs.create({ url: iframeDetected.url }, (newTab) => {
+                                            setTimeout(() => {
+                                                statusEl.textContent = 'Form opened in new tab. Click Autofill again on the new tab.';
+                                                setTimeout(() => statusEl.textContent = '', 5000);
+                                            }, 1000);
+                                        });
+                                        return;
+                                    }
+
+                                    // No iframe detected, proceed with normal autofill
+                                    // First save userData to storage so the injected script can access it
+                                    chrome.storage.local.set({
+                                        _autofillData: userData,
+                                        _autofillTimestamp: Date.now()
+                                    }, () => {
+                                        if (chrome.runtime.lastError) {
+                                            statusEl.textContent = 'Error: Could not prepare autofill data.';
+                                            console.error('Storage error:', chrome.runtime.lastError);
+                                            return;
+                                        }
+
+                                        // Now inject the autofill function
+                                        chrome.scripting.executeScript({
+                                            target: { tabId: tabs[0].id, allFrames: true },
+                                            function: autofillPage
+                                        }).then(() => {
+                                            console.log('✓ Autofill script executed successfully');
+                                            statusEl.textContent = 'Autofill complete! Saving to tracker...';
+
+                                            // Clean up temporary storage
+                                            chrome.storage.local.remove(['_autofillData', '_autofillTimestamp']);
+
+                                            // Save application to tracker AFTER autofilling completes
+                                            setTimeout(() => {
+                                                console.log('⏰ Starting tracker save (after 3s delay)...');
+                                                saveCurrentApplicationToTracker(tabs[0], statusEl);
+                                            }, 3000);
+                                        }).catch(err => {
+                                            statusEl.textContent = 'Autofill failed on this page.';
+                                            console.error('❌ Autofill script injection failed:', err);
+                                            chrome.storage.local.remove(['_autofillData', '_autofillTimestamp']);
+                                            setTimeout(() => statusEl.textContent = '', 3000);
+                                        });
+                                    });
+                                }).catch(err => {
+                                    console.error('Iframe detection failed:', err);
+                                    statusEl.textContent = 'Could not analyze page structure.';
+                                    setTimeout(() => statusEl.textContent = '', 3000);
+                                });
+                            } else {
+                                // Already on ATS domain, skip iframe detection and proceed with autofill
+                                console.log('Already on ATS domain, proceeding with direct autofill');
+
+                                // First save userData to storage so the injected script can access it
+                                chrome.storage.local.set({
+                                    _autofillData: userData,
+                                    _autofillTimestamp: Date.now()
+                                }, () => {
+                                    if (chrome.runtime.lastError) {
+                                        statusEl.textContent = 'Error: Could not prepare autofill data.';
+                                        console.error('Storage error:', chrome.runtime.lastError);
+                                        return;
+                                    }
+
+                                    // Now inject the autofill function
+                                    chrome.scripting.executeScript({
+                                        target: { tabId: tabs[0].id, allFrames: true },
+                                        function: autofillPage
+                                    }).then(() => {
+                                        console.log('✓ Autofill script executed successfully');
+                                        statusEl.textContent = 'Autofill complete! Saving to tracker...';
+
+                                        // Clean up temporary storage
+                                        chrome.storage.local.remove(['_autofillData', '_autofillTimestamp']);
+
+                                        // Save application to tracker AFTER autofilling completes
+                                        setTimeout(() => {
+                                            console.log('⏰ Starting tracker save (after 3s delay)...');
+                                            saveCurrentApplicationToTracker(tabs[0], statusEl);
+                                        }, 3000);
+                                    }).catch(err => {
+                                        statusEl.textContent = 'Autofill failed on this page.';
+                                        console.error('❌ Autofill script injection failed:', err);
+                                        chrome.storage.local.remove(['_autofillData', '_autofillTimestamp']);
+                                        setTimeout(() => statusEl.textContent = '', 3000);
+                                    });
+                                });
+                            }
+                        });
+                    });
+                } catch (e) {
+                    console.error("Autofill button error:", e);
                 }
             });
         }
 
-        // Parse Resume button - extract info from resume and autofill form
+        // View Tracker button
+        const viewTrackerBtn = document.getElementById('viewTracker');
+        if (viewTrackerBtn) {
+            viewTrackerBtn.addEventListener('click', function () {
+                chrome.tabs.create({ url: chrome.runtime.getURL('tracker.html') });
+            });
+        }
+
+        // Parse Resume button
         const parseResumeBtn = document.getElementById('parseResume');
         const parseStatusEl = document.getElementById('parseStatus');
-
         if (parseResumeBtn) {
-            parseResumeBtn.addEventListener('click', async function() {
+            parseResumeBtn.addEventListener('click', async function () {
                 try {
                     parseStatusEl.textContent = 'Parsing resume...';
                     parseStatusEl.style.color = '#8b5cf6';
 
-                    // Get the resume from storage or from the file input
                     let resumeContent = null;
                     const newFile = resumeFileInput?.files[0];
 
                     if (newFile) {
-                        // Parse the newly selected file
                         resumeContent = await readFileAsText(newFile);
                     } else {
-                        // Try to get from storage
                         const stored = await new Promise(resolve => {
                             chrome.storage.local.get(['resume', 'resumeFileName'], resolve);
                         });
 
                         if (stored.resume) {
-                            // Decode base64 if it's a data URL
                             if (stored.resume.startsWith('data:')) {
                                 const base64 = stored.resume.split(',')[1];
                                 if (stored.resumeFileName?.endsWith('.txt')) {
@@ -69,7 +279,6 @@ try {
                                 } else {
                                     parseStatusEl.textContent = 'Note: PDF/DOCX parsing is limited. For best results, upload a .txt version of your resume.';
                                     parseStatusEl.style.color = '#f59e0b';
-                                    // Try to extract any readable text from the base64
                                     resumeContent = extractTextFromBase64(base64);
                                 }
                             }
@@ -82,56 +291,29 @@ try {
                         return;
                     }
 
-                    // Parse the resume content
                     const extracted = parseResumeContent(resumeContent);
-
-                    // Populate the form fields
                     let fieldsPopulated = 0;
 
-                    if (extracted.firstName) {
-                        const el = document.getElementById('firstName');
-                        if (el && !el.value) { el.value = extracted.firstName; fieldsPopulated++; }
-                    }
-                    if (extracted.lastName) {
-                        const el = document.getElementById('lastName');
-                        if (el && !el.value) { el.value = extracted.lastName; fieldsPopulated++; }
-                    }
-                    if (extracted.email) {
-                        const el = document.getElementById('email');
-                        if (el && !el.value) { el.value = extracted.email; fieldsPopulated++; }
-                    }
-                    if (extracted.phone) {
-                        const el = document.getElementById('phone');
-                        if (el && !el.value) { el.value = extracted.phone; fieldsPopulated++; }
-                    }
-                    if (extracted.address) {
-                        const el = document.getElementById('address');
-                        if (el && !el.value) { el.value = extracted.address; fieldsPopulated++; }
-                    }
-                    if (extracted.city) {
-                        const el = document.getElementById('city');
-                        if (el && !el.value) { el.value = extracted.city; fieldsPopulated++; }
-                    }
-                    if (extracted.state) {
-                        const el = document.getElementById('state');
-                        if (el && !el.value) { el.value = extracted.state; fieldsPopulated++; }
-                    }
-                    if (extracted.zipCode) {
-                        const el = document.getElementById('zipCode');
-                        if (el && !el.value) { el.value = extracted.zipCode; fieldsPopulated++; }
-                    }
-                    if (extracted.linkedinUrl) {
-                        const el = document.getElementById('linkedinUrl');
-                        if (el && !el.value) { el.value = extracted.linkedinUrl; fieldsPopulated++; }
-                    }
-                    if (extracted.portfolioUrl) {
-                        const el = document.getElementById('portfolioUrl');
-                        if (el && !el.value) { el.value = extracted.portfolioUrl; fieldsPopulated++; }
-                    }
-                    if (extracted.skills) {
-                        const el = document.getElementById('additionalInfo');
-                        if (el && !el.value) { el.value = extracted.skills; fieldsPopulated++; }
-                    }
+                    const populateField = (id, value) => {
+                        const el = document.getElementById(id);
+                        if (el && !el.value && value) {
+                            el.value = value;
+                            return 1;
+                        }
+                        return 0;
+                    };
+
+                    fieldsPopulated += populateField('firstName', extracted.firstName);
+                    fieldsPopulated += populateField('lastName', extracted.lastName);
+                    fieldsPopulated += populateField('email', extracted.email);
+                    fieldsPopulated += populateField('phone', extracted.phone);
+                    fieldsPopulated += populateField('address', extracted.address);
+                    fieldsPopulated += populateField('city', extracted.city);
+                    fieldsPopulated += populateField('state', extracted.state);
+                    fieldsPopulated += populateField('zipCode', extracted.zipCode);
+                    fieldsPopulated += populateField('linkedinUrl', extracted.linkedinUrl);
+                    fieldsPopulated += populateField('portfolioUrl', extracted.portfolioUrl);
+                    fieldsPopulated += populateField('additionalInfo', extracted.skills);
 
                     if (fieldsPopulated > 0) {
                         parseStatusEl.textContent = `Extracted ${fieldsPopulated} field(s) from resume. Click Save to keep changes.`;
@@ -149,251 +331,49 @@ try {
             });
         }
 
-        // Save data when the save button is clicked
-        const saveBtn = document.getElementById('save');
-        if (!saveBtn) {
-            console.error('Save button not found!');
-            return;
+        if (resumeFileInput) {
+            resumeFileInput.addEventListener('change', function () {
+                if (this.files && this.files[0]) {
+                    if (resumeFileNameEl) {
+                        resumeFileNameEl.textContent = `Selected: ${this.files[0].name} (click Save)`;
+                        resumeFileNameEl.style.color = '#D97706';
+                    }
+                }
+            });
         }
 
-        saveBtn.addEventListener('click', function() {
-            try {
-                // Show saving status immediately
-                if (statusEl) {
-                    statusEl.textContent = 'Saving...';
-                    statusEl.style.color = '#6b7280';
-                }
+        // Load saved data when the popup opens
+        chrome.storage.local.get([...textFields, 'resumeFileName', 'resume'], function (result) {
+            if (chrome.runtime.lastError) { return console.error("Error loading data:", chrome.runtime.lastError.message); }
+            textFields.forEach(field => {
+                const el = document.getElementById(field);
+                if (el && result[field]) el.value = result[field];
+            });
+            if (result.resumeFileName && resumeFileNameEl) resumeFileNameEl.textContent = `Saved file: ${result.resumeFileName}`;
+        });
 
-                let dataToSave = {};
-                textFields.forEach(field => {
-                    const el = document.getElementById(field);
-                    if (el) dataToSave[field] = el.value;
-                });
+        // --- Non-Blocking Background Tasks ---
+        // Wrap these in independent try-catch blocks so they don't block the UI
 
-                const newResumeFile = resumeFileInput?.files[0];
-
-                const saveDataToStorage = (data) => {
-                    chrome.storage.local.set(data, function() {
-                        if (chrome.runtime.lastError) {
-                            if (statusEl) {
-                                statusEl.textContent = `Error: ${chrome.runtime.lastError.message}`;
-                                statusEl.style.color = '#ef4444';
-                            }
-                            console.error("Save error:", chrome.runtime.lastError);
-                        } else {
-                            if (statusEl) {
-                                statusEl.textContent = 'Information saved!';
-                                statusEl.style.color = '#16a34a';
-                            }
-                            if (data.resumeFileName && resumeFileNameEl) {
-                                resumeFileNameEl.textContent = `Saved file: ${data.resumeFileName}`;
-                                resumeFileNameEl.style.color = '';
-                            }
-                        }
-                        setTimeout(() => { if(statusEl) statusEl.textContent = ''; }, 2500);
-                    });
-                };
-
-                if (newResumeFile) {
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        dataToSave.resume = e.target.result; // The Base64 string
-                        dataToSave.resumeFileName = newResumeFile.name;
-                        saveDataToStorage(dataToSave);
-                    };
-                    reader.onerror = function(err) {
-                        statusEl.textContent = 'Error reading file.';
-                        console.error("File reading error:", err);
-                    };
-                    reader.readAsDataURL(newResumeFile);
-                } else {
-                    // Preserve existing resume if no new file is chosen
-                    chrome.storage.local.get(['resume', 'resumeFileName'], (result) => {
-                         if(result.resume) dataToSave.resume = result.resume;
-                         if(result.resumeFileName) dataToSave.resumeFileName = result.resumeFileName;
-                         saveDataToStorage(dataToSave);
-                    });
-                }
-            } catch (error) {
-                if (statusEl) {
-                    statusEl.textContent = 'A critical error occurred during save.';
-                    statusEl.style.color = '#ef4444';
-                }
-                console.error("Critical error in save handler:", error);
+        try {
+            // Show free app badge
+            const appStatus = await AppManager.getStatus();
+            const licenseInfoEl = document.getElementById('licenseInfo');
+            if (licenseInfoEl) {
+                licenseInfoEl.style.display = 'block';
             }
-        });
-
-        // Autofill button logic
-        document.getElementById('autofill').addEventListener('click', async function() {
-            // App is free for everyone - no restrictions
-            statusEl.textContent = 'Loading your data...';
-
-            // FIRST: Load user data from storage (in popup context where it's reliable)
-            const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'resume', 'resumeFileName', 'additionalInfo', 'coverLetter', 'gender', 'hispanic', 'race', 'veteran', 'disability', 'citizenship', 'sponsorship'];
-
-            chrome.storage.local.get(fields, function(userData) {
-                if (chrome.runtime.lastError) {
-                    statusEl.textContent = 'Error: Could not load your saved data.';
-                    console.error("Hired Always: Error loading user data:", chrome.runtime.lastError);
-                    setTimeout(() => statusEl.textContent = '', 3000);
-                    return;
-                }
-
-                // Check if user has saved any data
-                if (!Object.keys(userData).length || !userData.firstName) {
-                    statusEl.textContent = 'Please save your information first!';
-                    setTimeout(() => statusEl.textContent = '', 3000);
-                    return;
-                }
-
-                console.log('✓ User data loaded successfully');
-                statusEl.textContent = 'Autofilling...';
-
-                chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-                    if (tabs.length === 0 || !tabs[0].id) {
-                        statusEl.textContent = 'Could not find active tab.';
-                        return;
-                    }
-
-                    // First, check if the page contains an iframe-based application form
-                    // BUT ONLY if we're not already on a known ATS domain
-                    const currentUrl = tabs[0].url || '';
-                    const isAlreadyOnATS = currentUrl.includes('greenhouse.io') ||
-                                          currentUrl.includes('lever.co') ||
-                                          currentUrl.includes('myworkdayjobs.com') ||
-                                          currentUrl.includes('ashbyhq.com') ||
-                                          currentUrl.includes('bamboohr.com') ||
-                                          currentUrl.includes('workable.com') ||
-                                          currentUrl.includes('jobvite.com') ||
-                                          currentUrl.includes('smartrecruiters.com');
-
-                    if (!isAlreadyOnATS) {
-                        chrome.scripting.executeScript({
-                            target: {tabId: tabs[0].id},
-                            function: detectIframeForm,
-                        }).then((results) => {
-                            const iframeDetected = results && results[0] && results[0].result;
-
-                            if (iframeDetected && iframeDetected.hasIframe) {
-                                // Display helpful message about iframe form
-                                statusEl.innerHTML = `<div style="color: #8B5CF6; font-size: 11px;">
-                                    <strong>Iframe-based form detected!</strong><br>
-                                    This form is embedded from ${iframeDetected.domain}.<br><br>
-                                    <span style="color: #666;">Opening the application form directly...</span>
-                                </div>`;
-
-                                // Open the iframe URL in a new tab
-                                chrome.tabs.create({ url: iframeDetected.url }, (newTab) => {
-                                    setTimeout(() => {
-                                        statusEl.textContent = 'Form opened in new tab. Click Autofill again on the new tab.';
-                                        setTimeout(() => statusEl.textContent = '', 5000);
-                                    }, 1000);
-                                });
-                                return;
-                            }
-
-                            // No iframe detected, proceed with normal autofill
-                            // First save userData to storage so the injected script can access it
-                            chrome.storage.local.set({
-                                _autofillData: userData,
-                                _autofillTimestamp: Date.now()
-                            }, () => {
-                                if (chrome.runtime.lastError) {
-                                    statusEl.textContent = 'Error: Could not prepare autofill data.';
-                                    console.error('Storage error:', chrome.runtime.lastError);
-                                    return;
-                                }
-
-                                // Now inject the autofill function
-                                chrome.scripting.executeScript({
-                                    target: {tabId: tabs[0].id, allFrames: true},
-                                    function: autofillPage
-                                }).then(() => {
-                                     console.log('✓ Autofill script executed successfully');
-                                     statusEl.textContent = 'Autofill complete! Saving to tracker...';
-
-                                     // Clean up temporary storage
-                                     chrome.storage.local.remove(['_autofillData', '_autofillTimestamp']);
-
-                                     // Save application to tracker AFTER autofilling completes
-                                     // Increased delay to 3000ms to ensure form fields are fully populated and dynamic content loads
-                                     setTimeout(() => {
-                                         console.log('⏰ Starting tracker save (after 3s delay)...');
-                                         saveCurrentApplicationToTracker(tabs[0], statusEl);
-                                     }, 3000);
-                                }).catch(err => {
-                                     statusEl.textContent = 'Autofill failed on this page.';
-                                     console.error('❌ Autofill script injection failed:', err);
-                                     chrome.storage.local.remove(['_autofillData', '_autofillTimestamp']);
-                                     setTimeout(() => statusEl.textContent = '', 3000);
-                                });
-                            });
-                        }).catch(err => {
-                            console.error('Iframe detection failed:', err);
-                            statusEl.textContent = 'Could not analyze page structure.';
-                            setTimeout(() => statusEl.textContent = '', 3000);
-                        });
-                    } else {
-                        // Already on ATS domain, skip iframe detection and proceed with autofill
-                        console.log('Already on ATS domain, proceeding with direct autofill');
-
-                        // First save userData to storage so the injected script can access it
-                        chrome.storage.local.set({
-                            _autofillData: userData,
-                            _autofillTimestamp: Date.now()
-                        }, () => {
-                            if (chrome.runtime.lastError) {
-                                statusEl.textContent = 'Error: Could not prepare autofill data.';
-                                console.error('Storage error:', chrome.runtime.lastError);
-                                return;
-                            }
-
-                            // Now inject the autofill function
-                            chrome.scripting.executeScript({
-                                target: {tabId: tabs[0].id, allFrames: true},
-                                function: autofillPage
-                            }).then(() => {
-                                 console.log('✓ Autofill script executed successfully');
-                                 statusEl.textContent = 'Autofill complete! Saving to tracker...';
-
-                                 // Clean up temporary storage
-                                 chrome.storage.local.remove(['_autofillData', '_autofillTimestamp']);
-
-                                 // Save application to tracker AFTER autofilling completes
-                                 // Increased delay to 3000ms to ensure form fields are fully populated and dynamic content loads
-                                 setTimeout(() => {
-                                     console.log('⏰ Starting tracker save (after 3s delay)...');
-                                     saveCurrentApplicationToTracker(tabs[0], statusEl);
-                                 }, 3000);
-                            }).catch(err => {
-                                 statusEl.textContent = 'Autofill failed on this page.';
-                                 console.error('❌ Autofill script injection failed:', err);
-                                 chrome.storage.local.remove(['_autofillData', '_autofillTimestamp']);
-                                 setTimeout(() => statusEl.textContent = '', 3000);
-                            });
-                        });
-                    }
-                });
-            });
-        });
-
-        // View Tracker button
-        document.getElementById('viewTracker').addEventListener('click', function() {
-            chrome.tabs.create({ url: chrome.runtime.getURL('tracker.html') });
-        });
-
-        // Rating System
-        function incrementUsageCount() {
-            chrome.storage.local.get(['usageCount', 'hasRated', 'ratingDismissed'], function(result) {
-                const usageCount = (result.usageCount || 0) + 1;
-                chrome.storage.local.set({ usageCount: usageCount }, function() {
-                    // Show rating prompt after 5 uses if user hasn't rated or dismissed
-                    if (usageCount >= 5 && !result.hasRated && !result.ratingDismissed) {
-                        setTimeout(() => showRatingModal(), 500);
-                    }
-                });
-            });
+        } catch (e) {
+            console.error("AppManager init error:", e);
         }
+
+        try {
+            // Initialize rating system
+            await RatingManager.init();
+        } catch (e) {
+            console.error("RatingManager init error:", e);
+        }
+
+
 
         function showRatingModal() {
             const modal = document.getElementById('ratingModal');
@@ -411,19 +391,19 @@ try {
         let selectedRating = 0;
 
         stars.forEach(star => {
-            star.addEventListener('mouseenter', function() {
+            star.addEventListener('mouseenter', function () {
                 const rating = parseInt(this.getAttribute('data-rating'));
                 highlightStars(rating);
             });
 
-            star.addEventListener('click', function() {
+            star.addEventListener('click', function () {
                 selectedRating = parseInt(this.getAttribute('data-rating'));
                 highlightStars(selectedRating);
                 rateNowBtn.style.display = 'block';
             });
         });
 
-        document.querySelector('.stars-container').addEventListener('mouseleave', function() {
+        document.querySelector('.stars-container').addEventListener('mouseleave', function () {
             if (selectedRating > 0) {
                 highlightStars(selectedRating);
             } else {
@@ -442,7 +422,7 @@ try {
         }
 
         // Rate Now button - opens Chrome Web Store
-        rateNowBtn.addEventListener('click', function() {
+        rateNowBtn.addEventListener('click', function () {
             const extensionId = chrome.runtime.id;
             const webStoreUrl = `https://chromewebstore.google.com/detail/${extensionId}`;
             chrome.tabs.create({ url: webStoreUrl });
@@ -451,34 +431,20 @@ try {
         });
 
         // Remind Later button
-        document.getElementById('remindLaterBtn').addEventListener('click', function() {
+        document.getElementById('remindLaterBtn').addEventListener('click', function () {
             // Reset usage count so it will ask again after another 5 uses
             chrome.storage.local.set({ usageCount: 0 });
             hideRatingModal();
         });
 
         // Don't Ask Again button
-        document.getElementById('dontAskAgainBtn').addEventListener('click', function() {
+        document.getElementById('dontAskAgainBtn').addEventListener('click', function () {
             chrome.storage.local.set({ ratingDismissed: true });
             hideRatingModal();
         });
 
-        // Increment usage count when saving or autofilling
-        if (saveBtn) {
-            saveBtn.addEventListener('click', function() {
-                incrementUsageCount();
-            }, { once: false });
-        }
-
-        const autofillBtn = document.getElementById('autofill');
-        if (autofillBtn) {
-            autofillBtn.addEventListener('click', function() {
-                incrementUsageCount();
-            }, { once: false });
-        }
-
         // Check if we should show rating modal on load
-        chrome.storage.local.get(['usageCount', 'hasRated', 'ratingDismissed'], function(result) {
+        chrome.storage.local.get(['usageCount', 'hasRated', 'ratingDismissed'], function (result) {
             if ((result.usageCount || 0) >= 5 && !result.hasRated && !result.ratingDismissed) {
                 setTimeout(() => showRatingModal(), 1000);
             }
@@ -497,7 +463,7 @@ function saveCurrentApplicationToTracker(tab, statusEl) {
 
         // Extract company and job title from page (async function)
         chrome.scripting.executeScript({
-            target: {tabId: tab.id},
+            target: { tabId: tab.id },
             function: extractJobInfo,
         }).then((results) => {
             console.log('📦 Raw results from extractJobInfo:', results);
@@ -523,133 +489,133 @@ function saveCurrentApplicationToTracker(tab, statusEl) {
                 console.log('✅ Successfully extracted job info:', jobInfo);
             }
 
-            chrome.storage.local.get(['jobApplications'], function(result) {
+            chrome.storage.local.get(['jobApplications'], function (result) {
                 let applications = result.jobApplications || [];
 
                 // Debug: Log what was extracted
                 console.log('📊 Tracker received job info:', jobInfo);
                 console.log('  • URL:', tab.url);
 
-                    // Check if this job was already added (by URL)
-                    const existingApp = applications.find(app => app.jobUrl === tab.url);
+                // Check if this job was already added (by URL)
+                const existingApp = applications.find(app => app.jobUrl === tab.url);
 
-                    // Clean up empty strings and whitespace
-                    if (jobInfo.company) jobInfo.company = jobInfo.company.trim();
-                    if (jobInfo.position) jobInfo.position = jobInfo.position.trim();
+                // Clean up empty strings and whitespace
+                if (jobInfo.company) jobInfo.company = jobInfo.company.trim();
+                if (jobInfo.position) jobInfo.position = jobInfo.position.trim();
 
-                    // If company is missing or empty, try to extract from URL
-                    if (!jobInfo.company || jobInfo.company === '') {
-                        console.log('🔍 Company not found, attempting URL extraction...');
-                        const urlMatch = tab.url.match(/(?:greenhouse\.io|lever\.co|myworkdayjobs\.com|ashbyhq\.com|bamboohr\.com|gem\.com|jobvite\.com|smartrecruiters\.com)\/([^\/\?]+)/);
-                        if (urlMatch && urlMatch[1]) {
-                            jobInfo.company = urlMatch[1].split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                            console.log('✓ Company extracted from URL:', jobInfo.company);
-                        } else {
-                            jobInfo.company = 'Unknown Company';
-                            console.log('⚠ Using fallback: Unknown Company');
-                        }
+                // If company is missing or empty, try to extract from URL
+                if (!jobInfo.company || jobInfo.company === '') {
+                    console.log('🔍 Company not found, attempting URL extraction...');
+                    const urlMatch = tab.url.match(/(?:greenhouse\.io|lever\.co|myworkdayjobs\.com|ashbyhq\.com|bamboohr\.com|gem\.com|jobvite\.com|smartrecruiters\.com)\/([^\/\?]+)/);
+                    if (urlMatch && urlMatch[1]) {
+                        jobInfo.company = urlMatch[1].split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                        console.log('✓ Company extracted from URL:', jobInfo.company);
+                    } else {
+                        jobInfo.company = 'Unknown Company';
+                        console.log('⚠ Using fallback: Unknown Company');
+                    }
+                }
+
+                // If position is missing or empty, use a fallback
+                if (!jobInfo.position || jobInfo.position === '') {
+                    console.log('⚠ Position not found, using fallback');
+                    jobInfo.position = 'Position Not Detected';
+                }
+
+                // At this point, both should have values
+                console.log('✓ Final values - Company:', jobInfo.company, '| Position:', jobInfo.position);
+
+                // Build notes with extracted metadata
+                let notes = 'Auto-saved from extension';
+                if (jobInfo.jobType) {
+                    notes += `\nJob Type: ${jobInfo.jobType}`;
+                }
+
+                if (existingApp) {
+                    // UPDATE existing application with latest data
+                    existingApp.company = jobInfo.company || existingApp.company;
+                    existingApp.position = jobInfo.position || existingApp.position;
+                    existingApp.location = jobInfo.location || existingApp.location;
+                    existingApp.salary = jobInfo.salary || existingApp.salary;
+                    existingApp.updatedAt = new Date().toISOString();
+
+                    // Update notes if new info is available
+                    if (jobInfo.jobType && !existingApp.notes.includes('Job Type:')) {
+                        existingApp.notes += `\nJob Type: ${jobInfo.jobType}`;
                     }
 
-                    // If position is missing or empty, use a fallback
-                    if (!jobInfo.position || jobInfo.position === '') {
-                        console.log('⚠ Position not found, using fallback');
-                        jobInfo.position = 'Position Not Detected';
+                    // Add timeline entry if status changed or it's been updated
+                    const lastTimeline = existingApp.timeline[existingApp.timeline.length - 1];
+                    if (!lastTimeline || lastTimeline.note !== 'Application data updated') {
+                        existingApp.timeline.push({
+                            status: existingApp.status || 'Applied',
+                            date: new Date().toISOString().split('T')[0],
+                            note: 'Application data updated'
+                        });
                     }
 
-                    // At this point, both should have values
-                    console.log('✓ Final values - Company:', jobInfo.company, '| Position:', jobInfo.position);
-
-                    // Build notes with extracted metadata
-                    let notes = 'Auto-saved from extension';
-                    if (jobInfo.jobType) {
-                        notes += `\nJob Type: ${jobInfo.jobType}`;
-                    }
-
-                    if (existingApp) {
-                            // UPDATE existing application with latest data
-                            existingApp.company = jobInfo.company || existingApp.company;
-                            existingApp.position = jobInfo.position || existingApp.position;
-                            existingApp.location = jobInfo.location || existingApp.location;
-                            existingApp.salary = jobInfo.salary || existingApp.salary;
-                            existingApp.updatedAt = new Date().toISOString();
-
-                            // Update notes if new info is available
-                            if (jobInfo.jobType && !existingApp.notes.includes('Job Type:')) {
-                                existingApp.notes += `\nJob Type: ${jobInfo.jobType}`;
+                    chrome.storage.local.set({ jobApplications: applications }, function () {
+                        if (chrome.runtime.lastError) {
+                            console.error('❌ Error saving to tracker:', chrome.runtime.lastError);
+                            if (statusEl) {
+                                statusEl.textContent = '⚠ Tracker save failed';
+                                setTimeout(() => statusEl.textContent = '', 4000);
                             }
-
-                            // Add timeline entry if status changed or it's been updated
-                            const lastTimeline = existingApp.timeline[existingApp.timeline.length - 1];
-                            if (!lastTimeline || lastTimeline.note !== 'Application data updated') {
-                                existingApp.timeline.push({
-                                    status: existingApp.status || 'Applied',
-                                    date: new Date().toISOString().split('T')[0],
-                                    note: 'Application data updated'
-                                });
-                            }
-
-                            chrome.storage.local.set({ jobApplications: applications }, function() {
-                                if (chrome.runtime.lastError) {
-                                    console.error('❌ Error saving to tracker:', chrome.runtime.lastError);
-                                    if (statusEl) {
-                                        statusEl.textContent = '⚠ Tracker save failed';
-                                        setTimeout(() => statusEl.textContent = '', 4000);
-                                    }
-                                } else {
-                                    console.log('✅ Job application UPDATED in tracker:', existingApp.company, '-', existingApp.position);
-                                    if (statusEl) {
-                                        statusEl.textContent = '✓ Autofill complete & tracked! (updated)';
-                                        setTimeout(() => statusEl.textContent = '', 3000);
-                                    }
-                                }
-                            });
                         } else {
-                            // CREATE new application
-                            const newApp = {
-                                id: 'app_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                                company: jobInfo.company,
-                                position: jobInfo.position,
-                                location: jobInfo.location || '',
-                                salary: jobInfo.salary || '',
-                                applicationDate: new Date().toISOString().split('T')[0],
-                                status: 'Applied',
-                                jobUrl: tab.url,
-                                contactName: '',
-                                contactEmail: '',
-                                notes: notes,
-                                createdAt: new Date().toISOString(),
-                                updatedAt: new Date().toISOString(),
-                                timeline: [{
-                                    status: 'Applied',
-                                    date: new Date().toISOString().split('T')[0],
-                                    note: 'Application submitted via Hired Always'
-                                }]
-                            };
-
-                            applications.push(newApp);
-                            chrome.storage.local.set({ jobApplications: applications }, function() {
-                                if (chrome.runtime.lastError) {
-                                    console.error('❌ Error saving to tracker:', chrome.runtime.lastError);
-                                    if (statusEl) {
-                                        statusEl.textContent = '⚠ Tracker save failed';
-                                        setTimeout(() => statusEl.textContent = '', 4000);
-                                    }
-                                } else {
-                                    console.log('✅ Job application CREATED in tracker:', newApp.company, '-', newApp.position);
-                                    if (statusEl) {
-                                        statusEl.textContent = '✓ Autofill complete & tracked!';
-                                        setTimeout(() => statusEl.textContent = '', 3000);
-                                    }
-                                }
-                            });
+                            console.log('✅ Job application UPDATED in tracker:', existingApp.company, '-', existingApp.position);
+                            if (statusEl) {
+                                statusEl.textContent = '✓ Autofill complete & tracked! (updated)';
+                                setTimeout(() => statusEl.textContent = '', 3000);
+                            }
                         }
-                });
+                    });
+                } else {
+                    // CREATE new application
+                    const newApp = {
+                        id: 'app_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                        company: jobInfo.company,
+                        position: jobInfo.position,
+                        location: jobInfo.location || '',
+                        salary: jobInfo.salary || '',
+                        applicationDate: new Date().toISOString().split('T')[0],
+                        status: 'Applied',
+                        jobUrl: tab.url,
+                        contactName: '',
+                        contactEmail: '',
+                        notes: notes,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                        timeline: [{
+                            status: 'Applied',
+                            date: new Date().toISOString().split('T')[0],
+                            note: 'Application submitted via Hired Always'
+                        }]
+                    };
+
+                    applications.push(newApp);
+                    chrome.storage.local.set({ jobApplications: applications }, function () {
+                        if (chrome.runtime.lastError) {
+                            console.error('❌ Error saving to tracker:', chrome.runtime.lastError);
+                            if (statusEl) {
+                                statusEl.textContent = '⚠ Tracker save failed';
+                                setTimeout(() => statusEl.textContent = '', 4000);
+                            }
+                        } else {
+                            console.log('✅ Job application CREATED in tracker:', newApp.company, '-', newApp.position);
+                            if (statusEl) {
+                                statusEl.textContent = '✓ Autofill complete & tracked!';
+                                setTimeout(() => statusEl.textContent = '', 3000);
+                            }
+                        }
+                    });
+                }
+            });
         }).catch(err => {
             console.error('❌ Error executing extractJobInfo script:', err);
             console.log('⚠️ Proceeding with tracker save using URL-based fallbacks...');
 
             // Even if extraction fails completely, still save the application with fallback values
-            chrome.storage.local.get(['jobApplications'], function(result) {
+            chrome.storage.local.get(['jobApplications'], function (result) {
                 let applications = result.jobApplications || [];
 
                 // Use URL-based extraction as fallback
@@ -780,13 +746,13 @@ async function extractJobInfo() {
 
     // Extract job title with enhanced selectors
     let jobTitle = document.querySelector('h1')?.innerText ||
-                   document.querySelector('h2')?.innerText ||
-                   document.querySelector('[class*="job-title"]')?.innerText ||
-                   document.querySelector('[class*="jobTitle"]')?.innerText ||
-                   document.querySelector('[data-testid*="job-title"]')?.innerText ||
-                   document.querySelector('[class*="position"]')?.innerText ||
-                   document.querySelector('[class*="JobTitle"]')?.innerText ||
-                   document.querySelector('[id*="job-title"]')?.innerText || '';
+        document.querySelector('h2')?.innerText ||
+        document.querySelector('[class*="job-title"]')?.innerText ||
+        document.querySelector('[class*="jobTitle"]')?.innerText ||
+        document.querySelector('[data-testid*="job-title"]')?.innerText ||
+        document.querySelector('[class*="position"]')?.innerText ||
+        document.querySelector('[class*="JobTitle"]')?.innerText ||
+        document.querySelector('[id*="job-title"]')?.innerText || '';
 
     // Fallback: try to extract from page title
     if (!jobTitle || jobTitle.length < 3) {
@@ -803,9 +769,9 @@ async function extractJobInfo() {
         if (!companyName) return false;
         const trimmed = companyName.trim();
         return trimmed.length > 2 &&
-               trimmed.length < 100 &&
-               !trimmed.toLowerCase().includes('apply') &&
-               !trimmed.toLowerCase().includes('application');
+            trimmed.length < 100 &&
+            !trimmed.toLowerCase().includes('apply') &&
+            !trimmed.toLowerCase().includes('application');
     }
 
     // Extract company name with enhanced selectors
@@ -842,8 +808,8 @@ async function extractJobInfo() {
     // Try Greenhouse-specific selectors if no company found yet
     if (!company) {
         const greenhouseCompany = document.querySelector('.company-name')?.innerText ||
-                                 document.querySelector('[class*="app-title"]')?.innerText ||
-                                 document.querySelector('div[class*="application--header"] h2')?.innerText;
+            document.querySelector('[class*="app-title"]')?.innerText ||
+            document.querySelector('div[class*="application--header"] h2')?.innerText;
 
         if (greenhouseCompany) {
             const cleaned = greenhouseCompany.trim().replace(/\s*\(.*?\)\s*/g, '').trim();
@@ -885,8 +851,8 @@ async function extractJobInfo() {
     // If no company found via selectors, try to extract from meta tags
     if (!company) {
         const metaCompany = document.querySelector('meta[property="og:site_name"]') ||
-                           document.querySelector('meta[name="company"]') ||
-                           document.querySelector('meta[property="og:description"]');
+            document.querySelector('meta[name="company"]') ||
+            document.querySelector('meta[property="og:description"]');
         if (metaCompany && metaCompany.content) {
             company = metaCompany.content.trim();
             // If it's the description, try to extract company name from it
@@ -1594,7 +1560,7 @@ async function autofillPage() {
                 Array.from(clone.querySelectorAll('input, textarea, select, button')).forEach(el => el.remove());
                 const text = clone.innerText.trim().split('\n')[0].trim();
                 if (text && text.length > 3 && text.length < 300) return text;
-            } catch (e) {}
+            } catch (e) { }
             current = current.parentElement;
         }
 
@@ -1607,18 +1573,18 @@ async function autofillPage() {
 
         return '';
     }
-    
+
     async function findOptionsForInput(element) {
         let options = [];
         const parent = element.parentElement;
 
         // Button group detection
         if (element.tagName.toLowerCase() === 'button' || element.getAttribute('role') === 'button') {
-             const buttonGroup = parent.querySelectorAll('button, [role="button"]');
-             if(buttonGroup.length > 1) {
-                 options = Array.from(buttonGroup).map(btn => btn.innerText.trim());
-                 if (options.length > 0) return { options, source: parent };
-             }
+            const buttonGroup = parent.querySelectorAll('button, [role="button"]');
+            if (buttonGroup.length > 1) {
+                options = Array.from(buttonGroup).map(btn => btn.innerText.trim());
+                if (options.length > 0) return { options, source: parent };
+            }
         }
 
         if (element.tagName.toLowerCase() === 'select') {
@@ -1638,14 +1604,14 @@ async function autofillPage() {
 
         // Check if this is a button-based dropdown (common in modern forms)
         const isButtonDropdown = element.tagName.toLowerCase() === 'button' &&
-                                (element.hasAttribute('aria-haspopup') ||
-                                 element.querySelector('svg') ||
-                                 element.innerText.toLowerCase().includes('select'));
+            (element.hasAttribute('aria-haspopup') ||
+                element.querySelector('svg') ||
+                element.innerText.toLowerCase().includes('select'));
 
         const isComboBox = element.getAttribute('role') === 'combobox' ||
-                          element.hasAttribute('aria-controls') ||
-                          element.getAttribute('aria-haspopup') === 'listbox' ||
-                          isButtonDropdown;
+            element.hasAttribute('aria-controls') ||
+            element.getAttribute('aria-haspopup') === 'listbox' ||
+            isButtonDropdown;
 
         if (isComboBox) {
             await simulateClick(element);
@@ -1875,7 +1841,7 @@ async function autofillPage() {
 
         const payload = { contents: [{ role: "user", parts }] };
         const apiKey = 'AIzaSyAIaKT-GSfWOgaF_bH9hyEgJMwsK1cGqVU';
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
         try {
             const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -1924,7 +1890,7 @@ async function autofillPage() {
             const descDiv = document.querySelector('#job-description, [class*="job-description"], [class*="jobdescription"]');
             if (descDiv) jobDescription = descDiv.innerText;
         }
-    } catch(e) { console.error("Hired Always: Could not parse page context:", e); }
+    } catch (e) { console.error("Hired Always: Could not parse page context:", e); }
 
     // userData was already loaded at the start of the function
     console.log("Hired Always: Starting form filling process...");
@@ -1975,7 +1941,7 @@ Return ONLY a valid JSON array with this exact structure:
                 );
             }
         }
-    } catch(e) {
+    } catch (e) {
         console.error("Hired Always: Could not parse work history from resume.", e);
         console.log("Raw AI response for debugging:", historyJson);
     }
@@ -2027,18 +1993,18 @@ Return ONLY a valid JSON array with this structure:
                 );
             }
         }
-    } catch(e) {
+    } catch (e) {
         console.error("Hired Always: Could not parse education from resume.", e);
         console.log("Raw AI education response for debugging:", educationJson);
     }
 
     await new Promise(resolve => setTimeout(resolve, 500)); // Wait for the page to finish loading dynamic content
-    
+
     const demographicKeywords = ['race', 'ethnicity', 'gender', 'disability', 'veteran', 'sexual orientation'];
     let usedAnswers = new Set();
     let experienceIndex = 0;
     let educationIndex = 0;
-    
+
     // Dynamic form element discovery - finds ALL potential form inputs
     function discoverFormElements() {
         const selectors = [
@@ -2208,7 +2174,7 @@ Return ONLY a valid JSON array with this structure:
                     continue;
                 }
             }
-            
+
             // Log field being processed for better debugging
             console.log("Hired Always: Processing form element:", el);
 
@@ -2390,10 +2356,10 @@ Return ONLY a valid JSON array with this structure:
                 console.log('⏭️ Skipping other demographic field');
                 continue;
             }
-            
+
             // --- Resume Field ---
             if (combinedText.includes('resume') || combinedText.includes('cv')) {
-                 if (el.type === 'file') {
+                if (el.type === 'file') {
                     // Attempt to attach resume file
                     if (userData.resume && userData.resumeFileName) {
                         console.log("Hired Always: Attempting to attach resume file...");
@@ -2439,7 +2405,7 @@ Return ONLY a valid JSON array with this structure:
                     }
                     continue;
                 }
-                if(elType === 'textarea' || el.isContentEditable) {
+                if (elType === 'textarea' || el.isContentEditable) {
                     const resumeText = await getAIResponse("Summarize the attached resume into a plain text version, focusing on skills and experience.", userData);
                     if (resumeText) await simulateTyping(el, resumeText);
                     continue;
@@ -2451,9 +2417,9 @@ Return ONLY a valid JSON array with this structure:
             const isCoverLetterButton =
                 el.dataset.testid === 'cover_letter-text' ||
                 (elType === 'button' &&
-                 el.innerText.toLowerCase().includes('enter manually') &&
-                 (combinedText.includes('cover letter') ||
-                  el.closest('.file-upload')?.querySelector('[id*="cover_letter"], [for*="cover_letter"]')));
+                    el.innerText.toLowerCase().includes('enter manually') &&
+                    (combinedText.includes('cover letter') ||
+                        el.closest('.file-upload')?.querySelector('[id*="cover_letter"], [for*="cover_letter"]')));
 
             if (isCoverLetterButton) {
                 console.log('📝 Found cover letter "Enter manually" button');
@@ -2462,9 +2428,9 @@ Return ONLY a valid JSON array with this structure:
 
                 // Try multiple selectors to find the textarea that appears
                 const coverLetterTextArea = document.getElementById('cover_letter_text') ||
-                                           document.querySelector('textarea[id*="cover_letter"]') ||
-                                           document.querySelector('textarea[name*="cover_letter"]') ||
-                                           document.querySelector('[contenteditable="true"][class*="cover"]');
+                    document.querySelector('textarea[id*="cover_letter"]') ||
+                    document.querySelector('textarea[name*="cover_letter"]') ||
+                    document.querySelector('[contenteditable="true"][class*="cover"]');
 
                 if (coverLetterTextArea) {
                     let coverLetterText = '';
@@ -2515,12 +2481,12 @@ Return ONLY a valid JSON array with this structure:
                 }
                 continue; // Move to the next element
             }
-            
+
             // --- Work Experience ---
             const isWorkExperienceField = combinedText.includes('experience') || combinedText.includes('employment') ||
-                                         combinedText.includes('work history') || combinedText.includes('job history') ||
-                                         (workHistory[experienceIndex] && (combinedText.includes(workHistory[experienceIndex].company.toLowerCase()) ||
-                                          combinedText.includes(workHistory[experienceIndex].jobTitle.toLowerCase())));
+                combinedText.includes('work history') || combinedText.includes('job history') ||
+                (workHistory[experienceIndex] && (combinedText.includes(workHistory[experienceIndex].company.toLowerCase()) ||
+                    combinedText.includes(workHistory[experienceIndex].jobTitle.toLowerCase())));
 
             if (isWorkExperienceField && experienceIndex < workHistory.length) {
                 const currentJob = workHistory[experienceIndex];
@@ -2547,7 +2513,7 @@ Return ONLY a valid JSON array with this structure:
                 }
                 // Responsibilities/Description
                 else if (combinedText.includes('responsibilit') || combinedText.includes('dut') ||
-                         combinedText.includes('description') || combinedText.includes('achievement')) {
+                    combinedText.includes('description') || combinedText.includes('achievement')) {
                     await simulateTyping(el, currentJob.responsibilities);
 
                     // Move to next job and look for "Add Another" button
@@ -2559,7 +2525,7 @@ Return ONLY a valid JSON array with this structure:
                         const addButton = Array.from(document.querySelectorAll('button, [role="button"]')).find(b => {
                             const btnText = b.innerText.toLowerCase();
                             return (btnText.includes('add') && (btnText.includes('experience') || btnText.includes('another') || btnText.includes('more'))) ||
-                                   btnText.includes('+ experience');
+                                btnText.includes('+ experience');
                         });
                         if (addButton) {
                             await simulateClick(addButton);
@@ -2572,10 +2538,10 @@ Return ONLY a valid JSON array with this structure:
 
             // --- Education ---
             const isEducationField = combinedText.includes('education') || combinedText.includes('school') ||
-                                    combinedText.includes('university') || combinedText.includes('college') ||
-                                    combinedText.includes('degree') || combinedText.includes('academic') ||
-                                    (educationHistory[educationIndex] && (combinedText.includes(educationHistory[educationIndex].school.toLowerCase()) ||
-                                     combinedText.includes(educationHistory[educationIndex].degree.toLowerCase())));
+                combinedText.includes('university') || combinedText.includes('college') ||
+                combinedText.includes('degree') || combinedText.includes('academic') ||
+                (educationHistory[educationIndex] && (combinedText.includes(educationHistory[educationIndex].school.toLowerCase()) ||
+                    combinedText.includes(educationHistory[educationIndex].degree.toLowerCase())));
 
             if (isEducationField && educationIndex < educationHistory.length) {
                 const currentEd = educationHistory[educationIndex];
@@ -2588,13 +2554,13 @@ Return ONLY a valid JSON array with this structure:
                 }
                 // Degree
                 else if (combinedText.includes('degree') || combinedText.includes('qualification') ||
-                         combinedText.includes('level of education')) {
+                    combinedText.includes('level of education')) {
                     await simulateTyping(el, currentEd.degree);
                     continue;
                 }
                 // Field of study/Major
                 else if (combinedText.includes('major') || combinedText.includes('field') ||
-                         combinedText.includes('study') || combinedText.includes('concentration')) {
+                    combinedText.includes('study') || combinedText.includes('concentration')) {
                     await simulateTyping(el, currentEd.fieldOfStudy);
                     continue;
                 }
@@ -2612,7 +2578,7 @@ Return ONLY a valid JSON array with this structure:
                 }
                 // End date / Graduation date
                 else if ((combinedText.includes('end') || combinedText.includes('graduation') || combinedText.includes('completion')) &&
-                         (combinedText.includes('date') || combinedText.includes('year'))) {
+                    (combinedText.includes('date') || combinedText.includes('year'))) {
                     await simulateTyping(el, currentEd.endDate || 'Expected 2024');
 
                     // Move to next education entry
@@ -2624,7 +2590,7 @@ Return ONLY a valid JSON array with this structure:
                         const addButton = Array.from(document.querySelectorAll('button, [role="button"]')).find(b => {
                             const btnText = b.innerText.toLowerCase();
                             return (btnText.includes('add') && (btnText.includes('education') || btnText.includes('another') || btnText.includes('more'))) ||
-                                   btnText.includes('+ education');
+                                btnText.includes('+ education');
                         });
                         if (addButton) {
                             await simulateClick(addButton);
@@ -2637,7 +2603,7 @@ Return ONLY a valid JSON array with this structure:
 
             // --- Certifications and Skills ---
             if ((combinedText.includes('certification') || combinedText.includes('license') ||
-                 combinedText.includes('credential')) && !isDemographic) {
+                combinedText.includes('credential')) && !isDemographic) {
                 const certPrompt = `You are analyzing a resume to answer a certification/license question ACCURATELY.
 
 **CRITICAL INSTRUCTION**: Only mention certifications, licenses, or credentials that are EXPLICITLY stated in the resume. DO NOT assume or infer certifications that are not clearly mentioned.
@@ -2667,9 +2633,9 @@ Return ONLY a valid JSON array with this structure:
 
             // Technical skills / Programming languages
             if ((combinedText.includes('programming') || combinedText.includes('language') ||
-                 combinedText.includes('framework') || combinedText.includes('tool')) &&
+                combinedText.includes('framework') || combinedText.includes('tool')) &&
                 (combinedText.includes('skill') || combinedText.includes('familiar') ||
-                 combinedText.includes('proficien') || combinedText.includes('experience'))) {
+                    combinedText.includes('proficien') || combinedText.includes('experience'))) {
                 const techSkillsPrompt = `You are analyzing a resume to identify technical skills that ACCURATELY match the question.
 
 **CRITICAL REQUIREMENTS:**
@@ -2793,7 +2759,7 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                     // Context-aware fallback selection
                     if (questionType === 'work-status') {
                         bestMatch = options.find(opt => opt.toLowerCase().includes('authorized') || opt.toLowerCase().includes('citizen')) ||
-                                   options.find(opt => opt.toLowerCase().includes('yes'));
+                            options.find(opt => opt.toLowerCase().includes('yes'));
                     } else if (questionType === 'relocation') {
                         bestMatch = options.find(opt => opt.toLowerCase().includes('yes') || opt.toLowerCase().includes('willing'));
                     } else if (questionType === 'notice-period') {
@@ -2882,7 +2848,7 @@ Return ONLY the exact text of the selected option. No explanation, no additional
 
                 continue;
             }
-            
+
             // --- Standard Text Fields ---
             if (elType === 'input' || elType === 'textarea' || el.isContentEditable) {
                 let valueToType = '';
@@ -3054,8 +3020,8 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                             valueToType = userData.firstName;
                         }
                         else if ((combinedText.includes('last') && combinedText.includes('name')) ||
-                                 combinedText.includes('lastname') || combinedText.includes('surname') ||
-                                 combinedText.includes('family name')) {
+                            combinedText.includes('lastname') || combinedText.includes('surname') ||
+                            combinedText.includes('family name')) {
                             valueToType = userData.lastName;
                         }
                         // If no match found and we have a good question, use AI
@@ -3119,11 +3085,11 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                 }
                 // Address fields
                 else if ((combinedText.includes('address') && !combinedText.includes('email')) ||
-                         combinedText.includes('street')) {
+                    combinedText.includes('street')) {
                     valueToType = userData.address;
                 }
                 else if (combinedText.includes('city') || combinedText.includes('town') ||
-                         (combinedText.includes('location') && !combinedText.includes('work') && !combinedText.includes('job'))) {
+                    (combinedText.includes('location') && !combinedText.includes('work') && !combinedText.includes('job'))) {
                     // Check if this is a React Select combobox (like Greenhouse's location field)
                     if (el.getAttribute('role') === 'combobox' && el.hasAttribute('aria-autocomplete')) {
                         // Type the city and let autocomplete handle it
@@ -3147,7 +3113,7 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                     continue;
                 }
                 else if (combinedText.includes('state') || combinedText.includes('province') ||
-                         combinedText.includes('region')) {
+                    combinedText.includes('region')) {
                     valueToType = userData.state;
                 }
                 else if (combinedText.includes('zip') || combinedText.includes('postal')) {
@@ -3166,17 +3132,17 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                     valueToType = userData.linkedinUrl;
                 }
                 else if (combinedText.includes('website') || combinedText.includes('portfolio') ||
-                         combinedText.includes('personal site') || combinedText.includes('url')) {
+                    combinedText.includes('personal site') || combinedText.includes('url')) {
                     valueToType = userData.portfolioUrl;
                 }
                 // Availability and start date
                 else if (combinedText.includes('available') || combinedText.includes('start date') ||
-                         combinedText.includes('availability')) {
+                    combinedText.includes('availability')) {
                     valueToType = "Immediately"; // Simple default, user can change if needed
                 }
                 // Salary expectations
                 else if (combinedText.includes('salary') || combinedText.includes('compensation') ||
-                         combinedText.includes('expected pay') || combinedText.includes('wage')) {
+                    combinedText.includes('expected pay') || combinedText.includes('wage')) {
                     valueToType = "Negotiable"; // Simple default, user can change if needed
                 }
                 // Years of experience (with specific technology or general)
@@ -3200,8 +3166,8 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                 }
                 // Skills/Technologies
                 else if (combinedText.includes('skills') || combinedText.includes('technologies') ||
-                         combinedText.includes('expertise') || combinedText.includes('proficienc') ||
-                         combinedText.includes('technical background') || combinedText.includes('qualifications')) {
+                    combinedText.includes('expertise') || combinedText.includes('proficienc') ||
+                    combinedText.includes('technical background') || combinedText.includes('qualifications')) {
                     // Always use additionalInfo first if available
                     if (userData.additionalInfo && userData.additionalInfo.trim()) {
                         valueToType = userData.additionalInfo.trim();
@@ -3215,7 +3181,7 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                 }
                 // Authorization to work
                 else if (combinedText.includes('authorized') || combinedText.includes('authorization') ||
-                         combinedText.includes('eligible to work') || combinedText.includes('work permit')) {
+                    combinedText.includes('eligible to work') || combinedText.includes('work permit')) {
                     // Use user's saved citizenship preference, default to "Yes" if not set
                     valueToType = userData.citizenship || "Yes";
                     console.log('🏷️ Using saved work authorization:', valueToType);
@@ -3235,7 +3201,7 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                 }
                 // Why are you interested / Why this company
                 else if ((combinedText.includes('why') && (combinedText.includes('interested') || combinedText.includes('applying'))) ||
-                         (combinedText.includes('why') && (combinedText.includes('company') || combinedText.includes('role') || combinedText.includes('position')))) {
+                    (combinedText.includes('why') && (combinedText.includes('company') || combinedText.includes('role') || combinedText.includes('position')))) {
                     // Check if user has additionalInfo that can answer this
                     if (userData.additionalInfo && userData.additionalInfo.trim().length > 50) {
                         valueToType = `I am interested because my skills align well with this role. ${userData.additionalInfo.split('.')[0]}.`;
@@ -3304,8 +3270,8 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                     if (cleanQuestion.length > 10 && !isDemographic) {
                         // First, try to use additionalInfo if the question seems general
                         if ((cleanQuestion.toLowerCase().includes('about yourself') ||
-                             cleanQuestion.toLowerCase().includes('background') ||
-                             cleanQuestion.toLowerCase().includes('experience')) &&
+                            cleanQuestion.toLowerCase().includes('background') ||
+                            cleanQuestion.toLowerCase().includes('experience')) &&
                             userData.additionalInfo && userData.additionalInfo.trim().length > 30) {
                             // Use user's profile directly for general questions
                             await simulateTyping(el, userData.additionalInfo.trim());
