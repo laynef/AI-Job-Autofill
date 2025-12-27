@@ -20,7 +20,7 @@ const CONSTANTS = {
         WITHDRAWN: 'Withdrawn'
     },
     APP_NAME: 'Hired Always',
-    VERSION: '2.5'
+    VERSION: '3.6'
 };
 
 // App Manager - Simplified for free version
