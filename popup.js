@@ -38,7 +38,11 @@ try {
                                 console.error("Save error:", chrome.runtime.lastError);
                             } else {
                                 if (statusEl) {
-                                    statusEl.textContent = 'Information saved!';
+                                    if (data.resume) {
+                                        statusEl.textContent = 'Information & Resume saved!';
+                                    } else {
+                                        statusEl.textContent = 'Information saved!';
+                                    }
                                     statusEl.style.color = '#16a34a';
                                 }
                                 if (data.resumeFileName && resumeFileNameEl) {
@@ -46,22 +50,50 @@ try {
                                     resumeFileNameEl.style.color = '';
                                 }
                                 // Increment usage count on save
-                                incrementUsageCount();
+                                RatingManager.incrementUsageCount();
                             }
                             setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2500);
                         });
                     };
 
                     if (newResumeFile) {
+                        if (newResumeFile.size === 0) {
+                            statusEl.textContent = 'Error: Selected file is empty (0 bytes).';
+                            statusEl.style.color = '#ef4444';
+                            saveDataToStorage(dataToSave);
+                            return;
+                        }
+
                         const reader = new FileReader();
                         reader.onload = function (e) {
                             dataToSave.resume = e.target.result; // The Base64 string
                             dataToSave.resumeFileName = newResumeFile.name;
                             saveDataToStorage(dataToSave);
                         };
-                        reader.onerror = function (err) {
-                            statusEl.textContent = 'Error reading file.';
-                            console.error("File reading error:", err);
+                        reader.onerror = function (event) {
+                            console.error("File reading error details:", reader.error);
+                            if (reader.error) {
+                                console.error("Error Name:", reader.error.name);
+                                console.error("Error Message:", reader.error.message);
+                            }
+
+                            // Still save the text data even if file fails
+                            saveDataToStorage(dataToSave);
+
+                            let errorMsg = 'Saved text info, but failed to read resume file: ';
+                            if (reader.error && reader.error.name === 'NotReadableError') {
+                                errorMsg += 'Access denied. Please re-select the file.';
+                                // Clear input so user can re-select the same file to refresh permissions
+                                if (resumeFileInput) resumeFileInput.value = '';
+                            } else {
+                                errorMsg += (reader.error ? reader.error.name : 'Unknown error');
+                            }
+
+                            // Override the success message from saveDataToStorage
+                            setTimeout(() => {
+                                statusEl.textContent = errorMsg;
+                                statusEl.style.color = '#ef4444'; // Red for error/warning
+                            }, 100); // Small delay to ensure it overrides the "Saved!" message
                         };
                         reader.readAsDataURL(newResumeFile);
                     } else {
@@ -91,7 +123,7 @@ try {
                 try {
                     // App is free for everyone - no restrictions
                     statusEl.textContent = 'Loading your data...';
-                    incrementUsageCount();
+                    RatingManager.incrementUsageCount();
 
                     // FIRST: Load user data from storage (in popup context where it's reliable)
                     const fields = ['firstName', 'lastName', 'email', 'phone', 'pronouns', 'address', 'city', 'state', 'zipCode', 'country', 'linkedinUrl', 'portfolioUrl', 'resume', 'resumeFileName', 'additionalInfo', 'coverLetter', 'gender', 'hispanic', 'race', 'veteran', 'disability', 'citizenship', 'sponsorship'];
@@ -373,82 +405,6 @@ try {
             console.error("RatingManager init error:", e);
         }
 
-
-
-        function showRatingModal() {
-            const modal = document.getElementById('ratingModal');
-            modal.style.display = 'flex';
-        }
-
-        function hideRatingModal() {
-            const modal = document.getElementById('ratingModal');
-            modal.style.display = 'none';
-        }
-
-        // Star rating interaction
-        const stars = document.querySelectorAll('.star');
-        const rateNowBtn = document.getElementById('rateNowBtn');
-        let selectedRating = 0;
-
-        stars.forEach(star => {
-            star.addEventListener('mouseenter', function () {
-                const rating = parseInt(this.getAttribute('data-rating'));
-                highlightStars(rating);
-            });
-
-            star.addEventListener('click', function () {
-                selectedRating = parseInt(this.getAttribute('data-rating'));
-                highlightStars(selectedRating);
-                rateNowBtn.style.display = 'block';
-            });
-        });
-
-        document.querySelector('.stars-container').addEventListener('mouseleave', function () {
-            if (selectedRating > 0) {
-                highlightStars(selectedRating);
-            } else {
-                highlightStars(0);
-            }
-        });
-
-        function highlightStars(rating) {
-            stars.forEach((star, index) => {
-                if (index < rating) {
-                    star.classList.add('filled');
-                } else {
-                    star.classList.remove('filled');
-                }
-            });
-        }
-
-        // Rate Now button - opens Chrome Web Store
-        rateNowBtn.addEventListener('click', function () {
-            const extensionId = chrome.runtime.id;
-            const webStoreUrl = `https://chromewebstore.google.com/detail/${extensionId}`;
-            chrome.tabs.create({ url: webStoreUrl });
-            chrome.storage.local.set({ hasRated: true });
-            hideRatingModal();
-        });
-
-        // Remind Later button
-        document.getElementById('remindLaterBtn').addEventListener('click', function () {
-            // Reset usage count so it will ask again after another 5 uses
-            chrome.storage.local.set({ usageCount: 0 });
-            hideRatingModal();
-        });
-
-        // Don't Ask Again button
-        document.getElementById('dontAskAgainBtn').addEventListener('click', function () {
-            chrome.storage.local.set({ ratingDismissed: true });
-            hideRatingModal();
-        });
-
-        // Check if we should show rating modal on load
-        chrome.storage.local.get(['usageCount', 'hasRated', 'ratingDismissed'], function (result) {
-            if ((result.usageCount || 0) >= 5 && !result.hasRated && !result.ratingDismissed) {
-                setTimeout(() => showRatingModal(), 1000);
-            }
-        });
     });
 } catch (e) {
     console.error("A fatal error occurred in popup.js:", e);

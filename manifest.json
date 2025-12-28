@@ -1,9 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Hired Always - AI Job Application Assistant",
-  "version": "3.6",
+  "version": "3.13",
   "description": "100% FREE AI job autofill - Fill applications instantly and track your job search. No ads, no subscriptions!",
-  "permissions": ["storage", "scripting", "activeTab"],
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "scripting",
+    "activeTab"
+  ],
   "host_permissions": [
     "*://job-boards.greenhouse.io/*",
     "*://boards.greenhouse.io/*",

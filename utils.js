@@ -20,7 +20,7 @@ const CONSTANTS = {
         WITHDRAWN: 'Withdrawn'
     },
     APP_NAME: 'Hired Always',
-    VERSION: '3.6'
+    VERSION: '3.13'
 };
 
 // App Manager - Simplified for free version
@@ -252,7 +252,7 @@ const PerformanceUtils = {
      */
     throttle(func, limit) {
         let inThrottle;
-        return function(...args) {
+        return function (...args) {
             if (!inThrottle) {
                 func.apply(this, args);
                 inThrottle = true;
