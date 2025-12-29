@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Query
 from fastapi.responses import HTMLResponse, Response, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -11,8 +11,9 @@ from adcash_config import get_zone_id, get_primary_zone_id, ANTI_ADBLOCK_CONFIG
 app = FastAPI(
     title="Hired Always",
     description="AI-powered job application assistant",
-    version="1.0.0"
+    version="1.0.0",
 )
+
 
 def get_adblock_lib_path():
     """Get the dynamically generated anti-adblock library path"""
@@ -31,7 +32,7 @@ def get_adblock_lib_path():
             "static/js/*lib*.js",
             "static/js/[a-z][0-9][a-z][0-9][a-z][0-9]*.js",  # Pattern like x7n4vw...
             "static/js/[tmzwk]*[0-9a-f]*.js",  # Pattern matching the prefix + hex
-            "static/js/[a-z0-9]*.js"  # Pattern for any alphanumeric filename
+            "static/js/[a-z0-9]*.js",  # Pattern for any alphanumeric filename
         ]
 
         for pattern in patterns:
@@ -44,6 +45,7 @@ def get_adblock_lib_path():
     except Exception as e:
         print(f"Error in get_adblock_lib_path: {e}")
         return None
+
 
 # Security Headers Middleware
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -78,7 +80,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
 
         # Strict Transport Security - Force HTTPS (31536000 = 1 year)
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains; preload"
+        )
 
         # Referrer Policy - Control referrer information
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -92,7 +96,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "magnetometer=()",
             "microphone=()",
             "payment=(self)",
-            "usb=()"
+            "usb=()",
         ]
         response.headers["Permissions-Policy"] = ", ".join(permissions_policy)
 
@@ -101,6 +105,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             del response.headers["Server"]
 
         return response
+
 
 # Add security headers middleware (add this before CORS)
 app.add_middleware(SecurityHeadersMiddleware)
@@ -111,7 +116,7 @@ app.add_middleware(
     allow_origins=[
         "chrome-extension://*",
         "https://hiredalways.com",
-        "http://localhost:*"
+        "http://localhost:*",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -120,6 +125,7 @@ app.add_middleware(
 
 # Import and include API router
 from api import router as api_router
+
 app.include_router(api_router)
 
 # Mount static files (CSS, images, etc.)
@@ -128,21 +134,26 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Setup Jinja2 templates
 templates = Jinja2Templates(directory="templates")
 
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """Home page - Main landing page"""
     adblock_lib_path = get_adblock_lib_path()
     # Get zone ID based on the host domain
     host = request.headers.get("host", "hiredalways.com")
-    domain = host.split(':')[0]  # Remove port if present
+    domain = host.split(":")[0]  # Remove port if present
     zone_id = get_zone_id(domain) or get_primary_zone_id()
 
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "adblock_lib_path": adblock_lib_path,
-        "adcash_zone_id": zone_id,
-        "adblock_enabled": ANTI_ADBLOCK_CONFIG.get('enabled', True)
-    })
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "adblock_lib_path": adblock_lib_path,
+            "adcash_zone_id": zone_id,
+            "adblock_enabled": ANTI_ADBLOCK_CONFIG.get("enabled", True),
+        },
+    )
+
 
 @app.get("/index.html", response_class=HTMLResponse)
 async def home_alt(request: Request):
@@ -150,15 +161,19 @@ async def home_alt(request: Request):
     adblock_lib_path = get_adblock_lib_path()
     # Get zone ID based on the host domain
     host = request.headers.get("host", "hiredalways.com")
-    domain = host.split(':')[0]  # Remove port if present
+    domain = host.split(":")[0]  # Remove port if present
     zone_id = get_zone_id(domain) or get_primary_zone_id()
 
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "adblock_lib_path": adblock_lib_path,
-        "adcash_zone_id": zone_id,
-        "adblock_enabled": ANTI_ADBLOCK_CONFIG.get('enabled', True)
-    })
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "adblock_lib_path": adblock_lib_path,
+            "adcash_zone_id": zone_id,
+            "adblock_enabled": ANTI_ADBLOCK_CONFIG.get("enabled", True),
+        },
+    )
+
 
 @app.get("/purchase.html", response_class=HTMLResponse)
 async def purchase(request: Request):
@@ -166,15 +181,19 @@ async def purchase(request: Request):
     adblock_lib_path = get_adblock_lib_path()
     # Get zone ID based on the host domain
     host = request.headers.get("host", "hiredalways.com")
-    domain = host.split(':')[0]  # Remove port if present
+    domain = host.split(":")[0]  # Remove port if present
     zone_id = get_zone_id(domain) or get_primary_zone_id()
 
-    return templates.TemplateResponse("purchase.html", {
-        "request": request,
-        "adblock_lib_path": adblock_lib_path,
-        "adcash_zone_id": zone_id,
-        "adblock_enabled": ANTI_ADBLOCK_CONFIG.get('enabled', True)
-    })
+    return templates.TemplateResponse(
+        "purchase.html",
+        {
+            "request": request,
+            "adblock_lib_path": adblock_lib_path,
+            "adcash_zone_id": zone_id,
+            "adblock_enabled": ANTI_ADBLOCK_CONFIG.get("enabled", True),
+        },
+    )
+
 
 @app.get("/purchase", response_class=HTMLResponse)
 async def purchase_alt(request: Request):
@@ -182,20 +201,25 @@ async def purchase_alt(request: Request):
     adblock_lib_path = get_adblock_lib_path()
     # Get zone ID based on the host domain
     host = request.headers.get("host", "hiredalways.com")
-    domain = host.split(':')[0]  # Remove port if present
+    domain = host.split(":")[0]  # Remove port if present
     zone_id = get_zone_id(domain) or get_primary_zone_id()
 
-    return templates.TemplateResponse("purchase.html", {
-        "request": request,
-        "adblock_lib_path": adblock_lib_path,
-        "adcash_zone_id": zone_id,
-        "adblock_enabled": ANTI_ADBLOCK_CONFIG.get('enabled', True)
-    })
+    return templates.TemplateResponse(
+        "purchase.html",
+        {
+            "request": request,
+            "adblock_lib_path": adblock_lib_path,
+            "adcash_zone_id": zone_id,
+            "adblock_enabled": ANTI_ADBLOCK_CONFIG.get("enabled", True),
+        },
+    )
+
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint for Cloud Run"""
     return {"status": "healthy"}
+
 
 @app.get("/robots.txt")
 async def robots():
@@ -204,12 +228,14 @@ async def robots():
         content = f.read()
     return Response(content=content, media_type="text/plain")
 
+
 @app.get("/sitemap.xml")
 async def sitemap():
     """Serve sitemap.xml for SEO"""
     with open("static/sitemap.xml", "r") as f:
         content = f.read()
     return Response(content=content, media_type="application/xml")
+
 
 @app.get("/manifest.json")
 async def manifest():
@@ -218,12 +244,14 @@ async def manifest():
         content = f.read()
     return Response(content=content, media_type="application/json")
 
+
 @app.get("/browserconfig.xml")
 async def browserconfig():
     """Serve browserconfig.xml for Windows tiles"""
     with open("static/browserconfig.xml", "r") as f:
         content = f.read()
     return Response(content=content, media_type="application/xml")
+
 
 @app.get("/js/lib.js", response_class=Response)
 async def adblock_library():
@@ -244,7 +272,7 @@ async def adblock_library():
             "static/js/*lib*.js",
             "static/js/[a-z][0-9][a-z][0-9][a-z][0-9]*.js",  # Pattern like x7n4vw...
             "static/js/[tmzwk]*[0-9a-f]*.js",  # Pattern matching the prefix + hex
-            "static/js/[a-z0-9]*.js"  # Pattern for any alphanumeric filename
+            "static/js/[a-z0-9]*.js",  # Pattern for any alphanumeric filename
         ]
 
         for pattern in patterns:
@@ -256,10 +284,16 @@ async def adblock_library():
                 return Response(content=content, media_type="text/javascript")
 
         # Final fallback: return empty script (won't break page)
-        return Response(content="// Anti-adblock library not found", media_type="text/javascript")
+        return Response(
+            content="// Anti-adblock library not found", media_type="text/javascript"
+        )
     except Exception as e:
         # Return empty script on error to prevent page breaking
-        return Response(content=f"// Error loading anti-adblock library: {str(e)}", media_type="text/javascript")
+        return Response(
+            content=f"// Error loading anti-adblock library: {str(e)}",
+            media_type="text/javascript",
+        )
+
 
 @app.get("/test-ads.html", response_class=HTMLResponse)
 async def test_ads():
@@ -268,7 +302,53 @@ async def test_ads():
         content = f.read()
     return HTMLResponse(content=content)
 
+
+# Mock categories data for infinite scroll demo
+CATEGORIES = [
+    {"id": i, "name": f"Category {i}", "jobCount": i * 100, "icon": "💼"}
+    for i in range(1, 101)
+]
+
+
+@app.get("/categories", response_class=HTMLResponse)
+async def categories_page(request: Request):
+    """Categories page with infinite scroll"""
+    adblock_lib_path = get_adblock_lib_path()
+    # Get zone ID based on the host domain
+    host = request.headers.get("host", "hiredalways.com")
+    domain = host.split(":")[0]  # Remove port if present
+    zone_id = get_zone_id(domain) or get_primary_zone_id()
+
+    return templates.TemplateResponse(
+        "categories.html",
+        {
+            "request": request,
+            "adblock_lib_path": adblock_lib_path,
+            "adcash_zone_id": zone_id,
+            "adblock_enabled": ANTI_ADBLOCK_CONFIG.get("enabled", True),
+        },
+    )
+
+
+@app.get("/api/categories")
+async def get_categories(
+    page: int = Query(1, ge=1), limit: int = Query(12, ge=1, le=100)
+):
+    """API endpoint for fetching categories with pagination"""
+    start = (page - 1) * limit
+    end = start + limit
+
+    return {
+        "categories": CATEGORIES[start:end],
+        "page": page,
+        "limit": limit,
+        "total": len(CATEGORIES),
+        "has_more": end < len(CATEGORIES),
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.environ.get("PORT", 8080))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

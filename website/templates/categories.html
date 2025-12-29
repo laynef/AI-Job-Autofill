@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Categories - Hired Always</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <style>
+        .categories-header {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            color: white;
+            padding: 4rem 0;
+            text-align: center;
+        }
+        .categories-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 2rem;
+            padding: 2rem 0;
+        }
+        .category-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+            cursor: pointer;
+        }
+        .category-card:hover {
+            transform: translateY(-5px);
+        }
+        .category-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: #2563eb;
+        }
+        .category-title {
+            font-size: 1.25rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            color: #1f2937;
+        }
+        .category-count {
+            color: #6b7280;
+            font-size: 0.875rem;
+        }
+        .loading-sentinel {
+            text-align: center;
+            padding: 2rem;
+            color: #6b7280;
+            grid-column: 1 / -1;
+        }
+        .spinner {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border: 3px solid rgba(37, 99, 235, 0.3);
+            border-radius: 50%;
+            border-top-color: #2563eb;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-content">
+                <div class="logo">
+                    <img src="/static/images/icon48.png" alt="Hired Always Logo">
+                    <span>Hired Always</span>
+                </div>
+                <div class="nav-links">
+                    <a href="/">Home</a>
+                    <a href="/#features">Features</a>
+                    <a href="/purchase">Pricing</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <header class="categories-header">
+        <div class="container">
+            <h1>Browse Job Categories</h1>
+            <p>Find the perfect role for your skills</p>
+        </div>
+    </header>
+
+    <main class="container">
+        <div id="categories-container" class="categories-grid">
+            <!-- Categories will be inserted here -->
+        </div>
+        <div id="loading-sentinel" class="loading-sentinel">
+            <div class="spinner"></div>
+            <p>Loading more categories...</p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>Hired Always</h4>
+                    <p>AI-powered job application assistant. Get hired faster.</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Links</h4>
+                    <ul>
+                        <li><a href="https://chromewebstore.google.com/detail/free-ai-job-application-c/kedoofhdliinkiibdljbplolfnbhaiia" target="_blank">Chrome Web Store</a></li>
+                        <li><a href="/" target="_blank">Website</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2025 HiredAlways. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const container = document.getElementById('categories-container');
+            const sentinel = document.getElementById('loading-sentinel');
+            
+            let page = 1;
+            let isLoading = false;
+            let hasMore = true;
+            const limit = 12; // Number of items per page
+
+            // Function to fetch categories
+            async function fetchCategories() {
+                if (isLoading || !hasMore) return;
+                
+                isLoading = true;
+                
+                try {
+                    const response = await fetch(`/api/categories?page=${page}&limit=${limit}`);
+                    const data = await response.json();
+                    
+                    if (data.categories.length === 0) {
+                        hasMore = false;
+                        sentinel.innerHTML = '<p>No more categories to load</p>';
+                        return;
+                    }
+
+                    renderCategories(data.categories);
+                    page++;
+                    
+                    if (data.categories.length < limit) {
+                        hasMore = false;
+                        sentinel.innerHTML = '<p>No more categories to load</p>';
+                    }
+                } catch (error) {
+                    console.error('Error fetching categories:', error);
+                    sentinel.innerHTML = '<p style="color: red">Error loading categories. Please try again.</p>';
+                } finally {
+                    isLoading = false;
+                }
+            }
+
+            // Function to render categories
+            function renderCategories(categories) {
+                const fragment = document.createDocumentFragment();
+                
+                categories.forEach(category => {
+                    const card = document.createElement('div');
+                    card.className = 'category-card';
+                    card.innerHTML = `
+                        <div class="category-icon">${category.icon || '💼'}</div>
+                        <div class="category-title">${category.name}</div>
+                        <div class="category-count">${category.jobCount.toLocaleString()} jobs</div>
+                    `;
+                    fragment.appendChild(card);
+                });
+                
+                container.appendChild(fragment);
+            }
+
+            // Intersection Observer setup
+            const observerOptions = {
+                root: null, // use viewport
+                rootMargin: '0px',
+                threshold: 0.1
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting && hasMore && !isLoading) {
+                        fetchCategories();
+                    }
+                });
+            }, observerOptions);
+
+            observer.observe(sentinel);
+
+            // Initial load
+            fetchCategories();
+        });
+    </script>
+</body>
+</html>
