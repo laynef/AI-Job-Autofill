@@ -219,7 +219,7 @@ async def proxy_ai(request: AIProxyRequest):
     # Make request to Gemini API
     try:
         async with httpx.AsyncClient() as client:
-            api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+            api_url = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent"
 
             response = await client.post(
                 api_url,
@@ -229,6 +229,9 @@ async def proxy_ai(request: AIProxyRequest):
                             "text": request.prompt
                         }]
                     }]
+                },
+                headers={
+                    "x-goog-api-key": GEMINI_API_KEY
                 },
                 timeout=30.0
             )
