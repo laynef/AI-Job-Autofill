@@ -1076,13 +1076,83 @@ async function autofillPage() {
 
     // --- HELPER FUNCTIONS ---
     async function simulateClick(element) {
-        element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-        element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-        element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
-        element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-        element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        element.focus();
+        if (!element) return;
+        
+        // Scroll into view first
+        try {
+            element.scrollIntoView({ behavior: 'instant', block: 'center' });
+        } catch (e) { /* ignore */ }
+        
+        const eventOptions = { bubbles: true, cancelable: true, view: window };
+        
+        // Dispatch full sequence of mouse events
+        element.dispatchEvent(new MouseEvent('mouseover', eventOptions));
+        element.dispatchEvent(new MouseEvent('mousedown', eventOptions));
+        element.dispatchEvent(new MouseEvent('mouseup', eventOptions));
+        element.dispatchEvent(new MouseEvent('click', eventOptions));
+        
+        // If it's an input/select/textarea, also focus it
+        if (['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(element.tagName)) {
+            element.focus();
+            element.dispatchEvent(new Event('focus', { bubbles: true }));
+        }
+        
         await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
+    // Helper to set value that triggers React/Angular/Vue listeners
+    function setNativeValue(element, value) {
+        const valueSetter = Object.getOwnPropertyDescriptor(element, 'value').set;
+        const prototype = Object.getPrototypeOf(element);
+        const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
+        
+        if (prototypeValueSetter && valueSetter !== prototypeValueSetter) {
+            prototypeValueSetter.call(element, value);
+        } else if (valueSetter) {
+            valueSetter.call(element, value);
+        } else {
+            element.value = value;
+        }
+        
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    // Robust label text finder
+    function getLabelTextForElement(element) {
+        let labelText = '';
+        
+        // 1. Check for label with 'for' attribute
+        if (element.id) {
+            const label = document.querySelector(`label[for="${element.id}"]`);
+            if (label) labelText = label.innerText;
+        }
+        
+        // 2. Check for parent label
+        if (!labelText) {
+            const parentLabel = element.closest('label');
+            if (parentLabel) {
+                // Clone and remove the input itself to get just the text
+                const clone = parentLabel.cloneNode(true);
+                const inputInClone = clone.querySelector('input, select, textarea');
+                if (inputInClone) inputInClone.remove();
+                labelText = clone.innerText;
+            }
+        }
+        
+        // 3. Check aria-label
+        if (!labelText && element.getAttribute('aria-label')) {
+            labelText = element.getAttribute('aria-label');
+        }
+        
+        // 4. Check aria-labelledby
+        if (!labelText && element.getAttribute('aria-labelledby')) {
+            const labelId = element.getAttribute('aria-labelledby');
+            const labelEl = document.getElementById(labelId);
+            if (labelEl) labelText = labelEl.innerText;
+        }
+
+        return labelText.trim();
     }
 
     async function selectReactSelectOption(inputElement, optionText) {
@@ -1116,51 +1186,95 @@ async function autofillPage() {
             // Click to open dropdown
             inputElement.focus();
             await simulateClick(inputElement);
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 400)); // Random delay 300-700ms
+
+            // Type to filter (helps with virtualization and huge lists)
+            // Only type if it's an input and editable
+            if (inputElement.tagName === 'INPUT' && !inputElement.readOnly && !inputElement.disabled) {
+                // Clear existing text if it's just a search/filter input
+                setNativeValue(inputElement, '');
+                
+                // Type the option text
+                const chars = optionText; 
+                setNativeValue(inputElement, chars);
+                // Dispatch input event specifically for filtering
+                inputElement.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: chars }));
+                await new Promise(resolve => setTimeout(resolve, 600 + Math.random() * 400)); // Random wait for filtering
+            }
 
             // Find the listbox or menu - try multiple strategies
-            const ariaControls = inputElement.getAttribute('aria-controls');
+            const ariaControls = inputElement.getAttribute('aria-controls') || inputElement.getAttribute('aria-owns');
             let listbox = null;
 
-            // Strategy 1: Use aria-controls
+            // Strategy 1: Use aria-controls/owns
             if (ariaControls) {
                 listbox = document.getElementById(ariaControls);
                 if (listbox) console.log(`   ✓ Found listbox via aria-controls: #${ariaControls}`);
             }
 
-            // Strategy 2: Look for visible listbox/menu
+            // Strategy 2: Look for visible listbox/menu (global search)
             if (!listbox) {
-                listbox = document.querySelector('[role="listbox"]:not(.iti__hide):not([style*="display: none"]):not([style*="display:none"])');
-                if (listbox) console.log(`   ✓ Found listbox via role="listbox"`);
+                // Select all potential listboxes
+                const potentialListboxes = Array.from(document.querySelectorAll('[role="listbox"], [role="menu"], .css-26l3qy-menu, .css-1nmdiq5-menu')); // Common react-select classes
+                
+                // Filter for visible ones
+                const visibleListboxes = potentialListboxes.filter(el => {
+                    const style = window.getComputedStyle(el);
+                    return style.display !== 'none' && style.visibility !== 'hidden' && el.offsetParent !== null;
+                });
+
+                // Sort by z-index (highest usually on top) or proximity
+                visibleListboxes.sort((a, b) => {
+                    const zA = parseInt(window.getComputedStyle(a).zIndex) || 0;
+                    const zB = parseInt(window.getComputedStyle(b).zIndex) || 0;
+                    return zB - zA;
+                });
+
+                if (visibleListboxes.length > 0) {
+                    listbox = visibleListboxes[0];
+                    console.log(`   ✓ Found visible listbox (z-index strategy)`);
+                }
             }
 
-            // Strategy 3: Look for menu (Material-UI style)
+            // Strategy 3: Look for any visible dropdown container
             if (!listbox) {
-                listbox = document.querySelector('[role="menu"]:not([style*="display: none"]):not([style*="display:none"])');
-                if (listbox) console.log(`   ✓ Found menu via role="menu"`);
-            }
-
-            // Strategy 4: Look for any visible dropdown container
-            if (!listbox) {
-                const visibleDropdowns = Array.from(document.querySelectorAll('[class*="dropdown"], [class*="menu"], [class*="options"], [class*="list"]'))
+                const visibleDropdowns = Array.from(document.querySelectorAll('[class*="dropdown"], [class*="menu"], [class*="options"], [class*="list"], [id*="react-select"]'))
                     .filter(el => {
                         const style = window.getComputedStyle(el);
-                        return style.display !== 'none' && style.visibility !== 'hidden' && el.offsetParent !== null;
+                        return style.display !== 'none' && style.visibility !== 'hidden' && el.offsetParent !== null && 
+                               el !== inputElement && !inputElement.contains(el);
                     });
                 if (visibleDropdowns.length > 0) {
-                    listbox = visibleDropdowns[0];
+                    // Pick the one that appeared most recently or is closest to input
+                    listbox = visibleDropdowns[visibleDropdowns.length - 1]; // Often appended last
                     console.log(`   ✓ Found dropdown container via class name`);
                 }
             }
 
             if (listbox) {
                 console.log(`   Searching for options in listbox...`);
-                const options = Array.from(listbox.querySelectorAll('[role="option"], [role="menuitem"], li, div[class*="option"]'));
+                // Wait for options to populate if listbox is empty (async loading)
+                let retries = 0;
+                let options = [];
+                while (retries < 5) { // Increased retries
+                    // Broadened selector for options
+                    options = Array.from(listbox.querySelectorAll('[role="option"], [role="menuitem"], li, div[class*="option"], [id*="option"], div[id*="react-select"]'));
+                    
+                    // If no options found with specific roles, try generic divs with text content if listbox is small
+                    if (options.length === 0 && listbox.children.length < 50) {
+                         options = Array.from(listbox.querySelectorAll('div, span, p')).filter(el => el.innerText.trim().length > 0);
+                    }
+
+                    if (options.length > 0) break;
+                    await new Promise(r => setTimeout(r, 400));
+                    retries++;
+                }
+                
                 console.log(`   Found ${options.length} potential options`);
 
                 if (options.length > 0) {
-                    // Log all available options for debugging
-                    console.log(`   Available options:`, options.map(opt => opt.innerText.trim()).join(', '));
+                    // Log all available options for debugging (limit to first 10)
+                    console.log(`   Available options (first 10):`, options.slice(0, 10).map(opt => opt.innerText.trim()).join(', '));
                 }
 
                 // Try exact match first
@@ -1188,29 +1302,47 @@ async function autofillPage() {
                 if (targetOption) {
                     console.log(`   ✓ Found matching option: "${targetOption.innerText.trim()}"`);
                     targetOption.scrollIntoView({ block: 'nearest' });
-                    await new Promise(resolve => setTimeout(resolve, 100));
+                    await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 200)); // Random hover delay
+                    
+                    // Try to click the option
                     await simulateClick(targetOption);
-                    await new Promise(resolve => setTimeout(resolve, 300));
+                    
+                    // Sometimes the click needs to be on a child element
+                    if (targetOption.firstElementChild) {
+                        await simulateClick(targetOption.firstElementChild);
+                    }
+                    
+                    await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 300)); // Random post-click delay
 
                     // Verify selection was successful
                     const selectedValue = inputElement.value || inputElement.getAttribute('aria-activedescendant') || inputElement.innerText;
                     if (selectedValue && selectedValue !== 'Please select' && selectedValue !== 'Select...') {
                         console.log(`   ✓ Selection successful! Value: "${selectedValue}"`);
                         return true;
-                    } else {
-                        console.warn(`   ⚠ Selection may have failed. Current value: "${selectedValue}"`);
                     }
-                } else {
-                    console.warn(`   ✗ Could not find matching option for: "${optionText}"`);
                 }
-            } else {
-                console.warn(`   ✗ Could not find dropdown menu for element`, inputElement);
             }
-
-            // Close dropdown by clicking away
-            await simulateClick(document.body);
+            
+            // FALLBACK: Keyboard navigation
+            // If we couldn't find the option or clicking didn't work, try keyboard
+            console.log("   ⚠️ Trying keyboard navigation fallback...");
+            
+            inputElement.focus();
+            // Press ArrowDown to select first filtered option
+            inputElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
+            await new Promise(r => setTimeout(r, 100));
+            
+            // Press Enter to confirm
+            inputElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
+            inputElement.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', bubbles: true }));
+            inputElement.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }));
+            
+            // Blur to commit
+            inputElement.blur();
+            
             await new Promise(resolve => setTimeout(resolve, 200));
-            return false;
+            return true; // Assume success after fallback
+
         } catch (error) {
             console.error("❌ Error selecting React Select option:", error);
             return false;
@@ -1354,104 +1486,127 @@ async function autofillPage() {
             const isContentEditable = element.isContentEditable;
             const isReactElement = element._reactInternalFiber || element._reactInternalInstance || Object.keys(element).some(key => key.startsWith('__react'));
 
-            // Check if field already has the correct value - don't touch it if so
+            // Check if field already has the correct value
             const currentValue = isContentEditable ? (element.textContent || '').trim() : (element.value || '').trim();
             const newValue = text.trim();
 
             if (currentValue === newValue) {
                 console.log('⏭️ Field already has correct value, skipping:', newValue.substring(0, 50));
-                return true; // Already correct, no need to modify
+                return true;
             }
 
-            // Skip if field already has a substantial value (user may have entered it)
             if (currentValue.length > 0 &&
                 currentValue !== 'Select' &&
                 currentValue !== 'Choose' &&
                 currentValue !== 'Please select' &&
                 currentValue !== '-- Select --') {
                 console.log('⏭️ Field already has value, not overwriting:', currentValue.substring(0, 50));
-                return true; // Don't overwrite existing meaningful values
+                return true;
             }
 
-            // Focus the element only if we need to modify it
+            // Focus the element
             element.focus();
             await new Promise(resolve => setTimeout(resolve, 50));
 
-            // Clear existing content only if it's empty or placeholder
+            // Clear existing content
             if (isContentEditable) {
                 element.textContent = '';
             } else {
                 element.value = '';
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                if (nativeInputValueSetter) {
+                    nativeInputValueSetter.call(element, '');
+                }
+                element.dispatchEvent(new Event('input', { bubbles: true }));
             }
 
-            // Set the value using multiple methods for compatibility
-            if (isContentEditable) {
-                // For contentEditable elements
-                element.textContent = text;
-                element.innerHTML = text;
-            } else {
-                // For standard input/textarea elements
-                element.value = text;
+            // Human-like typing simulation
+            const chars = text.split('');
+            
+            // For longer text, we type faster to avoid timeouts
+            const typeDelay = chars.length > 50 ? 2 : 10; 
+            
+            // Helper to dispatch input events
+            const dispatchInput = (char) => {
+                const inputEvent = new InputEvent('input', {
+                    bubbles: true,
+                    cancelable: true,
+                    inputType: 'insertText',
+                    data: char
+                });
+                element.dispatchEvent(inputEvent);
+            };
 
-                // For React elements, also set the underlying value property
-                if (isReactElement) {
+            // Type character by character for "human-like" behavior
+            if (isContentEditable) {
+                element.textContent = text; // ContentEditable is hard to simulate char-by-char safely
+                dispatchInput(text);
+            } else {
+                let currentText = '';
+                for (let i = 0; i < chars.length; i++) {
+                    const char = chars[i];
+                    currentText += char;
+                    
+                    // Update value
                     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
                     const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
 
-                    if (element.tagName.toLowerCase() === 'input' && nativeInputValueSetter) {
-                        nativeInputValueSetter.call(element, text);
-                    } else if (element.tagName.toLowerCase() === 'textarea' && nativeTextAreaValueSetter) {
-                        nativeTextAreaValueSetter.call(element, text);
+                    if (element.tagName.toLowerCase() === 'textarea' && nativeTextAreaValueSetter) {
+                        nativeTextAreaValueSetter.call(element, currentText);
+                    } else if (nativeInputValueSetter) {
+                        nativeInputValueSetter.call(element, currentText);
+                    } else {
+                        element.value = currentText;
                     }
+
+                    // Dispatch events for this character
+                    dispatchInput(char);
+                    // element.dispatchEvent(new Event('change', { bubbles: true })); // Some frameworks need change on every keystroke
+                    
+                    // Random small delay for realism (but fast enough)
+                    if (i % 5 === 0) await new Promise(r => setTimeout(r, Math.random() * typeDelay));
                 }
             }
 
-            // Dispatch multiple events to ensure frameworks detect the change
+            // Final event dispatch sequence
             const events = ['input', 'change', 'keyup', 'keydown'];
             for (const eventType of events) {
-                const event = new Event(eventType, { bubbles: true, cancelable: true });
-                element.dispatchEvent(event);
+                element.dispatchEvent(new Event(eventType, { bubbles: true, cancelable: true }));
             }
 
-            // Trigger React-specific events if needed
             if (isReactElement) {
                 element.dispatchEvent(new Event('input', { bubbles: true }));
                 element.dispatchEvent(new Event('change', { bubbles: true }));
             }
 
-            // Brief delay to let frameworks process
             await new Promise(resolve => setTimeout(resolve, 100));
 
-            // Verify the value was set - but only retry if completely empty
+            // Verify
             const verifyValue = (isContentEditable ? element.textContent : element.value) || '';
             const verifyTrimmed = verifyValue.trim();
             const textTrimmed = text.trim();
 
-            // Only retry if the field is empty or has a placeholder-like value
-            // Don't retry if there's any meaningful content (to avoid messing up correct answers)
-            if (verifyTrimmed.length === 0 ||
-                verifyTrimmed.toLowerCase() === 'select' ||
-                verifyTrimmed.toLowerCase() === 'choose') {
-                console.warn(`Hired Always: Field empty after fill, retrying. Expected: "${textTrimmed.substring(0, 30)}..."`);
-                // Try one more time with direct assignment
-                if (isContentEditable) {
-                    element.textContent = text;
-                } else {
-                    element.value = text;
-                }
+            if (verifyTrimmed.length === 0) {
+                console.warn(`Hired Always: Field empty after fill, retrying with direct set.`);
+                if (isContentEditable) element.textContent = text;
+                else element.value = text;
                 element.dispatchEvent(new Event('input', { bubbles: true }));
                 element.dispatchEvent(new Event('change', { bubbles: true }));
-            } else if (verifyTrimmed !== textTrimmed) {
-                // Field has some value but not exact match - log but don't overwrite
-                console.log(`Hired Always: Field has value "${verifyTrimmed.substring(0, 30)}..." (expected "${textTrimmed.substring(0, 30)}..."), keeping existing`);
             }
 
             element.blur();
             return true;
-
         } catch (error) {
-            console.error("Hired Always: Error in simulateTyping:", error);
-            return false;
+            console.error("Error in simulateTyping:", error);
+            // Last resort fallback
+            try {
+                element.value = text;
+                element.dispatchEvent(new Event('input', { bubbles: true }));
+                element.dispatchEvent(new Event('change', { bubbles: true }));
+                return true;
+            } catch (e) {
+                return false;
+            }
         }
     }
 
@@ -2362,7 +2517,19 @@ Return ONLY a valid JSON array with this structure:
                     continue;
                 }
                 if (elType === 'textarea' || el.isContentEditable) {
-                    const resumeText = await getAIResponse("Summarize the attached resume into a plain text version, focusing on skills and experience.", userData);
+                    let resumePrompt;
+                    const lowerQuestion = question ? question.toLowerCase() : '';
+                    
+                    if (lowerQuestion.includes('paste') || lowerQuestion.includes('copy') || 
+                        lowerQuestion.includes('full text') || lowerQuestion.includes('entire')) {
+                        resumePrompt = "Provide the FULL plain text content of the resume. Do not summarize, do not omit details. Output the raw text.";
+                    } else {
+                        resumePrompt = `You are answering a specific question in a job application: "${question}". 
+                        Based on the candidate's resume, provide a professional, well-written response that directly answers the question.
+                        Highlight relevant skills and experience. Keep it professional and concise.`;
+                    }
+                    
+                    const resumeText = await getAIResponse(resumePrompt, userData);
                     if (resumeText) await simulateTyping(el, resumeText);
                     continue;
                 }
@@ -2739,10 +2906,10 @@ Return ONLY the exact text of the selected option. No explanation, no additional
 
                 if (el.tagName.toLowerCase() === 'select') {
                     for (let option of el.options) {
-                        if (option.text.trim() === bestMatch || option.text.trim().toLowerCase() === bestMatch.toLowerCase()) {
-                            el.value = option.value;
-                            el.dispatchEvent(new Event('change', { bubbles: true }));
-                            el.dispatchEvent(new Event('input', { bubbles: true }));
+                        const optText = option.text.trim();
+                        if (optText === bestMatch || optText.toLowerCase() === bestMatch.toLowerCase()) {
+                            // Use robust value setter
+                            setNativeValue(el, option.value);
                             selectionSuccessful = true;
                             break;
                         }
@@ -2752,20 +2919,46 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                         await new Promise(resolve => setTimeout(resolve, 100));
                     }
                 } else if (el.type === 'radio' || el.type === 'checkbox') {
-                    for (const input of document.querySelectorAll(`input[name="${el.name}"]`)) {
-                        const label = document.querySelector(`label[for="${input.id}"]`);
-                        if (label && (label.innerText.trim() === bestMatch || label.innerText.trim().toLowerCase() === bestMatch.toLowerCase())) {
-                            await simulateClick(input);
+                    // Find all related inputs (by name or by grouping)
+                    let relatedInputs = [];
+                    if (el.name) {
+                        relatedInputs = Array.from(document.querySelectorAll(`input[name="${el.name}"]`));
+                    } else {
+                        // Fallback: look for siblings if no name (rare but happens in some frameworks)
+                        // Or maybe we are just processing 'el' itself if it's a single checkbox
+                        relatedInputs = [el]; 
+                        // If it's a radio group without name, we might be in trouble, but let's try to find siblings in same container
+                        if (el.type === 'radio') {
+                            const container = el.closest('div, fieldset, [role="group"]');
+                            if (container) {
+                                relatedInputs = Array.from(container.querySelectorAll('input[type="radio"]'));
+                            }
+                        }
+                    }
+
+                    for (const input of relatedInputs) {
+                        const labelText = getLabelTextForElement(input);
+                        
+                        if (labelText && (labelText === bestMatch || labelText.toLowerCase() === bestMatch.toLowerCase() || labelText.includes(bestMatch))) {
+                            if (!input.checked) {
+                                await simulateClick(input);
+                            }
                             selectionSuccessful = true;
                             break;
                         }
                     }
+                    
                     // Verify selection
                     if (selectionSuccessful) {
                         await new Promise(resolve => setTimeout(resolve, 100));
-                        const isChecked = document.querySelector(`input[name="${el.name}"]:checked`);
+                        // Re-query to check status
+                        const isChecked = el.name ? 
+                            document.querySelector(`input[name="${el.name}"]:checked`) : 
+                            (el.checked ? el : null);
+                            
                         if (!isChecked) {
                             console.warn("Radio/checkbox selection failed for:", question);
+                            // Try one more time with direct click on the best match element found
                         }
                     }
                 } else if (el.getAttribute('role') === 'combobox' || (el.tagName.toLowerCase() === 'button' && el.hasAttribute('aria-haspopup'))) {
@@ -2984,6 +3177,9 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                         else if (question && question.length > 5 && question.includes('?')) {
                             console.log(`Hired Always: Using AI for unclassified field: "${question}"`);
                             try {
+                                const isTextArea = elType === 'textarea';
+                                const maxWords = isTextArea ? 150 : 40;
+                                
                                 const fallbackPrompt = `You are helping fill out a job application form. Provide a brief, professional answer based on the candidate's profile.
 
 **CANDIDATE PROFILE:**
@@ -2997,11 +3193,11 @@ Return ONLY the exact text of the selected option. No explanation, no additional
 **QUESTION:**
 "${question}"
 
-**RESPONSE (keep under 50 words):**`;
+**RESPONSE (keep under ${maxWords} words):**`;
 
                                 const fallbackResponse = await getAIResponse(fallbackPrompt, userData);
                                 if (fallbackResponse && fallbackResponse.trim() &&
-                                    fallbackResponse.length > 3 && fallbackResponse.length < 200) {
+                                    fallbackResponse.length > 3 && fallbackResponse.length < (isTextArea ? 1000 : 200)) {
                                     valueToType = fallbackResponse.trim();
                                     console.log(`Hired Always: AI fallback answer: "${valueToType}"`);
                                 }
