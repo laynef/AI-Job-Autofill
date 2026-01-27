@@ -375,7 +375,7 @@ try {
         }
 
         // Load saved data when the popup opens
-        chrome.storage.local.get([...textFields, 'resumeFileName', 'resume'], function (result) {
+        chrome.storage.local.get([...textFields, 'resumeFileName', 'resume'], async function (result) {
             if (chrome.runtime.lastError) { return console.error("Error loading data:", chrome.runtime.lastError.message); }
             textFields.forEach(field => {
                 const el = document.getElementById(field);
@@ -1085,9 +1085,12 @@ async function autofillPage() {
         
         const eventOptions = { bubbles: true, cancelable: true, view: window };
         
-        // Dispatch full sequence of mouse events
-        element.dispatchEvent(new MouseEvent('mouseover', eventOptions));
+        // Dispatch full sequence of mouse and pointer events
+        const pointerOptions = { ...eventOptions, pointerId: 1, pointerType: 'mouse', isPrimary: true };
+        
+        element.dispatchEvent(new PointerEvent('pointerdown', pointerOptions));
         element.dispatchEvent(new MouseEvent('mousedown', eventOptions));
+        element.dispatchEvent(new PointerEvent('pointerup', pointerOptions));
         element.dispatchEvent(new MouseEvent('mouseup', eventOptions));
         element.dispatchEvent(new MouseEvent('click', eventOptions));
         
@@ -1155,190 +1158,327 @@ async function autofillPage() {
         return labelText.trim();
     }
 
-    async function selectReactSelectOption(inputElement, optionText) {
+    async function selectReactSelectOption(inputElement, optionTextOrArray) {
+        // Handle both single string and array of candidates
+        const candidates = Array.isArray(optionTextOrArray) ? optionTextOrArray : [optionTextOrArray];
+        // Filter out empty/null values
+        const validCandidates = candidates.filter(c => c && typeof c === 'string' && c.trim().length > 0);
+        
+        if (validCandidates.length === 0) return false;
+        
+        const primaryCandidate = validCandidates[0];
+
         try {
-            console.log(`🔍 Attempting to select dropdown option: "${optionText}"`);
+            console.log(`🔍 Attempting to select dropdown option (Candidates: ${validCandidates.join(', ')})`);
             console.log(`   Element:`, inputElement);
 
-            // Check if already has correct value - skip if so
-            const currentValue = inputElement.value || inputElement.innerText || inputElement.textContent || '';
-            const currentValueLower = currentValue.toLowerCase().trim();
-            const targetValueLower = optionText.toLowerCase().trim();
-
-            if (currentValueLower === targetValueLower ||
-                currentValueLower.includes(targetValueLower) ||
-                targetValueLower.includes(currentValueLower)) {
-                console.log(`⏭️ Dropdown already has correct value: "${currentValue}", skipping`);
-                return true;
-            }
-
-            // Also check if a meaningful value is already selected (not placeholder)
-            if (currentValue.length > 0 &&
-                !currentValueLower.includes('select') &&
-                !currentValueLower.includes('choose') &&
-                !currentValueLower.includes('please') &&
-                currentValueLower !== '--' &&
-                currentValueLower !== '-') {
-                console.log(`⏭️ Dropdown already has a value: "${currentValue}", not overwriting`);
-                return true;
-            }
-
-            // Click to open dropdown
-            inputElement.focus();
-            await simulateClick(inputElement);
-            await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 400)); // Random delay 300-700ms
-
-            // Type to filter (helps with virtualization and huge lists)
-            // Only type if it's an input and editable
-            if (inputElement.tagName === 'INPUT' && !inputElement.readOnly && !inputElement.disabled) {
-                // Clear existing text if it's just a search/filter input
-                setNativeValue(inputElement, '');
+            // Helper to check if current value is already correct
+            const checkCurrentValue = () => {
+                const currentValue = inputElement.value || inputElement.innerText || inputElement.textContent || '';
+                const currentValueLower = currentValue.toLowerCase().trim();
                 
-                // Type the option text
-                const chars = optionText; 
-                setNativeValue(inputElement, chars);
-                // Dispatch input event specifically for filtering
-                inputElement.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: chars }));
-                await new Promise(resolve => setTimeout(resolve, 600 + Math.random() * 400)); // Random wait for filtering
-            }
-
-            // Find the listbox or menu - try multiple strategies
-            const ariaControls = inputElement.getAttribute('aria-controls') || inputElement.getAttribute('aria-owns');
-            let listbox = null;
-
-            // Strategy 1: Use aria-controls/owns
-            if (ariaControls) {
-                listbox = document.getElementById(ariaControls);
-                if (listbox) console.log(`   ✓ Found listbox via aria-controls: #${ariaControls}`);
-            }
-
-            // Strategy 2: Look for visible listbox/menu (global search)
-            if (!listbox) {
-                // Select all potential listboxes
-                const potentialListboxes = Array.from(document.querySelectorAll('[role="listbox"], [role="menu"], .css-26l3qy-menu, .css-1nmdiq5-menu')); // Common react-select classes
-                
-                // Filter for visible ones
-                const visibleListboxes = potentialListboxes.filter(el => {
-                    const style = window.getComputedStyle(el);
-                    return style.display !== 'none' && style.visibility !== 'hidden' && el.offsetParent !== null;
-                });
-
-                // Sort by z-index (highest usually on top) or proximity
-                visibleListboxes.sort((a, b) => {
-                    const zA = parseInt(window.getComputedStyle(a).zIndex) || 0;
-                    const zB = parseInt(window.getComputedStyle(b).zIndex) || 0;
-                    return zB - zA;
-                });
-
-                if (visibleListboxes.length > 0) {
-                    listbox = visibleListboxes[0];
-                    console.log(`   ✓ Found visible listbox (z-index strategy)`);
-                }
-            }
-
-            // Strategy 3: Look for any visible dropdown container
-            if (!listbox) {
-                const visibleDropdowns = Array.from(document.querySelectorAll('[class*="dropdown"], [class*="menu"], [class*="options"], [class*="list"], [id*="react-select"]'))
-                    .filter(el => {
-                        const style = window.getComputedStyle(el);
-                        return style.display !== 'none' && style.visibility !== 'hidden' && el.offsetParent !== null && 
-                               el !== inputElement && !inputElement.contains(el);
-                    });
-                if (visibleDropdowns.length > 0) {
-                    // Pick the one that appeared most recently or is closest to input
-                    listbox = visibleDropdowns[visibleDropdowns.length - 1]; // Often appended last
-                    console.log(`   ✓ Found dropdown container via class name`);
-                }
-            }
-
-            if (listbox) {
-                console.log(`   Searching for options in listbox...`);
-                // Wait for options to populate if listbox is empty (async loading)
-                let retries = 0;
-                let options = [];
-                while (retries < 5) { // Increased retries
-                    // Broadened selector for options
-                    options = Array.from(listbox.querySelectorAll('[role="option"], [role="menuitem"], li, div[class*="option"], [id*="option"], div[id*="react-select"]'));
-                    
-                    // If no options found with specific roles, try generic divs with text content if listbox is small
-                    if (options.length === 0 && listbox.children.length < 50) {
-                         options = Array.from(listbox.querySelectorAll('div, span, p')).filter(el => el.innerText.trim().length > 0);
-                    }
-
-                    if (options.length > 0) break;
-                    await new Promise(r => setTimeout(r, 400));
-                    retries++;
-                }
-                
-                console.log(`   Found ${options.length} potential options`);
-
-                if (options.length > 0) {
-                    // Log all available options for debugging (limit to first 10)
-                    console.log(`   Available options (first 10):`, options.slice(0, 10).map(opt => opt.innerText.trim()).join(', '));
-                }
-
-                // Try exact match first
-                let targetOption = options.find(opt =>
-                    opt.innerText.trim().toLowerCase() === optionText.toLowerCase()
-                );
-
-                // Try partial match
-                if (!targetOption) {
-                    targetOption = options.find(opt =>
-                        opt.innerText.toLowerCase().includes(optionText.toLowerCase()) ||
-                        optionText.toLowerCase().includes(opt.innerText.toLowerCase())
-                    );
-                }
-
-                // Try fuzzy match (words in any order)
-                if (!targetOption) {
-                    const optionWords = optionText.toLowerCase().split(/\s+/);
-                    targetOption = options.find(opt => {
-                        const optText = opt.innerText.toLowerCase();
-                        return optionWords.every(word => optText.includes(word));
-                    });
-                }
-
-                if (targetOption) {
-                    console.log(`   ✓ Found matching option: "${targetOption.innerText.trim()}"`);
-                    targetOption.scrollIntoView({ block: 'nearest' });
-                    await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 200)); // Random hover delay
-                    
-                    // Try to click the option
-                    await simulateClick(targetOption);
-                    
-                    // Sometimes the click needs to be on a child element
-                    if (targetOption.firstElementChild) {
-                        await simulateClick(targetOption.firstElementChild);
-                    }
-                    
-                    await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 300)); // Random post-click delay
-
-                    // Verify selection was successful
-                    const selectedValue = inputElement.value || inputElement.getAttribute('aria-activedescendant') || inputElement.innerText;
-                    if (selectedValue && selectedValue !== 'Please select' && selectedValue !== 'Select...') {
-                        console.log(`   ✓ Selection successful! Value: "${selectedValue}"`);
+                // Check against all candidates
+                for (const candidate of validCandidates) {
+                    const targetLower = candidate.toLowerCase().trim();
+                    if (currentValueLower === targetLower || 
+                        (currentValueLower.length > 3 && currentValueLower.includes(targetLower)) ||
+                        (targetLower.length > 3 && targetLower.includes(currentValueLower))) {
                         return true;
                     }
                 }
+                return false;
+            };
+
+            // Check if already has correct value - skip if so
+            if (checkCurrentValue()) {
+                console.log(`⏭️ Dropdown already has a correct value, not overwriting`);
+                return true;
+            }
+
+            // Also skip if a meaningful value is already selected (not placeholder) and we are conservative
+            // BUT for demographic fields, we might want to overwrite defaults.
+            const currentValue = inputElement.value || inputElement.innerText || inputElement.textContent || '';
+            const currentValueLower = currentValue.toLowerCase().trim();
+            if (currentValue.length > 0 && 
+                !currentValueLower.includes('select') && 
+                !currentValueLower.includes('choose') && 
+                !currentValueLower.includes('please') &&
+                currentValueLower !== '' &&
+                currentValueLower !== '--' &&
+                currentValueLower !== '-') {
+                 // Double check it's not one of our candidates
+                 if (!checkCurrentValue()) {
+                     console.log(`⏭️ Dropdown has value "${currentValue}", checking if we should overwrite...`);
+                     // If it's a completely different value, we might want to change it.
+                     // For now, proceed.
+                 } else {
+                     return true;
+                 }
+            }
+
+            // Logic to find listbox and extract options
+            const findListboxAndOptions = async () => {
+                // Find the listbox or menu - try multiple strategies
+                const ariaControls = inputElement.getAttribute('aria-controls') || inputElement.getAttribute('aria-owns');
+                let listbox = null;
+
+                // Strategy 1: Use aria-controls/owns
+                if (ariaControls) {
+                    listbox = document.getElementById(ariaControls);
+                    if (listbox) {
+                         const style = window.getComputedStyle(listbox);
+                         if (style.display !== 'none' && style.visibility !== 'hidden' && listbox.offsetParent !== null) {
+                             console.log(`   ✓ Found visible listbox via aria-controls: #${ariaControls}`);
+                         } else {
+                             listbox = null; // Found but not visible
+                         }
+                    }
+                }
+
+                // Strategy 2: Look for visible listbox/menu (global search)
+                if (!listbox) {
+                    // Select all potential listboxes
+                    // Added role="presentation" (MUI sometimes uses this for the popper container)
+                    const potentialListboxes = Array.from(document.querySelectorAll('[role="listbox"], [role="menu"], [role="presentation"], .css-26l3qy-menu, .css-1nmdiq5-menu, .MuiAutocomplete-popper, .MuiMenu-paper, .ant-select-dropdown')); 
+                    
+                    // Filter for visible ones
+                    const visibleListboxes = potentialListboxes.filter(el => {
+                        const style = window.getComputedStyle(el);
+                        return style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity) > 0 && el.offsetParent !== null;
+                    });
+
+                    // Sort by z-index (highest usually on top)
+                    visibleListboxes.sort((a, b) => {
+                        const zA = parseInt(window.getComputedStyle(a).zIndex) || 0;
+                        const zB = parseInt(window.getComputedStyle(b).zIndex) || 0;
+                        return zB - zA;
+                    });
+
+                    if (visibleListboxes.length > 0) {
+                        listbox = visibleListboxes[0];
+                        // console.log(`   ✓ Found visible listbox (z-index strategy)`);
+                    }
+                }
+
+                // Strategy 3: Look for any visible dropdown container
+                if (!listbox) {
+                    const visibleDropdowns = Array.from(document.querySelectorAll('[class*="dropdown"], [class*="menu"], [class*="options"], [class*="list"], [id*="react-select"]'))
+                        .filter(el => {
+                            const style = window.getComputedStyle(el);
+                            return style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity) > 0 && el.offsetParent !== null && 
+                                   el !== inputElement && !inputElement.contains(el);
+                        });
+                    if (visibleDropdowns.length > 0) {
+                        // Pick the one that appeared most recently or is closest to input
+                        listbox = visibleDropdowns[visibleDropdowns.length - 1]; // Often appended last
+                        // console.log(`   ✓ Found dropdown container via class name`);
+                    }
+                }
+
+                if (listbox) {
+                    // Wait for options to populate if listbox is empty (async loading)
+                    let retries = 0;
+                    let options = [];
+                    while (retries < 5) {
+                        // Broadened selector for options
+                        options = Array.from(listbox.querySelectorAll('[role="option"], [role="menuitem"], li, div[class*="option"], [id*="option"], div[id*="react-select"]'));
+                        
+                        // If no options found with specific roles, try generic divs with text content if listbox is small
+                        if (options.length === 0 && listbox.children.length < 50) {
+                             options = Array.from(listbox.querySelectorAll('div, span, p')).filter(el => el.innerText.trim().length > 0);
+                        }
+
+                        if (options.length > 0) break;
+                        await new Promise(r => setTimeout(r, 200));
+                        retries++;
+                    }
+                    return options;
+                }
+                return [];
+            };
+
+            // Enhanced Open Strategy
+            let options = [];
+            
+            // Attempt 1: Direct Click
+            inputElement.focus();
+            await simulateClick(inputElement);
+            await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 200));
+            options = await findListboxAndOptions();
+
+            // Attempt 2: Click Parent (often the control wrapper)
+            if (options.length === 0 && inputElement.parentElement) {
+                console.log("   ⚠️ Initial click failed to reveal options. Clicking parent...");
+                await simulateClick(inputElement.parentElement);
+                await new Promise(resolve => setTimeout(resolve, 300));
+                options = await findListboxAndOptions();
+            }
+
+            // Attempt 3: Click Grandparent (often the framework wrapper)
+            if (options.length === 0 && inputElement.parentElement && inputElement.parentElement.parentElement) {
+                console.log("   ⚠️ Clicking grandparent...");
+                await simulateClick(inputElement.parentElement.parentElement);
+                await new Promise(resolve => setTimeout(resolve, 300));
+                options = await findListboxAndOptions();
+            }
+
+            // Attempt 4: Keyboard Down (Accessibility fallback)
+            if (options.length === 0) {
+                console.log("   ⚠️ Trying Keyboard ArrowDown...");
+                inputElement.focus();
+                inputElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
+                await new Promise(resolve => setTimeout(resolve, 300));
+                options = await findListboxAndOptions();
+            }
+
+            // Function to find match in options
+            const findMatchInOptions = (options) => {
+                for (const candidate of validCandidates) {
+                    const candidateLower = candidate.toLowerCase();
+                    
+                    // Try exact match first
+                    let targetOption = options.find(opt =>
+                        opt.innerText.trim().toLowerCase() === candidateLower
+                    );
+
+                    // Try partial match
+                    if (!targetOption) {
+                        targetOption = options.find(opt =>
+                            opt.innerText.toLowerCase().includes(candidateLower) ||
+                            candidateLower.includes(opt.innerText.toLowerCase())
+                        );
+                    }
+
+                    // Try fuzzy match (words in any order)
+                    if (!targetOption) {
+                        const optionWords = candidateLower.split(/\s+/);
+                        targetOption = options.find(opt => {
+                            const optText = opt.innerText.toLowerCase();
+                            return optionWords.every(word => optText.includes(word));
+                        });
+                    }
+                    
+                    if (targetOption) return { option: targetOption, candidate };
+                }
+                return null;
+            };
+
+            // PHASE 1: Check options WITHOUT typing
+            options = await findListboxAndOptions();
+            console.log(`   Phase 1: Found ${options.length} options (no typing)`);
+            
+            let match = findMatchInOptions(options);
+            
+            if (match) {
+                console.log(`   ✓ Found matching option (Phase 1): "${match.option.innerText.trim()}" for candidate "${match.candidate}"`);
+                match.option.scrollIntoView({ block: 'nearest' });
+                await new Promise(resolve => setTimeout(resolve, 100));
+                await simulateClick(match.option);
+                // Child click logic
+                if (match.option.firstElementChild) await simulateClick(match.option.firstElementChild);
+                return true;
+            }
+
+            // PHASE 2: Type to filter (only if needed and possible)
+            // If we found options but no match, OR if we didn't find options, we might need to type.
+            const shouldType = (options.length === 0) || (options.length > 20);
+            
+            if (shouldType && inputElement.tagName === 'INPUT' && !inputElement.readOnly && !inputElement.disabled) {
+                console.log(`   Phase 2: Typing to filter...`);
+                
+                // Try each candidate until we find a match
+                for (const candidateToType of validCandidates) {
+                    console.log(`   Phase 2: Typing "${candidateToType}"...`);
+                    
+                    // Clear existing text first
+                    setNativeValue(inputElement, '');
+                    await new Promise(r => setTimeout(r, 100));
+                    
+                    // Type the candidate using human-like simulation
+                    // We inline a simple version here to avoid circular dependencies or overhead, 
+                    // but we ensure we trigger events for each char or chunk
+                    const chars = candidateToType.split('');
+                    let currentVal = '';
+                    
+                    for (let i = 0; i < chars.length; i++) {
+                        currentVal += chars[i];
+                        setNativeValue(inputElement, currentVal);
+                        inputElement.dispatchEvent(new InputEvent('input', { 
+                            bubbles: true, 
+                            inputType: 'insertText', 
+                            data: chars[i] 
+                        }));
+                        // Small delay for realism
+                        if (i % 2 === 0) await new Promise(r => setTimeout(r, 10 + Math.random() * 20));
+                    }
+                    
+                    await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 400)); // Wait for filtering
+
+                    // Find options again
+                    options = await findListboxAndOptions();
+                    console.log(`   Phase 2: Found ${options.length} options after typing "${candidateToType}"`);
+                    
+                    match = findMatchInOptions(options);
+                    
+                    if (match) {
+                        console.log(`   ✓ Found matching option (Phase 2): "${match.option.innerText.trim()}"`);
+                        match.option.scrollIntoView({ block: 'nearest' });
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        await simulateClick(match.option);
+                        if (match.option.firstElementChild) await simulateClick(match.option.firstElementChild);
+                        return true;
+                    }
+                }
+                
+                // If still no match after trying all candidates, DO NOT clear input immediately.
+                // We might want to keep the custom value (Fallback C).
+                console.log(`   Phase 2: No match found after typing.`);
+            }
+
+            // PHASE 3: Retry after clearing (in case typing hid the fallback options)
+            // Only necessary if we actually typed
+            if (shouldType) {
+                 options = await findListboxAndOptions();
+                 match = findMatchInOptions(options);
+                 if (match) {
+                    console.log(`   ✓ Found matching option (Phase 3): "${match.option.innerText.trim()}"`);
+                    await simulateClick(match.option);
+                    if (match.option.firstElementChild) await simulateClick(match.option.firstElementChild);
+                    return true;
+                 }
             }
             
-            // FALLBACK: Keyboard navigation
-            // If we couldn't find the option or clicking didn't work, try keyboard
-            console.log("   ⚠️ Trying keyboard navigation fallback...");
+            // FALLBACK: Keyboard navigation or Direct Entry
+            console.log("   ⚠️ Trying fallback strategies...");
             
             inputElement.focus();
-            // Press ArrowDown to select first filtered option
+
+            // Strategy A: If we have options but couldn't match text, try selecting the first non-empty one
+            // This is risky but better than nothing if it's a "Select..." dropdown where options are "Yes", "No"
+            if (options.length > 0 && options.length < 5) {
+                 console.log("   ⚠️ Fallback A: Selecting first available option...");
+                 const firstOption = options.find(o => o.innerText.trim().length > 0 && !o.innerText.toLowerCase().includes('select'));
+                 if (firstOption) {
+                     await simulateClick(firstOption);
+                     return true;
+                 }
+            }
+
+            // Strategy B: Keyboard Navigation (Arrow Down + Enter)
+            console.log("   ⚠️ Fallback B: Keyboard navigation...");
             inputElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
             await new Promise(r => setTimeout(r, 100));
-            
-            // Press Enter to confirm
             inputElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
-            inputElement.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', bubbles: true }));
-            inputElement.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }));
             
-            // Blur to commit
-            inputElement.blur();
+            // Strategy C: Direct Value Entry (for comboboxes that allow custom values)
+            // If the element is an input, we can leave the value there and blur
+            if (inputElement.tagName === 'INPUT') {
+                console.log("   ⚠️ Fallback C: Leaving typed value as custom entry...");
+                setNativeValue(inputElement, primaryCandidate);
+                inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+                inputElement.blur();
+                return true; 
+            }
             
             await new Promise(resolve => setTimeout(resolve, 200));
             return true; // Assume success after fallback
@@ -1349,9 +1489,12 @@ async function autofillPage() {
         }
     }
 
-    async function selectDropdownOption(selectElement, optionText) {
+    async function selectDropdownOption(selectElement, optionTextOrArray) {
         try {
-            console.log(`🔽 Selecting dropdown option: "${optionText}"`);
+            const candidates = Array.isArray(optionTextOrArray) ? optionTextOrArray : [optionTextOrArray];
+            const validCandidates = candidates.filter(c => c && typeof c === 'string' && c.trim().length > 0);
+            
+            console.log(`🔽 Selecting dropdown option (Candidates: ${validCandidates.join(', ')})`);
 
             // For regular <select> elements
             if (selectElement.tagName.toLowerCase() === 'select') {
@@ -1362,12 +1505,20 @@ async function autofillPage() {
                 if (currentOption) {
                     const currentText = currentOption.text.toLowerCase().trim();
                     const currentValue = currentOption.value.toLowerCase().trim();
-                    const targetLower = optionText.toLowerCase().trim();
+                    
+                    let isAlreadyCorrect = false;
+                    for (const candidate of validCandidates) {
+                        const targetLower = candidate.toLowerCase().trim();
+                        if (currentText === targetLower ||
+                            currentValue === targetLower ||
+                            currentText.includes(targetLower) ||
+                            targetLower.includes(currentText)) {
+                            isAlreadyCorrect = true;
+                            break;
+                        }
+                    }
 
-                    if (currentText === targetLower ||
-                        currentValue === targetLower ||
-                        currentText.includes(targetLower) ||
-                        targetLower.includes(currentText)) {
+                    if (isAlreadyCorrect) {
                         console.log(`⏭️ Select already has correct value: "${currentOption.text}", skipping`);
                         return true;
                     }
@@ -1383,31 +1534,40 @@ async function autofillPage() {
                     }
                 }
 
-                // Try exact match first
-                let matchingOption = options.find(opt => opt.text.trim() === optionText || opt.value === optionText);
+                let matchingOption = null;
 
-                // Try partial match (case-insensitive)
-                if (!matchingOption) {
-                    const optionLower = optionText.toLowerCase();
-                    matchingOption = options.find(opt =>
-                        opt.text.toLowerCase().includes(optionLower) ||
-                        opt.value.toLowerCase().includes(optionLower)
-                    );
-                }
+                for (const candidate of validCandidates) {
+                    // Try exact match first
+                    matchingOption = options.find(opt => opt.text.trim() === candidate || opt.value === candidate);
 
-                // Try matching keywords
-                if (!matchingOption) {
-                    const keywords = optionText.toLowerCase().split(/\s+/);
-                    matchingOption = options.find(opt => {
-                        const optText = opt.text.toLowerCase();
-                        return keywords.some(keyword => optText.includes(keyword));
-                    });
+                    // Try partial match (case-insensitive)
+                    if (!matchingOption) {
+                        const optionLower = candidate.toLowerCase();
+                        matchingOption = options.find(opt =>
+                            opt.text.toLowerCase().includes(optionLower) ||
+                            opt.value.toLowerCase().includes(optionLower)
+                        );
+                    }
+
+                    // Try matching keywords
+                    if (!matchingOption) {
+                        const keywords = candidate.toLowerCase().split(/\s+/);
+                        matchingOption = options.find(opt => {
+                            const optText = opt.text.toLowerCase();
+                            return keywords.some(keyword => optText.includes(keyword));
+                        });
+                    }
+                    
+                    if (matchingOption) {
+                        console.log(`   ✓ Found match for candidate "${candidate}": "${matchingOption.text}"`);
+                        break;
+                    }
                 }
 
                 if (matchingOption) {
-                    // Set by value
-                    selectElement.value = matchingOption.value;
-
+                    // Set using setNativeValue for maximum compatibility
+                    setNativeValue(selectElement, matchingOption.value);
+                    
                     // Also set by selectedIndex for frameworks that need it
                     const optionIndex = options.indexOf(matchingOption);
                     if (optionIndex >= 0) {
@@ -1419,17 +1579,10 @@ async function autofillPage() {
                     selectElement.dispatchEvent(new Event('input', { bubbles: true }));
                     selectElement.dispatchEvent(new Event('blur', { bubbles: true }));
 
-                    // For React/Angular - fire native events
-                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
-                    if (nativeInputValueSetter) {
-                        nativeInputValueSetter.call(selectElement, matchingOption.value);
-                        selectElement.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
-
                     console.log(`   ✓ Selected: "${matchingOption.text}" (index: ${optionIndex})`);
                     return true;
                 } else {
-                    console.warn(`   ✗ Could not find matching option for: "${optionText}"`);
+                    console.warn(`   ✗ Could not find matching option for any candidate`);
                     // Log available options for debugging
                     console.log(`   Available options: ${options.map(o => o.text).join(', ')}`);
                     return false;
@@ -1479,6 +1632,126 @@ async function autofillPage() {
         }
     }
 
+    async function selectRadioOption(radioElement, optionTextOrArray) {
+        const candidates = Array.isArray(optionTextOrArray) ? optionTextOrArray : [optionTextOrArray];
+        const validCandidates = candidates.filter(c => c && typeof c === 'string' && c.trim().length > 0);
+        
+        console.log(`🔘 Selecting radio option (Candidates: ${validCandidates.join(', ')})`);
+
+        const isInput = radioElement.tagName.toLowerCase() === 'input' && radioElement.type === 'radio';
+        const name = radioElement.name;
+        let group = [];
+
+        // Helper to determine selector
+        const getSelector = () => isInput ? 'input[type="radio"]' : '[role="radio"], [role="menuitemradio"]';
+
+        if (isInput && name) {
+            group = Array.from(document.querySelectorAll(`input[type="radio"][name="${name}"]`));
+        } else {
+             console.log("   ⚠️ Radio element has no name or is custom, trying container fallback...");
+             
+             // 1. Try fieldset/radiogroup first (strong signal)
+             let container = radioElement.closest('fieldset, [role="radiogroup"], [role="group"]');
+             
+             if (!container) {
+                 // 2. Try climbing up divs
+                 let current = radioElement.parentElement;
+                 let depth = 0;
+                 while (current && depth < 4) {
+                     const selector = getSelector();
+                     const radios = current.querySelectorAll(selector);
+                     if (radios.length > 1) {
+                         container = current;
+                         break;
+                     }
+                     current = current.parentElement;
+                     depth++;
+                 }
+             }
+
+             if (container) {
+                 const selector = getSelector();
+                 group = Array.from(container.querySelectorAll(selector));
+             }
+        }
+
+        if (group.length === 0) {
+            console.log("   ❌ Could not find radio group.");
+            return false;
+        }
+
+        // Helper to get label text for a radio
+        const getRadioLabel = (radio) => {
+             // 1. Label tag with for attribute
+             if (radio.id) {
+                 const label = document.querySelector(`label[for="${radio.id}"]`);
+                 if (label) return label.innerText.trim();
+             }
+             // 2. Parent label
+             const parentLabel = radio.closest('label');
+             if (parentLabel) return parentLabel.innerText.trim();
+             
+             // 3. Next sibling label (common pattern)
+             if (radio.nextElementSibling && radio.nextElementSibling.tagName === 'LABEL') {
+                 return radio.nextElementSibling.innerText.trim();
+             }
+
+             // 4. Aria-label
+             if (radio.getAttribute('aria-label')) return radio.getAttribute('aria-label');
+
+             // 5. Text content (for custom radios)
+             if (!isInput && radio.innerText && radio.innerText.trim().length > 0) return radio.innerText.trim();
+
+             // 6. Parent text content (fallback for custom radios inside divs with text)
+             if (radio.parentElement && radio.parentElement.innerText.trim().length > 0) {
+                 // Try to exclude the radio's own text if possible, but usually fine
+                 return radio.parentElement.innerText.trim();
+             }
+
+             // 7. Next sibling text (if not a label tag)
+             if (radio.nextElementSibling && radio.nextElementSibling.innerText && radio.nextElementSibling.innerText.trim().length > 0) {
+                 return radio.nextElementSibling.innerText.trim();
+             }
+             
+             // 8. Value attribute
+             return radio.value ? radio.value.trim() : '';
+        };
+
+        let match = null;
+
+        for (const candidate of validCandidates) {
+            const candidateLower = candidate.toLowerCase();
+            
+            // Try exact/partial match on label or value
+            match = group.find(radio => {
+                const label = getRadioLabel(radio).toLowerCase();
+                const val = (radio.value || '').toLowerCase();
+                return label === candidateLower || val === candidateLower ||
+                       label.includes(candidateLower) || val.includes(candidateLower) ||
+                       candidateLower.includes(label); // Also try reverse inclusion
+            });
+
+            if (match) break;
+        }
+
+        if (match) {
+            console.log(`   ✓ Found matching radio: "${getRadioLabel(match)}"`);
+            
+            const isChecked = isInput ? match.checked : match.getAttribute('aria-checked') === 'true';
+
+            if (!isChecked) {
+                await simulateClick(match);
+                if (isInput) {
+                    match.checked = true; // Ensure state
+                    match.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+            return true;
+        }
+
+        return false;
+    }
+
     async function simulateTyping(element, text) {
         if (typeof text !== 'string' || !text.trim()) return false;
 
@@ -1514,9 +1787,14 @@ async function autofillPage() {
             } else {
                 element.value = '';
                 const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-                if (nativeInputValueSetter) {
+                const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+                
+                if (element.tagName.toLowerCase() === 'textarea' && nativeTextAreaValueSetter) {
+                    nativeTextAreaValueSetter.call(element, '');
+                } else if (nativeInputValueSetter && element.tagName.toLowerCase() !== 'textarea') {
                     nativeInputValueSetter.call(element, '');
                 }
+                
                 element.dispatchEvent(new Event('input', { bubbles: true }));
             }
 
@@ -1703,12 +1981,76 @@ async function autofillPage() {
         } else if (element.getAttribute('list')) {
             const dataList = document.getElementById(element.getAttribute('list'));
             if (dataList) options = Array.from(dataList.options).map(opt => opt.value);
-        } else if (element.type === 'radio' || element.type === 'checkbox') {
+        } else if (element.type === 'radio' || element.type === 'checkbox' || element.getAttribute('role') === 'radio' || element.getAttribute('role') === 'menuitemradio') {
             const groupName = element.name;
-            if (groupName) {
-                options = Array.from(document.querySelectorAll(`input[name="${groupName}"]`))
-                    .map(radio => document.querySelector(`label[for="${radio.id}"]`)?.innerText.trim())
-                    .filter(Boolean);
+            let group = [];
+            const isInput = element.tagName.toLowerCase() === 'input';
+            
+            // Helper to determine selector
+            const getSelector = () => {
+                if (isInput) return `input[type="${element.type}"]`;
+                const role = element.getAttribute('role');
+                return role ? `[role="${role}"]` : '[role="radio"], [role="menuitemradio"]';
+            };
+
+            if (groupName && isInput) {
+                group = Array.from(document.querySelectorAll(`input[name="${groupName}"]`));
+            } else {
+                 // Fallback for unnamed groups (e.g. grouped by parent)
+                 // 1. Try fieldset/radiogroup first (strong signal)
+                 let container = element.closest('fieldset, [role="radiogroup"], [role="group"]');
+                 
+                 if (!container) {
+                     // 2. Try climbing up divs until we find one with multiple radios of same type
+                     let current = element.parentElement;
+                     let depth = 0;
+                     while (current && depth < 4) { // limit depth
+                         const selector = getSelector();
+                         const radios = current.querySelectorAll(selector);
+                         if (radios.length > 1) {
+                             container = current;
+                             break;
+                         }
+                         current = current.parentElement;
+                         depth++;
+                     }
+                 }
+
+                 if (container) {
+                     const selector = getSelector();
+                     group = Array.from(container.querySelectorAll(selector));
+                 }
+            }
+            
+            if (group.length > 0) {
+                 // Helper to get label - MATCHES selectRadioOption LOGIC
+                 const getLabel = (el) => {
+                     if (el.id) {
+                         const label = document.querySelector(`label[for="${el.id}"]`);
+                         if (label) return label.innerText.trim();
+                     }
+                     const parentLabel = el.closest('label');
+                     if (parentLabel) return parentLabel.innerText.trim();
+                     if (el.nextElementSibling && el.nextElementSibling.tagName === 'LABEL') {
+                         return el.nextElementSibling.innerText.trim();
+                     }
+                     if (el.getAttribute('aria-label')) return el.getAttribute('aria-label');
+                     if (!isInput && el.innerText && el.innerText.trim().length > 0) return el.innerText.trim();
+                     
+                     // Extra checks from selectRadioOption
+                     if (el.parentElement && el.parentElement.innerText.trim().length > 0) {
+                         return el.parentElement.innerText.trim();
+                     }
+                     if (el.nextElementSibling && el.nextElementSibling.innerText && el.nextElementSibling.innerText.trim().length > 0) {
+                         return el.nextElementSibling.innerText.trim();
+                     }
+
+                     return el.value ? el.value.trim() : '';
+                 };
+                 
+                 options = group.map(getLabel).filter(t => t && t.length > 0);
+                 // Remove duplicates
+                 options = [...new Set(options)];
             }
         }
         if (options.length > 0) return { options, source: element };
@@ -1722,29 +2064,98 @@ async function autofillPage() {
         const isComboBox = element.getAttribute('role') === 'combobox' ||
             element.hasAttribute('aria-controls') ||
             element.getAttribute('aria-haspopup') === 'listbox' ||
-            isButtonDropdown;
+            element.getAttribute('aria-haspopup') === 'true' ||
+            element.getAttribute('aria-autocomplete') === 'list' ||
+            isButtonDropdown ||
+            ((typeof element.className === 'string') && 
+             /\b(select|dropdown|combobox|multiselect|picker|chosen|select2|mui|ant)\b/i.test(element.className) && 
+             !element.className.includes('container') && 
+             !element.className.includes('wrapper'));
 
         if (isComboBox) {
-            await simulateClick(element);
-            await new Promise(resolve => setTimeout(resolve, 750));
-
-            const ariaControlsId = element.getAttribute('aria-controls');
-            let controlledEl = ariaControlsId ? document.getElementById(ariaControlsId) : document.querySelector('[role="listbox"]:not([style*="display: none"])');
-
-            // Also check for menu role (common in Material-UI and similar libraries)
+            // Check if options are already visible (e.g. if we just interacted with it)
+            const ariaControlsId = element.getAttribute('aria-controls') || element.getAttribute('aria-owns');
+            let controlledEl = ariaControlsId ? document.getElementById(ariaControlsId) : null;
+            
+            // Heuristic check for existing visible list without clicking
             if (!controlledEl) {
-                controlledEl = document.querySelector('[role="menu"]:not([style*="display: none"])');
+                 const potentialLists = Array.from(document.querySelectorAll('[role="listbox"], [role="menu"], .css-26l3qy-menu, .MuiAutocomplete-popper, .MuiMenu-paper'));
+                 const visibleLists = potentialLists.filter(el => {
+                    const style = window.getComputedStyle(el);
+                    return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && el.offsetParent !== null;
+                 });
+                 if (visibleLists.length > 0) controlledEl = visibleLists[0];
+            }
+
+            // If we didn't find a visible list, we need to open it
+            let openedHere = false;
+            if (!controlledEl || controlledEl.offsetParent === null) {
+                element.focus();
+                await simulateClick(element);
+                openedHere = true;
+                await new Promise(resolve => setTimeout(resolve, 600)); // Wait for animation
+            }
+
+            // Search again for the list element
+            if (!controlledEl) {
+                const ariaControlsIdCheck = element.getAttribute('aria-controls') || element.getAttribute('aria-owns');
+                controlledEl = ariaControlsIdCheck ? document.getElementById(ariaControlsIdCheck) : null;
+            }
+
+            if (!controlledEl) {
+                // Look for any visible listbox/menu that appeared
+                // We prioritize elements with high z-index as they are likely the dropdowns
+                const potentialLists = Array.from(document.querySelectorAll('[role="listbox"], [role="menu"], [class*="menu"], [class*="dropdown"], [class*="options"], .css-26l3qy-menu, [id*="react-select"], ul[class*="list"], .MuiAutocomplete-popper, .MuiMenu-paper'));
+                
+                const visibleLists = potentialLists.filter(el => {
+                    const style = window.getComputedStyle(el);
+                    // Must be visible and not the element itself
+                    return style.display !== 'none' && 
+                           style.visibility !== 'hidden' && 
+                           style.opacity !== '0' &&
+                           el.offsetParent !== null &&
+                           el !== element &&
+                           !element.contains(el);
+                });
+
+                if (visibleLists.length > 0) {
+                     // Sort by z-index descending
+                     visibleLists.sort((a, b) => {
+                         const zA = window.getComputedStyle(a).zIndex;
+                         const zB = window.getComputedStyle(b).zIndex;
+                         const valA = (zA === 'auto' || isNaN(parseInt(zA))) ? 0 : parseInt(zA);
+                         const valB = (zB === 'auto' || isNaN(parseInt(zB))) ? 0 : parseInt(zB);
+                         return valB - valA;
+                     });
+                     controlledEl = visibleLists[0];
+                }
             }
 
             if (controlledEl) {
-                const optionElements = Array.from(controlledEl.querySelectorAll('[role="option"], [role="menuitem"]'));
-                if (optionElements.length > 0) {
-                    const opts = optionElements.map(opt => opt.innerText.trim()).filter(t => t.length > 0);
-                    await simulateClick(document.body); // Close the dropdown
+                // Extract options
+                const optionEls = controlledEl.querySelectorAll('[role="option"], [role="menuitem"], li, div[class*="option"], div[id*="react-select"], .MuiAutocomplete-option');
+                let opts = Array.from(optionEls).map(el => el.innerText.trim()).filter(t => t.length > 0);
+                
+                // Fallback: direct children if no roles found
+                if (opts.length === 0) {
+                     opts = Array.from(controlledEl.children).map(el => el.innerText.trim()).filter(t => t.length > 0);
+                }
+
+                if (opts.length > 0) {
+                    if (openedHere) {
+                        await simulateClick(document.body); // Close the dropdown if we opened it
+                        element.blur(); 
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                    }
                     return { options: opts, source: controlledEl };
                 }
             }
-            await simulateClick(document.body); // Click away to close
+            
+            if (openedHere) {
+                await simulateClick(document.body); // Click away to close
+                element.blur();
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
         }
         return { options: [] };
     }
@@ -2128,6 +2539,8 @@ Return ONLY a valid JSON array with this structure:
             '[role="textbox"]',
             '[role="combobox"]',
             '[role="listbox"]',
+            '[role="radio"]',
+            '[role="menuitemradio"]',
             '[role="radiogroup"] input[type="radio"]',
             '[role="group"] input[type="checkbox"]',
 
@@ -2235,14 +2648,21 @@ Return ONLY a valid JSON array with this structure:
                 continue;
             }
 
-            // Skip elements that already have values (unless they're default/placeholder values)
-            if (el.value && el.value.trim() !== '' &&
-                el.value.trim() !== 'Select' &&
-                el.value.trim() !== 'Choose' &&
-                el.value.trim() !== 'Please select' &&
-                el.value.trim() !== '-- Select --') {
-                console.log('⏭️ Skipping field with existing value:', el.value.substring(0, 50));
-                continue;
+            // Skip inputs/textareas that already have values (unless they look like placeholders)
+            if ((el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'textarea') && 
+                el.value && el.value.trim() !== '') {
+                const val = el.value.trim().toLowerCase();
+                // Allow placeholders that are implemented as values
+                const isPlaceholder = val.includes('select') || 
+                                      val.includes('choose') || 
+                                      val.includes('enter') || 
+                                      val.includes('type') ||
+                                      val === 'search';
+                                      
+                if (!isPlaceholder) {
+                    console.log('⏭️ Skipping input with existing value:', el.value.substring(0, 50));
+                    continue;
+                }
             }
 
             // For checkboxes and radio buttons, skip if already selected
@@ -2252,15 +2672,26 @@ Return ONLY a valid JSON array with this structure:
             }
 
             // For select dropdowns, skip if a meaningful option is already selected
-            if (el.tagName.toLowerCase() === 'select' && el.selectedIndex > 0) {
-                const selectedText = el.options[el.selectedIndex].text.trim();
-                if (selectedText &&
-                    selectedText !== 'Select' &&
-                    selectedText !== 'Choose' &&
-                    selectedText !== 'Please select' &&
-                    selectedText !== '-- Select --') {
-                    console.log('⏭️ Skipping dropdown with existing selection:', selectedText);
-                    continue;
+            if (el.tagName.toLowerCase() === 'select') {
+                const selectedOption = el.options[el.selectedIndex];
+                if (selectedOption) {
+                    const selectedText = selectedOption.text.trim();
+                    const selectedVal = selectedOption.value;
+                    const isSelectPlaceholder = !selectedText ||
+                                                selectedText === '' ||
+                                                selectedText.toLowerCase().includes('select') ||
+                                                selectedText.toLowerCase().includes('choose') ||
+                                                selectedText.toLowerCase().includes('please') ||
+                                                selectedText === '--' ||
+                                                selectedText.includes('...') ||
+                                                selectedVal === '' ||
+                                                selectedVal === '-1' ||
+                                                selectedVal === '0';
+                    
+                    if (!isSelectPlaceholder) {
+                        console.log('⏭️ Skipping dropdown with existing selection:', selectedText);
+                        continue;
+                    }
                 }
             }
 
@@ -2308,11 +2739,34 @@ Return ONLY a valid JSON array with this structure:
                 // Helper function to check if dropdown already has a meaningful value
                 function isDropdownAlreadyAnswered(element) {
                     const tagName = element.tagName.toLowerCase();
+                    const type = element.type;
+
+                    if (type === 'radio') {
+                         const name = element.name;
+                         if (name) {
+                             const group = document.querySelectorAll(`input[type="radio"][name="${name}"]`);
+                             return Array.from(group).some(r => r.checked);
+                         }
+                         // For unnamed radios, check container context
+                         const container = element.closest('div, fieldset, [role="group"], [role="radiogroup"]');
+                         if (container) {
+                             const siblings = Array.from(container.querySelectorAll('input[type="radio"]'));
+                             if (siblings.length > 0 && siblings.length < 20) {
+                                 return siblings.some(r => r.checked);
+                             }
+                         }
+                         return element.checked;
+                    }
+
+                    if (type === 'checkbox') {
+                         return element.checked;
+                    }
+
                     let currentValue = '';
 
                     if (tagName === 'select') {
                         const selectedOption = element.options[element.selectedIndex];
-                        if (selectedOption && element.selectedIndex > 0) {
+                        if (selectedOption && element.selectedIndex >= 0) {
                             currentValue = selectedOption.text.toLowerCase().trim();
                         }
                     } else {
@@ -2326,7 +2780,9 @@ Return ONLY a valid JSON array with this structure:
                         currentValue.includes('please') ||
                         currentValue === '--' ||
                         currentValue === '-' ||
-                        currentValue === '';
+                        currentValue === '' ||
+                        currentValue === 'none' ||
+                        currentValue === 'null';
 
                     if (!isPlaceholder && currentValue.length > 0) {
                         console.log(`⏭️ Dropdown already answered with: "${currentValue}", skipping`);
@@ -2340,15 +2796,29 @@ Return ONLY a valid JSON array with this structure:
                     if (isDropdownAlreadyAnswered(el)) {
                         continue;
                     }
-                    const raceValue = userData.race || 'Decline To Self Identify';
-                    console.log('🏷️ Using saved race/ethnicity:', raceValue);
+                    const raceCandidates = [
+                        userData.race,
+                        'Decline To Self Identify',
+                        'Decline to Answer',
+                        'Prefer not to say',
+                        'I do not wish to answer',
+                        'White',
+                        'Caucasian',
+                        'Black or African American',
+                        'Asian',
+                        'Hispanic or Latino',
+                        'Two or More Races'
+                    ].filter(Boolean);
+                    console.log('🏷️ Using race/ethnicity candidates:', raceCandidates);
 
                     if (inputRole === 'combobox') {
-                        await selectReactSelectOption(el, raceValue);
+                        await selectReactSelectOption(el, raceCandidates);
                     } else if (elType === 'select') {
-                        await selectDropdownOption(el, raceValue);
+                        await selectDropdownOption(el, raceCandidates);
+                    } else if (el.type === 'radio') {
+                        await selectRadioOption(el, raceCandidates);
                     } else if (elType === 'button') {
-                        await selectReactSelectOption(el, raceValue);
+                        await selectReactSelectOption(el, raceCandidates);
                     }
                     continue;
                 }
@@ -2358,15 +2828,27 @@ Return ONLY a valid JSON array with this structure:
                     if (isDropdownAlreadyAnswered(el)) {
                         continue;
                     }
-                    const genderValue = userData.gender || 'Decline to Self-Identify';
-                    console.log('🏷️ Using saved gender:', genderValue);
+                    const genderCandidates = [
+                        userData.gender,
+                        'Decline to Self-Identify',
+                        'Decline to Answer',
+                        'Prefer not to say',
+                        'I do not wish to answer',
+                        'Male',
+                        'Female',
+                        'Man',
+                        'Woman'
+                    ].filter(Boolean);
+                    console.log('🏷️ Using gender candidates:', genderCandidates);
 
                     if (inputRole === 'combobox') {
-                        await selectReactSelectOption(el, genderValue);
+                        await selectReactSelectOption(el, genderCandidates);
                     } else if (elType === 'select') {
-                        await selectDropdownOption(el, genderValue);
+                        await selectDropdownOption(el, genderCandidates);
+                    } else if (el.type === 'radio') {
+                        await selectRadioOption(el, genderCandidates);
                     } else if (elType === 'button') {
-                        await selectReactSelectOption(el, genderValue);
+                        await selectReactSelectOption(el, genderCandidates);
                     }
                     continue;
                 }
@@ -2376,15 +2858,26 @@ Return ONLY a valid JSON array with this structure:
                     if (isDropdownAlreadyAnswered(el)) {
                         continue;
                     }
-                    const veteranValue = userData.veteran || 'I don\'t wish to answer';
-                    console.log('🏷️ Using saved veteran status:', veteranValue);
+                    const veteranCandidates = [
+                        userData.veteran,
+                        'I am not a protected veteran',
+                        'Not a protected veteran',
+                        'No',
+                        'I identify as one or more of the classifications of protected veteran',
+                        'Yes',
+                        'Decline to Self-Identify',
+                        'Prefer not to say'
+                    ].filter(Boolean);
+                    console.log('🏷️ Using veteran status candidates:', veteranCandidates);
 
                     if (inputRole === 'combobox') {
-                        await selectReactSelectOption(el, veteranValue);
+                        await selectReactSelectOption(el, veteranCandidates);
                     } else if (elType === 'select') {
-                        await selectDropdownOption(el, veteranValue);
+                        await selectDropdownOption(el, veteranCandidates);
+                    } else if (el.type === 'radio') {
+                        await selectRadioOption(el, veteranCandidates);
                     } else if (elType === 'button') {
-                        await selectReactSelectOption(el, veteranValue);
+                        await selectReactSelectOption(el, veteranCandidates);
                     }
                     continue;
                 }
@@ -2394,15 +2887,25 @@ Return ONLY a valid JSON array with this structure:
                     if (isDropdownAlreadyAnswered(el)) {
                         continue;
                     }
-                    const disabilityValue = userData.disability || 'I don\'t wish to answer';
-                    console.log('🏷️ Using saved disability status:', disabilityValue);
+                    const disabilityCandidates = [
+                        userData.disability,
+                        "No, I don't have a disability",
+                        "No",
+                        "Yes, I have a disability (or previously had one)",
+                        "Yes",
+                        "Decline to Self-Identify",
+                        "Prefer not to say"
+                    ].filter(Boolean);
+                    console.log('🏷️ Using disability status candidates:', disabilityCandidates);
 
                     if (inputRole === 'combobox') {
-                        await selectReactSelectOption(el, disabilityValue);
+                        await selectReactSelectOption(el, disabilityCandidates);
                     } else if (elType === 'select') {
-                        await selectDropdownOption(el, disabilityValue);
+                        await selectDropdownOption(el, disabilityCandidates);
+                    } else if (el.type === 'radio') {
+                        await selectRadioOption(el, disabilityCandidates);
                     } else if (elType === 'button') {
-                        await selectReactSelectOption(el, disabilityValue);
+                        await selectReactSelectOption(el, disabilityCandidates);
                     }
                     continue;
                 }
@@ -2412,15 +2915,25 @@ Return ONLY a valid JSON array with this structure:
                     if (isDropdownAlreadyAnswered(el)) {
                         continue;
                     }
-                    const hispanicValue = userData.hispanic || 'I don\'t wish to answer';
-                    console.log('🏷️ Using saved hispanic/latino status:', hispanicValue);
+                    const hispanicCandidates = [
+                        userData.hispanic,
+                        "No",
+                        "No, not Hispanic or Latino",
+                        "Yes",
+                        "Yes, Hispanic or Latino",
+                        "Decline to Self-Identify",
+                        "Prefer not to say"
+                    ].filter(Boolean);
+                    console.log('🏷️ Using hispanic/latino status candidates:', hispanicCandidates);
 
                     if (inputRole === 'combobox') {
-                        await selectReactSelectOption(el, hispanicValue);
+                        await selectReactSelectOption(el, hispanicCandidates);
                     } else if (elType === 'select') {
-                        await selectDropdownOption(el, hispanicValue);
+                        await selectDropdownOption(el, hispanicCandidates);
+                    } else if (el.type === 'radio') {
+                        await selectRadioOption(el, hispanicCandidates);
                     } else if (elType === 'button') {
-                        await selectReactSelectOption(el, hispanicValue);
+                        await selectReactSelectOption(el, hispanicCandidates);
                     }
                     continue;
                 }
@@ -2432,15 +2945,24 @@ Return ONLY a valid JSON array with this structure:
                     if (isDropdownAlreadyAnswered(el)) {
                         continue;
                     }
-                    const authValue = userData.citizenship || 'Yes';
-                    console.log('🏷️ Using saved work authorization:', authValue);
+                    const authCandidates = [
+                        userData.citizenship,
+                        "Yes",
+                        "Authorized",
+                        "I am authorized",
+                        "No",
+                        "Not authorized"
+                    ].filter(Boolean);
+                    console.log('🏷️ Using work authorization candidates:', authCandidates);
 
                     if (inputRole === 'combobox') {
-                        await selectReactSelectOption(el, authValue);
+                        await selectReactSelectOption(el, authCandidates);
                     } else if (elType === 'select') {
-                        await selectDropdownOption(el, authValue);
+                        await selectDropdownOption(el, authCandidates);
+                    } else if (el.type === 'radio') {
+                        await selectRadioOption(el, authCandidates);
                     } else if (elType === 'button') {
-                        await selectReactSelectOption(el, authValue);
+                        await selectReactSelectOption(el, authCandidates);
                     }
                     continue;
                 }
@@ -2450,15 +2972,24 @@ Return ONLY a valid JSON array with this structure:
                     if (isDropdownAlreadyAnswered(el)) {
                         continue;
                     }
-                    const sponsorValue = userData.sponsorship || 'No';
-                    console.log('🏷️ Using saved sponsorship status:', sponsorValue);
+                    const sponsorCandidates = [
+                        userData.sponsorship,
+                        "No",
+                        "No, I will not require sponsorship",
+                        "Will not require sponsorship",
+                        "Yes",
+                        "Yes, I will require sponsorship"
+                    ].filter(Boolean);
+                    console.log('🏷️ Using sponsorship status candidates:', sponsorCandidates);
 
                     if (inputRole === 'combobox') {
-                        await selectReactSelectOption(el, sponsorValue);
+                        await selectReactSelectOption(el, sponsorCandidates);
                     } else if (elType === 'select') {
-                        await selectDropdownOption(el, sponsorValue);
+                        await selectDropdownOption(el, sponsorCandidates);
+                    } else if (el.type === 'radio') {
+                        await selectRadioOption(el, sponsorCandidates);
                     } else if (elType === 'button') {
-                        await selectReactSelectOption(el, sponsorValue);
+                        await selectReactSelectOption(el, sponsorCandidates);
                     }
                     continue;
                 }
@@ -2526,7 +3057,14 @@ Return ONLY a valid JSON array with this structure:
                     } else {
                         resumePrompt = `You are answering a specific question in a job application: "${question}". 
                         Based on the candidate's resume, provide a professional, well-written response that directly answers the question.
-                        Highlight relevant skills and experience. Keep it professional and concise.`;
+                        
+                        **INSTRUCTIONS:**
+                        - Answer ONLY what is asked.
+                        - Do NOT provide a generic summary unless explicitly asked.
+                        - If the question asks for a list (e.g., "List your skills"), provide a comma-separated list or bullet points.
+                        - If the question asks for a narrative (e.g., "Describe a challenge"), provide a specific example from the resume.
+                        - Use the first person ("I").
+                        - Keep it professional, concise, and relevant to the job title: "${jobTitle || 'the position'}".`;
                     }
                     
                     const resumeText = await getAIResponse(resumePrompt, userData);
@@ -2749,7 +3287,19 @@ Return ONLY a valid JSON array with this structure:
 **ACCURATE RESPONSE:**`;
                 const certAnswer = await getAIResponse(certPrompt, userData);
                 if (certAnswer) {
-                    await simulateTyping(el, certAnswer);
+                    const elType = el.tagName.toLowerCase();
+                    const inputRole = el.getAttribute('role');
+                    const isCombobox = inputRole === 'combobox' || (typeof el.className === 'string' && el.className.includes('select'));
+
+                    if (isCombobox) {
+                         await selectReactSelectOption(el, [certAnswer]);
+                    } else if (elType === 'select') {
+                        await selectDropdownOption(el, [certAnswer]);
+                    } else if (el.type === 'radio') {
+                        await selectRadioOption(el, [certAnswer]);
+                    } else {
+                        await simulateTyping(el, certAnswer);
+                    }
                     continue;
                 }
             }
@@ -2786,14 +3336,38 @@ Return ONLY a valid JSON array with this structure:
 **ACCURATE RESPONSE:**`;
                 const techAnswer = await getAIResponse(techSkillsPrompt, userData);
                 if (techAnswer) {
-                    await simulateTyping(el, techAnswer);
+                    const elType = el.tagName.toLowerCase();
+                    const inputRole = el.getAttribute('role');
+                    const isCombobox = inputRole === 'combobox' || (typeof el.className === 'string' && el.className.includes('select'));
+
+                    if (isCombobox) {
+                         await selectReactSelectOption(el, [techAnswer]);
+                    } else if (elType === 'select') {
+                        await selectDropdownOption(el, [techAnswer]);
+                    } else if (el.type === 'radio') {
+                        await selectRadioOption(el, [techAnswer]);
+                    } else {
+                        await simulateTyping(el, techAnswer);
+                    }
                     continue;
                 }
             }
 
             // --- Options (Dropdowns, Radios, etc.) ---
             const { options, source } = await findOptionsForInput(el);
-            if (options.length > 0) {
+            
+            // Check if it is a dropdown-like element, even if no options were extracted yet
+            // This allows us to handle searchable comboboxes where options only appear after typing
+            const isDropdownLike = options.length > 0 || 
+                                   el.tagName.toLowerCase() === 'select' || 
+                                   el.type === 'radio' ||
+                                   el.getAttribute('role') === 'radio' ||
+                                   el.getAttribute('role') === 'menuitemradio' ||
+                                   el.getAttribute('role') === 'combobox' || 
+                                   el.hasAttribute('aria-haspopup') ||
+                                   (typeof el.className === 'string' && /\b(select|dropdown|combobox|picker)\b/i.test(el.className));
+
+            if (isDropdownLike) {
                 const cleanQuestion = question.replace(/[*:]$/, '').trim();
 
                 // Determine question type for better AI context
@@ -2803,8 +3377,15 @@ Return ONLY a valid JSON array with this structure:
                 else if (combinedText.includes('how') && combinedText.includes('hear')) questionType = 'referral-source';
                 else if (combinedText.includes('status') || combinedText.includes('citizenship')) questionType = 'work-status';
                 else if (combinedText.includes('notice') || combinedText.includes('period')) questionType = 'notice-period';
+                else if (combinedText.includes('gender') || combinedText.includes('sex')) questionType = 'gender';
+                else if (combinedText.includes('race') || combinedText.includes('ethnicity')) questionType = 'race';
+                else if (combinedText.includes('veteran')) questionType = 'veteran';
+                else if (combinedText.includes('disability')) questionType = 'disability';
 
-                const prompt = `You are an expert career advisor helping with job application forms. You must select the MOST ACCURATE and TRUTHFUL option from the provided list.
+                let prompt;
+                
+                if (options.length > 0) {
+                    prompt = `You are an expert career advisor helping with job application forms. You must select the MOST ACCURATE and TRUTHFUL option from the provided list.
 
 **CRITICAL REQUIREMENTS:**
 - ACCURACY: Choose the option that best reflects the candidate's actual qualifications and situation
@@ -2838,108 +3419,146 @@ ${options.map((opt, idx) => `${idx + 1}. ${opt}`).join('\n')}
 4. NEVER select obviously false information (wrong location, impossible experience levels, etc.)
 
 **RESPONSE FORMAT:**
-Return ONLY the exact text of the selected option. No explanation, no additional text.
+Return ONLY the exact text of the selected option. Do NOT include the number (e.g., "1. Option"). Return ONLY the option text.
 
 **SELECTED OPTION:**`;
+                } else {
+                    // Fallback prompt when no options are found - ask for a likely value to type
+                    prompt = `You are filling out a job application form. There is a dropdown or combobox field, but I cannot see the options yet. 
+Based on the question and the candidate's profile, provide the most likely answer to type into this field.
+
+**CANDIDATE PROFILE:**
+- Name: ${userData.firstName || ''} ${userData.lastName || ''}
+- Location: ${userData.city || ''} ${userData.state || ''} ${userData.country || ''}
+- Citizenship: ${userData.citizenship || 'Not provided'}
+- Job Title Applied For: ${jobTitle || 'Not specified'}
+- Question Category: ${questionType}
+
+**QUESTION:**
+"${cleanQuestion}"
+
+**INSTRUCTIONS:**
+- Provide a short, standard answer that is likely to appear in a dropdown for this question.
+- Examples: "Yes", "No", "United States", "Male", "Female", "Bachelor's Degree", "Full-time".
+- Return ONLY the text to type.
+
+**ANSWER:**`;
+                }
 
                 let aiChoice = await getAIResponse(prompt, userData);
 
                 // Clean up the AI response to match an option exactly
                 aiChoice = aiChoice.trim();
+                // Remove leading numbers (e.g. "1. Option" -> "Option")
+                aiChoice = aiChoice.replace(/^\d+[\.\)]\s*/, '');
+                // Remove common prefixes
+                aiChoice = aiChoice.replace(/^(Option|Answer|Selected):\s*/i, '');
 
                 // Advanced option matching with validation
                 let bestMatch = null;
 
-                // Step 1: Try exact match (case insensitive)
-                bestMatch = options.find(opt => opt.trim().toLowerCase() === aiChoice.toLowerCase());
+                if (options.length > 0) {
+                    // Step 1: Try exact match (case insensitive)
+                    bestMatch = options.find(opt => opt.trim().toLowerCase() === aiChoice.toLowerCase());
 
-                // Step 2: Try partial match - AI choice contains option or vice versa
-                if (!bestMatch) {
-                    bestMatch = options.find(opt => {
-                        const optLower = opt.toLowerCase();
-                        const choiceLower = aiChoice.toLowerCase();
-                        return optLower.includes(choiceLower) || choiceLower.includes(optLower);
-                    });
-                }
-
-                // Step 3: Try word-based matching for better accuracy
-                if (!bestMatch && aiChoice.length > 2) {
-                    const aiWords = aiChoice.toLowerCase().split(/\s+/);
-                    bestMatch = options.find(opt => {
-                        const optWords = opt.toLowerCase().split(/\s+/);
-                        return aiWords.some(aiWord =>
-                            optWords.some(optWord =>
-                                aiWord.length > 2 && optWord.includes(aiWord)
-                            )
-                        );
-                    });
-                }
-
-                // Step 4: Intelligent fallback based on question type
-                if (!bestMatch) {
-                    console.warn(`⚠️ AI choice "${aiChoice}" doesn't match any option. Question type: ${questionType}`);
-
-                    // Context-aware fallback selection
-                    if (questionType === 'work-status') {
-                        bestMatch = options.find(opt => opt.toLowerCase().includes('authorized') || opt.toLowerCase().includes('citizen')) ||
-                            options.find(opt => opt.toLowerCase().includes('yes'));
-                    } else if (questionType === 'relocation') {
-                        bestMatch = options.find(opt => opt.toLowerCase().includes('yes') || opt.toLowerCase().includes('willing'));
-                    } else if (questionType === 'notice-period') {
-                        bestMatch = options.find(opt => opt.includes('2') || opt.includes('weeks') || opt.includes('immediately'));
-                    } else {
-                        // Generic fallback: avoid negative options, prefer professional responses
-                        bestMatch = options.find(opt =>
-                            opt.trim() &&
-                            opt.toLowerCase() !== 'select' &&
-                            opt.toLowerCase() !== 'choose' &&
-                            opt.toLowerCase() !== 'none' &&
-                            !opt.toLowerCase().includes('prefer not')
-                        ) || options[0];
+                    // Step 2: Try partial match - AI choice contains option or vice versa
+                    if (!bestMatch) {
+                        bestMatch = options.find(opt => {
+                            const optLower = opt.toLowerCase();
+                            const choiceLower = aiChoice.toLowerCase();
+                            return optLower.includes(choiceLower) || choiceLower.includes(optLower);
+                        });
                     }
+
+                    // Step 3: Try word-based matching for better accuracy
+                    if (!bestMatch && aiChoice.length > 2) {
+                        const aiWords = aiChoice.toLowerCase().split(/\s+/);
+                        bestMatch = options.find(opt => {
+                            const optWords = opt.toLowerCase().split(/\s+/);
+                            return aiWords.some(aiWord =>
+                                optWords.some(optWord =>
+                                    aiWord.length > 2 && optWord.includes(aiWord)
+                                )
+                            );
+                        });
+                    }
+
+                    // Step 4: Intelligent fallback based on question type
+                    if (!bestMatch) {
+                        console.warn(`⚠️ AI choice "${aiChoice}" doesn't match any option. Question type: ${questionType}`);
+
+                        // Context-aware fallback selection
+                        if (questionType === 'work-status') {
+                            bestMatch = options.find(opt => opt.toLowerCase().includes('authorized') || opt.toLowerCase().includes('citizen')) ||
+                                options.find(opt => opt.toLowerCase().includes('yes'));
+                        } else if (questionType === 'relocation') {
+                            bestMatch = options.find(opt => opt.toLowerCase().includes('yes') || opt.toLowerCase().includes('willing'));
+                        } else if (questionType === 'notice-period') {
+                            bestMatch = options.find(opt => opt.includes('2') || opt.includes('weeks') || opt.includes('immediately'));
+                        } else {
+                            // Generic fallback: avoid negative options, prefer professional responses
+                            bestMatch = options.find(opt =>
+                                opt.trim() &&
+                                opt.toLowerCase() !== 'select' &&
+                                opt.toLowerCase() !== 'choose' &&
+                                opt.toLowerCase() !== 'none' &&
+                                !opt.toLowerCase().includes('prefer not')
+                            ) || options[0];
+                        }
+                    }
+                } else {
+                    // No options found, so "bestMatch" is just the AI's guess
+                    bestMatch = aiChoice;
                 }
 
                 usedAnswers.add(bestMatch);
+
+                // Create robust candidates list for selection
+                const candidates = [bestMatch, aiChoice].filter(c => c && typeof c === 'string' && c.trim().length > 0);
+                
+                // Add specific synonyms based on AI choice if needed
+                if (aiChoice.toLowerCase().includes('yes')) candidates.push('Yes');
+                if (aiChoice.toLowerCase().includes('no')) candidates.push('No');
+                if (aiChoice.toLowerCase().includes('remote')) candidates.push('Remote');
+                if (aiChoice.toLowerCase().includes('hybrid')) candidates.push('Hybrid');
+                if (aiChoice.toLowerCase().includes('onsite') || aiChoice.toLowerCase().includes('on-site')) candidates.push('On-site');
 
                 // Select the option based on element type
                 let selectionSuccessful = false;
 
                 if (el.tagName.toLowerCase() === 'select') {
-                    for (let option of el.options) {
-                        const optText = option.text.trim();
-                        if (optText === bestMatch || optText.toLowerCase() === bestMatch.toLowerCase()) {
-                            // Use robust value setter
-                            setNativeValue(el, option.value);
-                            selectionSuccessful = true;
-                            break;
+                    selectionSuccessful = await selectDropdownOption(el, candidates);
+                    if (!selectionSuccessful) {
+                        console.warn("Standard select failed, trying manual fallback...");
+                        // Fallback manual loop
+                        for (let option of el.options) {
+                            const optText = option.text.trim();
+                            if (candidates.some(c => optText === c || optText.toLowerCase() === c.toLowerCase())) {
+                                setNativeValue(el, option.value);
+                                selectionSuccessful = true;
+                                break;
+                            }
                         }
                     }
                     // Verify selection
                     if (selectionSuccessful) {
                         await new Promise(resolve => setTimeout(resolve, 100));
                     }
-                } else if (el.type === 'radio' || el.type === 'checkbox') {
+                } else if (el.type === 'radio' || el.getAttribute('role') === 'radio' || el.getAttribute('role') === 'menuitemradio') {
+                    selectionSuccessful = await selectRadioOption(el, candidates);
+                } else if (el.type === 'checkbox') {
                     // Find all related inputs (by name or by grouping)
                     let relatedInputs = [];
                     if (el.name) {
                         relatedInputs = Array.from(document.querySelectorAll(`input[name="${el.name}"]`));
                     } else {
-                        // Fallback: look for siblings if no name (rare but happens in some frameworks)
-                        // Or maybe we are just processing 'el' itself if it's a single checkbox
                         relatedInputs = [el]; 
-                        // If it's a radio group without name, we might be in trouble, but let's try to find siblings in same container
-                        if (el.type === 'radio') {
-                            const container = el.closest('div, fieldset, [role="group"]');
-                            if (container) {
-                                relatedInputs = Array.from(container.querySelectorAll('input[type="radio"]'));
-                            }
-                        }
                     }
 
                     for (const input of relatedInputs) {
                         const labelText = getLabelTextForElement(input);
                         
-                        if (labelText && (labelText === bestMatch || labelText.toLowerCase() === bestMatch.toLowerCase() || labelText.includes(bestMatch))) {
+                        if (labelText && candidates.some(c => labelText === c || labelText.toLowerCase() === c.toLowerCase() || labelText.includes(c))) {
                             if (!input.checked) {
                                 await simulateClick(input);
                             }
@@ -2947,39 +3566,24 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                             break;
                         }
                     }
-                    
-                    // Verify selection
-                    if (selectionSuccessful) {
-                        await new Promise(resolve => setTimeout(resolve, 100));
-                        // Re-query to check status
-                        const isChecked = el.name ? 
-                            document.querySelector(`input[name="${el.name}"]:checked`) : 
-                            (el.checked ? el : null);
-                            
-                        if (!isChecked) {
-                            console.warn("Radio/checkbox selection failed for:", question);
-                            // Try one more time with direct click on the best match element found
-                        }
-                    }
                 } else if (el.getAttribute('role') === 'combobox' || (el.tagName.toLowerCase() === 'button' && el.hasAttribute('aria-haspopup'))) {
                     // Handle combobox and button-based dropdowns
-                    selectionSuccessful = await selectReactSelectOption(el, bestMatch);
+                    selectionSuccessful = await selectReactSelectOption(el, candidates);
 
                     // If selection failed, try opening and selecting again with more time
                     if (!selectionSuccessful) {
                         await new Promise(resolve => setTimeout(resolve, 500));
-                        selectionSuccessful = await selectReactSelectOption(el, bestMatch);
+                        selectionSuccessful = await selectReactSelectOption(el, candidates);
                     }
 
                     if (!selectionSuccessful) {
-                        console.warn("Could not select dropdown option for:", question, "Tried to select:", bestMatch);
+                        console.warn("Could not select dropdown option for:", question, "Tried to select:", candidates.join(' | '));
                     }
                 } else {
                     // Custom dropdowns - button groups or other custom elements
                     const optionElements = Array.from(source.querySelectorAll('[role="option"], [role="menuitem"], button'));
                     const targetOption = optionElements.find(opt =>
-                        opt.innerText.trim() === bestMatch ||
-                        opt.innerText.trim().toLowerCase() === bestMatch.toLowerCase()
+                        candidates.some(c => opt.innerText.trim() === c || opt.innerText.trim().toLowerCase() === c.toLowerCase())
                     );
                     if (targetOption) {
                         await simulateClick(targetOption);
@@ -3112,9 +3716,11 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                         console.log('🏷️ Using saved hispanic/latino preference:', valueToType);
                         break;
                     case 'unknownText':
-                        // Use AI for unknown text fields if question is present
-                        if (question && question.length > 3) {
-                            console.log(`Hired Always: Using AI for unknown text field: "${question}"`);
+                        // Use AI for unknown text fields if question is present or can be inferred
+                        const queryText = question || (combinedText.length > 5 ? combinedText : '');
+                        
+                        if (queryText && queryText.length > 3) {
+                            console.log(`Hired Always: Using AI for unknown text field: "${queryText}"`);
                             try {
                                 const unknownTextPrompt = `You are helping fill out a job application form. Provide a professional, concise answer based on the candidate's profile.
 
@@ -3133,8 +3739,8 @@ Return ONLY the exact text of the selected option. No explanation, no additional
 - Additional Info: ${userData.additionalInfo || 'Not provided'}
 - Job Applied For: ${jobTitle || 'Not specified'}
 
-**QUESTION:**
-"${question}"
+**QUESTION/FIELD:**
+"${queryText}"
 
 **REQUIREMENTS:**
 - Provide a brief, professional response (1-3 sentences)
@@ -3158,7 +3764,7 @@ Return ONLY the exact text of the selected option. No explanation, no additional
                                     console.log(`Hired Always: AI provided unhelpful answer: "${aiResponse}"`);
                                 }
                             } catch (error) {
-                                console.warn(`Hired Always: AI request failed for question: "${question}"`, error);
+                                console.warn(`Hired Always: AI request failed for question: "${queryText}"`, error);
                             }
                         }
                         break;
