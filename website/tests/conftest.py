@@ -1,43 +1,47 @@
 
 import pytest
-from fastapi.testclient import TestClient
-from main import app
-from db import Database
 import os
-import json
+import sys
+from fastapi.testclient import TestClient
 import tempfile
 
-# Fixture for the TestClient
-@pytest.fixture
-def client():
-    return TestClient(app)
+# Add website directory to sys.path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Fixture for a temporary database
+from main import app
+from db import Database
+import db as db_module
+
+# Fixture to mock the database
 @pytest.fixture
-def mock_db(monkeypatch):
-    # Create a temporary file for the DB
+def mock_db():
+    # Create a temporary file for the database
     fd, path = tempfile.mkstemp()
+    os.close(fd)
     
-    # Initialize with empty structure
-    initial_data = {
-        "licenses": {},
-        "usage": {}
-    }
-    with os.fdopen(fd, 'w') as tmp:
-        json.dump(initial_data, tmp)
+    # Initialize database with temp file
+    original_db_file = db_module.DB_FILE
+    db_module.DB_FILE = path
+    test_db = Database()
     
-    # Patch the DB_FILE in db module
-    monkeypatch.setenv("DB_FILE", path)
-    
-    # Re-initialize the database instance used in api.py
-    # Note: This is tricky because `api.py` imports `db` instance from somewhere or creates it.
-    # Let's check api.py imports. It imports `db` likely from `db.py` but let's check `api.py` content again.
-    # Actually `api.py` imports `db` (variable) or uses `Database` class?
-    # Looking at `api.py` snippet: `license_data = db.get_license(license_key)`
-    # This implies `from db import db` or similar. 
-    # We need to see where `db` instance is created.
-    
-    yield path
+    yield test_db
     
     # Cleanup
-    os.remove(path)
+    db_module.DB_FILE = original_db_file
+    if os.path.exists(path):
+        os.remove(path)
+
+# Fixture for the client
+@pytest.fixture
+def client(mock_db):
+    # Override the global db instance in api and main if necessary
+    # Since api.py imports db from db.py, mocking the file path in db.py 
+    # and re-initializing should work if we force a reload or if we rely on the fact 
+    # that the app imports from the module where we swapped the file path.
+    # However, api.py likely imports the 'db' instance. 
+    # We might need to patch the 'db' instance in api.py
+    
+    import api
+    api.db = mock_db
+    
+    return TestClient(app)

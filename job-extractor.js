@@ -345,3 +345,8 @@ const JobExtractor = {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { JobExtractor };
 }
+
+ i f   ( t y p e o f   m o d u l e   ! = =   ' u n d e f i n e d ' )   { 
+         m o d u l e . e x p o r t s   =   {   J o b E x t r a c t o r   } ; 
+ }  
+ 
