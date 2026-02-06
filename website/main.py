@@ -1,5 +1,10 @@
 from fastapi import FastAPI, Request, Query
-from fastapi.responses import HTMLResponse, Response, PlainTextResponse
+from fastapi.responses import (
+    HTMLResponse,
+    Response,
+    PlainTextResponse,
+    RedirectResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -158,41 +163,13 @@ async def home(request: Request):
 @app.get("/index.html", response_class=HTMLResponse)
 async def home_alt(request: Request):
     """Home page - Alternative route with .html extension"""
-    adblock_lib_path = get_adblock_lib_path()
-    # Get zone ID based on the host domain
-    host = request.headers.get("host", "hiredalways.com")
-    domain = host.split(":")[0]  # Remove port if present
-    zone_id = get_zone_id(domain) or get_primary_zone_id()
-
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "adblock_lib_path": adblock_lib_path,
-            "adcash_zone_id": zone_id,
-            "adblock_enabled": ANTI_ADBLOCK_CONFIG.get("enabled", True),
-        },
-    )
+    return RedirectResponse(url="/", status_code=301)
 
 
 @app.get("/purchase.html", response_class=HTMLResponse)
 async def purchase(request: Request):
     """Purchase page - Subscription checkout"""
-    adblock_lib_path = get_adblock_lib_path()
-    # Get zone ID based on the host domain
-    host = request.headers.get("host", "hiredalways.com")
-    domain = host.split(":")[0]  # Remove port if present
-    zone_id = get_zone_id(domain) or get_primary_zone_id()
-
-    return templates.TemplateResponse(
-        "purchase.html",
-        {
-            "request": request,
-            "adblock_lib_path": adblock_lib_path,
-            "adcash_zone_id": zone_id,
-            "adblock_enabled": ANTI_ADBLOCK_CONFIG.get("enabled", True),
-        },
-    )
+    return RedirectResponse(url="/purchase", status_code=301)
 
 
 @app.get("/purchase", response_class=HTMLResponse)
