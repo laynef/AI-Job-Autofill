@@ -1,8 +1,10 @@
 
 import pytest
 from db import Database
+import db as db_module
 import os
 import tempfile
+import importlib
 
 class TestDatabase:
     def test_init_creates_structure(self):
@@ -11,18 +13,23 @@ class TestDatabase:
         os.close(fd)
         os.remove(path) # Start with no file
         
-        # Initialize DB
-        os.environ["DB_FILE"] = path
-        db = Database()
-        db.save()
+        # Patch the module-level DB_FILE variable
+        original_db_file = db_module.DB_FILE
+        db_module.DB_FILE = path
         
-        assert os.path.exists(path)
-        assert "licenses" in db.data
-        assert "usage" in db.data
-        
-        # Cleanup
-        if os.path.exists(path):
-            os.remove(path)
+        try:
+            db = Database()
+            db.save()
+            
+            assert os.path.exists(path)
+            assert "licenses" in db.data
+            assert "usage" in db.data
+        finally:
+            # Restore original DB_FILE
+            db_module.DB_FILE = original_db_file
+            # Cleanup
+            if os.path.exists(path):
+                os.remove(path)
 
     def test_save_and_load(self):
         fd, path = tempfile.mkstemp()
