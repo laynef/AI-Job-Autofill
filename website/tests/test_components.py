@@ -29,7 +29,7 @@ def test_features_component_rendering():
     
     assert 'id="features"' in content
     assert 'AI-Powered Autofill' in content
-    assert 'Custom Cover Letters' in content
+    assert 'Smart Cover Letters' in content
 
 def test_pricing_component_rendering():
     """Test that the Pricing card renders correctly on purchase page"""
