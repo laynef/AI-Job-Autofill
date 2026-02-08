@@ -11,6 +11,8 @@ from main import app
 
 client = TestClient(app)
 
+pytestmark = pytest.mark.build
+
 def test_app_startup():
     """
     Smoke test to verify the application starts up and serves the root page.

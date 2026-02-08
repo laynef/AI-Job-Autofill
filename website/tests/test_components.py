@@ -11,6 +11,8 @@ from main import app
 
 client = TestClient(app)
 
+pytestmark = pytest.mark.integration
+
 def test_hero_component_rendering():
     """Test that the Hero component renders correctly on the home page"""
     response = client.get("/")

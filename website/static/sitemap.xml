@@ -10,7 +10,7 @@
   <!-- Home Page -->
   <url>
     <loc>https://hiredalways.com/</loc>
-    <lastmod>2025-10-25</lastmod>
+    <lastmod>2026-02-08</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <image:image>
@@ -23,7 +23,7 @@
   <!-- Purchase Page -->
   <url>
     <loc>https://hiredalways.com/purchase</loc>
-    <lastmod>2025-10-25</lastmod>
+    <lastmod>2026-02-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
     <image:image>
@@ -36,7 +36,7 @@
   <!-- Categories Page -->
   <url>
     <loc>https://hiredalways.com/categories</loc>
-    <lastmod>2025-10-25</lastmod>
+    <lastmod>2026-02-08</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>

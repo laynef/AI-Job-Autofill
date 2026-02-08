@@ -3,6 +3,8 @@ import pytest
 from fastapi.testclient import TestClient
 import xml.etree.ElementTree as ET
 
+pytestmark = pytest.mark.integration
+
 def test_sitemap_structure_and_availability(client):
     # 1. Get sitemap
     response = client.get("/sitemap.xml")

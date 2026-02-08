@@ -2,6 +2,8 @@ import pytest
 from fastapi.testclient import TestClient
 import api
 
+pytestmark = pytest.mark.integration
+
 
 def test_validate_license_invalid(client):
     response = client.post(

@@ -6,6 +6,8 @@ import os
 import tempfile
 import importlib
 
+pytestmark = pytest.mark.unit
+
 class TestDatabase:
     def test_init_creates_structure(self):
         # Create a temp file
