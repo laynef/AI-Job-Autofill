@@ -1,0 +1,113 @@
+
+/* Ad Slideshow Styles */
+.ad-slideshow-container {
+    max-width: 100%;
+    position: relative;
+    margin: 2rem auto;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    background-color: #fff;
+    min-height: 250px; /* Adjust based on content */
+}
+
+.ad-slide {
+    display: none;
+    text-align: center;
+    padding: 1rem;
+    animation: fade 1.5s;
+}
+
+.ad-slide.active {
+    display: block;
+}
+
+.ad-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+}
+
+.ad-image {
+    max-width: 100%;
+    height: auto;
+    max-height: 200px;
+    object-fit: contain;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+}
+
+.ad-title {
+    font-size: 1.25rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    color: #333;
+}
+
+.ad-cta {
+    display: inline-block;
+    background-color: #ff5722;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    font-weight: bold;
+    margin-top: 0.5rem;
+    transition: background-color 0.3s;
+}
+
+.ad-cta:hover {
+    background-color: #f4511e;
+}
+
+/* Dots/bullets/indicators */
+.ad-dots {
+    text-align: center;
+    padding: 0.5rem;
+    background-color: rgba(0,0,0,0.05);
+}
+
+.ad-dot {
+    cursor: pointer;
+    height: 10px;
+    width: 10px;
+    margin: 0 4px;
+    background-color: #bbb;
+    border-radius: 50%;
+    display: inline-block;
+    transition: background-color 0.6s ease;
+}
+
+.ad-dot.active, .ad-dot:hover {
+    background-color: #717171;
+}
+
+@keyframes fade {
+  from {opacity: .4} 
+  to {opacity: 1}
+}
+
+/* Responsive */
+@media (min-width: 768px) {
+    .ad-slideshow-container {
+        max-width: 728px; /* Standard leaderboard widthish */
+    }
+    
+    .ad-content {
+        flex-direction: row;
+        gap: 2rem;
+        text-align: left;
+    }
+    
+    .ad-image {
+        max-width: 200px;
+        margin-bottom: 0;
+    }
+    
+    .ad-text-content {
+        flex: 1;
+    }
+}
