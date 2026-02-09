@@ -13,7 +13,7 @@ DB_FILE = os.environ.get("DB_FILE", "/data/hiredalways.json")
 
 class Database:
     def __init__(self):
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.data = {
             "licenses": {},  # {license_key: {active, user_id, start_date, etc}}
             "usage": {}      # {device_fingerprint: {count, license_key, last_used}}
