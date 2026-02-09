@@ -1,0 +1,13 @@
+[run]
+branch = True
+source = .
+omit =
+    */__pycache__/*
+    */tests/*
+    */.venv/*
+    */site-packages/*
+
+[report]
+show_missing = True
+skip_covered = False
+precision = 2

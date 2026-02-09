@@ -43,3 +43,41 @@ def test_api_health():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
+
+
+def test_templates_exist():
+    """
+    Build sanity check: required templates should exist for deployment.
+    """
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    templates_dir = os.path.join(base, "templates")
+    assert os.path.isdir(templates_dir)
+
+    required_templates = ["index.html", "purchase.html", "categories.html"]
+    for template_name in required_templates:
+        template_path = os.path.join(templates_dir, template_name)
+        assert os.path.exists(template_path), f"Missing template: {template_name}"
+
+
+def test_static_assets_exist():
+    """
+    Build sanity check: required static assets should exist for deployment.
+    """
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    static_dir = os.path.join(base, "static")
+    assert os.path.isdir(static_dir)
+
+    required_files = [
+        "robots.txt",
+        "sitemap.xml",
+        "manifest.json",
+        "browserconfig.xml",
+        "css/styles.css",
+        "css/ad-slideshow.css",
+        "js/ad-slideshow.js",
+        "images/social-preview.png",
+    ]
+
+    for rel_path in required_files:
+        asset_path = os.path.join(static_dir, rel_path)
+        assert os.path.exists(asset_path), f"Missing static asset: {rel_path}"
