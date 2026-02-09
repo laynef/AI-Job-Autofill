@@ -4,11 +4,11 @@ pytestmark = pytest.mark.integration
 
 
 def test_html_redirects(client):
-    response = client.get("/index.html", allow_redirects=False)
+    response = client.get("/index.html", follow_redirects=False)
     assert response.status_code == 301
     assert response.headers["location"] == "/"
 
-    response = client.get("/purchase.html", allow_redirects=False)
+    response = client.get("/purchase.html", follow_redirects=False)
     assert response.status_code == 301
     assert response.headers["location"] == "/purchase"
 
@@ -39,3 +39,9 @@ def test_categories_api_pagination(client):
     assert data["page"] == 9
     assert data["has_more"] is False
     assert len(data["categories"]) == 4
+
+
+def test_test_ads_page(client):
+    response = client.get("/test-ads.html")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]

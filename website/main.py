@@ -324,7 +324,7 @@ async def get_categories(
     }
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     import uvicorn
 
     port = int(os.environ.get("PORT", 8080))
