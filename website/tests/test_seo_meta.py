@@ -14,8 +14,8 @@ def test_home_page_meta_tags(client):
 
     _assert_meta_present(content, '<meta name="description"')
     _assert_meta_present(content, '<link rel="canonical" href="https://hiredalways.com/"')
-    _assert_meta_present(content, '<meta property="og:image" content="https://hiredalways.com/static/images/social-preview.png"')
-    _assert_meta_present(content, '<meta name="twitter:image" content="https://hiredalways.com/static/images/social-preview.png"')
+    _assert_meta_present(content, '<meta property="og:image" content="https://hiredalways.com/static/images/social-preview-ads.svg"')
+    _assert_meta_present(content, '<meta name="twitter:image" content="https://hiredalways.com/static/images/social-preview-ads.svg"')
 
 
 def test_purchase_page_meta_tags(client):
@@ -26,8 +26,8 @@ def test_purchase_page_meta_tags(client):
     _assert_meta_present(content, '<meta name="description"')
     _assert_meta_present(content, '<meta name="robots" content="index, follow"')
     _assert_meta_present(content, '<link rel="canonical" href="https://hiredalways.com/purchase"')
-    _assert_meta_present(content, '<meta property="og:image" content="https://hiredalways.com/static/images/social-preview.png"')
-    _assert_meta_present(content, '<meta name="twitter:image" content="https://hiredalways.com/static/images/social-preview.png"')
+    _assert_meta_present(content, '<meta property="og:image" content="https://hiredalways.com/static/images/social-preview-ads.svg"')
+    _assert_meta_present(content, '<meta name="twitter:image" content="https://hiredalways.com/static/images/social-preview-ads.svg"')
 
 
 def test_categories_page_meta_tags(client):
@@ -38,5 +38,5 @@ def test_categories_page_meta_tags(client):
     _assert_meta_present(content, '<meta name="description"')
     _assert_meta_present(content, '<meta name="robots" content="index, follow"')
     _assert_meta_present(content, '<link rel="canonical" href="https://hiredalways.com/categories"')
-    _assert_meta_present(content, '<meta property="og:image" content="https://hiredalways.com/static/images/social-preview.png"')
-    _assert_meta_present(content, '<meta name="twitter:image" content="https://hiredalways.com/static/images/social-preview.png"')
+    _assert_meta_present(content, '<meta property="og:image" content="https://hiredalways.com/static/images/social-preview-ads.svg"')
+    _assert_meta_present(content, '<meta name="twitter:image" content="https://hiredalways.com/static/images/social-preview-ads.svg"')

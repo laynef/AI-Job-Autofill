@@ -10,11 +10,11 @@
   <!-- Home Page -->
   <url>
     <loc>https://hiredalways.com/</loc>
-    <lastmod>2026-02-08</lastmod>
+    <lastmod>2026-02-10</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <image:image>
-      <image:loc>https://hiredalways.com/static/images/social-preview.png</image:loc>
+      <image:loc>https://hiredalways.com/static/images/social-preview-ads.svg</image:loc>
       <image:title>Hired Always - AI Job Application Autofill</image:title>
       <image:caption>Stop wasting hours on job applications. Let AI do the work while you focus on landing your dream job.</image:caption>
     </image:image>
@@ -23,11 +23,11 @@
   <!-- Purchase Page -->
   <url>
     <loc>https://hiredalways.com/purchase</loc>
-    <lastmod>2026-02-08</lastmod>
+    <lastmod>2026-02-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
     <image:image>
-      <image:loc>https://hiredalways.com/static/images/social-preview.png</image:loc>
+      <image:loc>https://hiredalways.com/static/images/social-preview-ads.svg</image:loc>
       <image:title>Upgrade to Unlimited - Hired Always</image:title>
       <image:caption>Unlimited AI job applications for just $9.99/month</image:caption>
     </image:image>
@@ -36,9 +36,17 @@
   <!-- Categories Page -->
   <url>
     <loc>https://hiredalways.com/categories</loc>
-    <lastmod>2026-02-08</lastmod>
+    <lastmod>2026-02-10</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
+  </url>
+
+  <!-- Test Ads Page (Public) -->
+  <url>
+    <loc>https://hiredalways.com/test-ads.html</loc>
+    <lastmod>2026-02-10</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
   </url>
 
 </urlset>

@@ -27,7 +27,8 @@ def test_sitemap_structure_and_availability(client):
     expected_pages = [
         "https://hiredalways.com/",
         "https://hiredalways.com/purchase",
-        "https://hiredalways.com/categories"
+        "https://hiredalways.com/categories",
+        "https://hiredalways.com/test-ads.html",
     ]
     
     for page in expected_pages:
