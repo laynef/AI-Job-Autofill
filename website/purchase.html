@@ -170,6 +170,140 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        /* Mobile Responsive Styles */
+        @media (max-width: 768px) {
+            .purchase-container {
+                margin: 2rem auto;
+                padding: 1rem;
+            }
+
+            .pricing-card {
+                padding: 2rem 1.5rem;
+            }
+
+            .price-tag {
+                font-size: 3rem;
+            }
+
+            .price-tag sup {
+                font-size: 1.5rem;
+            }
+
+            .features-list {
+                padding: 0 1rem;
+                margin: 1.5rem 0;
+            }
+
+            .features-list li {
+                padding: 0.625rem 0;
+                font-size: 0.9375rem;
+            }
+
+            .email-input-group {
+                margin: 1.5rem 0;
+            }
+
+            .email-input-group input {
+                max-width: 100%;
+                padding: 0.875rem;
+                font-size: 16px; /* Prevents zoom on iOS */
+            }
+
+            #paypal-button-container {
+                margin: 1.5rem auto;
+            }
+
+            .navbar {
+                padding: 0.75rem 0;
+            }
+
+            .nav-links {
+                gap: 1rem;
+                font-size: 0.9rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .purchase-container {
+                margin: 1rem auto;
+                padding: 0.75rem;
+            }
+
+            .pricing-card {
+                padding: 1.5rem 1rem;
+            }
+
+            .price-tag {
+                font-size: 2.5rem;
+            }
+
+            .price-tag sup {
+                font-size: 1.25rem;
+            }
+
+            .price-subtitle {
+                font-size: 1rem;
+            }
+
+            .features-list {
+                padding: 0;
+                margin: 1.25rem 0;
+            }
+
+            .features-list li {
+                padding: 0.5rem 0;
+                font-size: 0.875rem;
+            }
+
+            .email-input-group {
+                margin: 1.25rem 0;
+            }
+
+            .email-input-group input {
+                padding: 0.875rem;
+                font-size: 16px;
+            }
+
+            .license-key {
+                font-size: 1rem;
+                padding: 0.875rem;
+                word-break: break-all;
+            }
+
+            .copy-button {
+                width: 100%;
+                padding: 0.875rem;
+                min-height: 44px; /* Touch target */
+            }
+
+            #license-result {
+                padding: 1.25rem;
+                font-size: 0.9375rem;
+            }
+
+            #license-result h3 {
+                font-size: 1.125rem;
+            }
+
+            #license-result p {
+                font-size: 0.875rem;
+            }
+        }
+
+        /* Touch-friendly improvements */
+        @media (hover: none) and (pointer: coarse) {
+            button,
+            .copy-button {
+                min-height: 44px;
+                padding: 0.875rem 1rem;
+            }
+
+            input {
+                font-size: 16px; /* Prevents zoom on iOS */
+                padding: 0.875rem;
+            }
+        }
     </style>
 </head>
 <body>
@@ -180,7 +314,14 @@
                     <img src="images/icon48.png" alt="Hired Always Logo">
                     <span>Hired Always</span>
                 </div>
-                <div class="nav-links">
+                <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle mobile menu">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
+                <div class="nav-links" id="navLinks">
                     <a href="index.html">Home</a>
                     <a href="index.html#features">Features</a>
                     <a href="index.html#how-it-works">How It Works</a>
@@ -408,6 +549,37 @@
             }).catch(err => {
                 console.error('Failed to copy:', err);
                 alert('Failed to copy. Please select and copy manually.');
+            });
+        }
+    </script>
+
+    <!-- Mobile Menu Script -->
+    <script>
+        // Mobile menu toggle
+        const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+        const navLinks = document.getElementById('navLinks');
+        
+        if (mobileMenuToggle && navLinks) {
+            mobileMenuToggle.addEventListener('click', function() {
+                navLinks.classList.toggle('active');
+                const isOpen = navLinks.classList.contains('active');
+                mobileMenuToggle.setAttribute('aria-expanded', isOpen);
+            });
+
+            // Close menu when clicking on a link
+            navLinks.querySelectorAll('a').forEach(link => {
+                link.addEventListener('click', function() {
+                    navLinks.classList.remove('active');
+                    mobileMenuToggle.setAttribute('aria-expanded', 'false');
+                });
+            });
+
+            // Close menu when clicking outside
+            document.addEventListener('click', function(event) {
+                if (!navLinks.contains(event.target) && !mobileMenuToggle.contains(event.target)) {
+                    navLinks.classList.remove('active');
+                    mobileMenuToggle.setAttribute('aria-expanded', 'false');
+                }
             });
         }
     </script>
