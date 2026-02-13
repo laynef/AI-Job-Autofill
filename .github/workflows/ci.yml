@@ -27,7 +27,7 @@ jobs:
       - name: Install deps
         run: .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
       - name: Run tests (unit/integration/build)
-        run: .venv/bin/pytest -q
+        run: .venv/bin/pytest -q -m "not e2e and not mobile"
 
   e2e-browser:
     runs-on: ubuntu-latest
@@ -47,7 +47,7 @@ jobs:
       - name: Install deps
         run: .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
       - name: Install Playwright browsers
-        run: npx playwright install
+        run: .venv/bin/playwright install --with-deps
       - name: Start server
         run: .venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8080 &
       - name: Wait for server
