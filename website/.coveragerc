@@ -6,6 +6,9 @@ omit =
     */tests/*
     */.venv/*
     */site-packages/*
+    create_social_preview.py
+    */create_social_preview.py
+
 
 [report]
 show_missing = True
