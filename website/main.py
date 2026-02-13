@@ -324,18 +324,28 @@ async def categories_page(request: Request):
 
 @app.get("/api/categories")
 async def get_categories(
-    page: int = Query(1, ge=1), limit: int = Query(12, ge=1, le=100)
+    page: int = Query(1, ge=1),
+    limit: int = Query(12, ge=1, le=100),
+    search: str = Query(None, description="Search term for categories"),
 ):
-    """API endpoint for fetching categories with pagination"""
+    """API endpoint for fetching categories with pagination and search"""
+    # Filter categories if search term is provided
+    filtered_categories = CATEGORIES
+    if search:
+        search_lower = search.lower()
+        filtered_categories = [
+            c for c in CATEGORIES if search_lower in c["name"].lower()
+        ]
+
     start = (page - 1) * limit
     end = start + limit
 
     return {
-        "categories": CATEGORIES[start:end],
+        "categories": filtered_categories[start:end],
         "page": page,
         "limit": limit,
-        "total": len(CATEGORIES),
-        "has_more": end < len(CATEGORIES),
+        "total": len(filtered_categories),
+        "has_more": end < len(filtered_categories),
     }
 
 
