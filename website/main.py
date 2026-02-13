@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Query, HTTPException
-from pydantic import BaseModel, EmailStr, ValidationError, field_validator
+from pydantic import BaseModel, EmailStr, ValidationError, validator
 from fastapi.responses import (
     HTMLResponse,
     Response,
@@ -360,8 +360,7 @@ class ContactForm(BaseModel):
     email: str
     message: str
 
-    @field_validator("email")
-    @classmethod
+    @validator("email")
     def validate_email(cls, v: str) -> str:
         if "@" not in v or "." not in v:
             raise ValueError("Invalid email address")
