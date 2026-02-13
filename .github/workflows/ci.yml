@@ -56,7 +56,7 @@ jobs:
         env:
           RUN_E2E: "1"
           E2E_BASE_URL: "http://127.0.0.1:8080"
-        run: .venv/bin/pytest -q -m e2e
+        run: .venv/bin/pytest -q -m e2e --no-cov
 
   mobile-simulators:
     if: ${{ github.event.inputs.run_mobile == 'true' }}
