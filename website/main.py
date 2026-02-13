@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Query, HTTPException
-from pydantic import BaseModel, EmailStr, ValidationError, validator
+from pydantic import BaseModel, EmailStr, ValidationError, field_validator
 from fastapi.responses import (
     HTMLResponse,
     Response,
@@ -262,9 +262,15 @@ async def adblock_library():
         patterns = [
             os.path.join(BASE_DIR, "static/js/lib-*.js"),
             os.path.join(BASE_DIR, "static/js/*lib*.js"),
-            os.path.join(BASE_DIR, "static/js/[a-z][0-9][a-z][0-9][a-z][0-9]*.js"),  # Pattern like x7n4vw...
-            os.path.join(BASE_DIR, "static/js/[tmzwk]*[0-9a-f]*.js"),  # Pattern matching the prefix + hex
-            os.path.join(BASE_DIR, "static/js/[a-z0-9]*.js"),  # Pattern for any alphanumeric filename
+            os.path.join(
+                BASE_DIR, "static/js/[a-z][0-9][a-z][0-9][a-z][0-9]*.js"
+            ),  # Pattern like x7n4vw...
+            os.path.join(
+                BASE_DIR, "static/js/[tmzwk]*[0-9a-f]*.js"
+            ),  # Pattern matching the prefix + hex
+            os.path.join(
+                BASE_DIR, "static/js/[a-z0-9]*.js"
+            ),  # Pattern for any alphanumeric filename
         ]
 
         for pattern in patterns:
@@ -354,8 +360,9 @@ class ContactForm(BaseModel):
     email: str
     message: str
 
-    @validator("email")
-    def validate_email(cls, v):
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
         if "@" not in v or "." not in v:
             raise ValueError("Invalid email address")
         return v
