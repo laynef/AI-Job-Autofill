@@ -1,9 +1,11 @@
-from fastapi import FastAPI, Request, Query
+from fastapi import FastAPI, Request, Query, HTTPException
+from pydantic import BaseModel, EmailStr, ValidationError, validator
 from fastapi.responses import (
     HTMLResponse,
     Response,
     PlainTextResponse,
     RedirectResponse,
+    JSONResponse,
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -24,8 +26,9 @@ def get_adblock_lib_path():
     """Get the dynamically generated anti-adblock library path"""
     try:
         # First, try to read from the path file created by Docker
-        if os.path.exists("adblock-lib-path.txt"):
-            with open("adblock-lib-path.txt", "r") as f:
+        path_file = os.path.join(BASE_DIR, "adblock-lib-path.txt")
+        if os.path.exists(path_file):
+            with open(path_file, "r") as f:
                 lib_path = f.read().strip()
                 if lib_path and os.path.exists(lib_path):
                     # Convert absolute path to relative URL path
@@ -33,18 +36,26 @@ def get_adblock_lib_path():
 
         # Fallback: Look for adblock library files with various patterns
         patterns = [
-            "static/js/lib-*.js",
-            "static/js/*lib*.js",
-            "static/js/[a-z][0-9][a-z][0-9][a-z][0-9]*.js",  # Pattern like x7n4vw...
-            "static/js/[tmzwk]*[0-9a-f]*.js",  # Pattern matching the prefix + hex
-            "static/js/[a-z0-9]*.js",  # Pattern for any alphanumeric filename
+            os.path.join(BASE_DIR, "static/js/lib-*.js"),
+            os.path.join(BASE_DIR, "static/js/*lib*.js"),
+            os.path.join(
+                BASE_DIR, "static/js/[a-z][0-9][a-z][0-9][a-z][0-9]*.js"
+            ),  # Pattern like x7n4vw...
+            os.path.join(
+                BASE_DIR, "static/js/[tmzwk]*[0-9a-f]*.js"
+            ),  # Pattern matching the prefix + hex
+            os.path.join(
+                BASE_DIR, "static/js/[a-z0-9]*.js"
+            ),  # Pattern for any alphanumeric filename
         ]
 
         for pattern in patterns:
             adblock_files = glob.glob(pattern)
             if adblock_files:
                 # Return the path relative to static folder
-                return adblock_files[0].replace("static", "/static")
+                # We need to extract the filename and append to /static/js/
+                filename = os.path.basename(adblock_files[0])
+                return f"/static/js/{filename}"
 
         return None
     except Exception as e:
@@ -134,10 +145,13 @@ from api import router as api_router
 app.include_router(api_router)
 
 # Mount static files (CSS, images, etc.)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app.mount(
+    "/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static"
+)
 
 # Setup Jinja2 templates
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -201,7 +215,7 @@ async def health_check():
 @app.get("/robots.txt")
 async def robots():
     """Serve robots.txt for SEO"""
-    with open("static/robots.txt", "r") as f:
+    with open(os.path.join(BASE_DIR, "static/robots.txt"), "r") as f:
         content = f.read()
     return Response(content=content, media_type="text/plain")
 
@@ -209,7 +223,7 @@ async def robots():
 @app.get("/sitemap.xml")
 async def sitemap():
     """Serve sitemap.xml for SEO"""
-    with open("static/sitemap.xml", "r") as f:
+    with open(os.path.join(BASE_DIR, "static/sitemap.xml"), "r") as f:
         content = f.read()
     return Response(content=content, media_type="application/xml")
 
@@ -217,7 +231,7 @@ async def sitemap():
 @app.get("/manifest.json")
 async def manifest():
     """Serve web app manifest for PWA support"""
-    with open("static/manifest.json", "r") as f:
+    with open(os.path.join(BASE_DIR, "static/manifest.json"), "r") as f:
         content = f.read()
     return Response(content=content, media_type="application/json")
 
@@ -225,7 +239,7 @@ async def manifest():
 @app.get("/browserconfig.xml")
 async def browserconfig():
     """Serve browserconfig.xml for Windows tiles"""
-    with open("static/browserconfig.xml", "r") as f:
+    with open(os.path.join(BASE_DIR, "static/browserconfig.xml"), "r") as f:
         content = f.read()
     return Response(content=content, media_type="application/xml")
 
@@ -235,8 +249,9 @@ async def adblock_library():
     """Serve the anti-adblock library at a consistent endpoint"""
     try:
         # First, try to read from the path file created by Docker
-        if os.path.exists("adblock-lib-path.txt"):
-            with open("adblock-lib-path.txt", "r") as f:
+        path_file = os.path.join(BASE_DIR, "adblock-lib-path.txt")
+        if os.path.exists(path_file):
+            with open(path_file, "r") as f:
                 lib_path = f.read().strip()
                 if lib_path and os.path.exists(lib_path):
                     with open(lib_path, "r") as f:
@@ -245,11 +260,11 @@ async def adblock_library():
 
         # Fallback: Look for adblock library files with various patterns
         patterns = [
-            "static/js/lib-*.js",
-            "static/js/*lib*.js",
-            "static/js/[a-z][0-9][a-z][0-9][a-z][0-9]*.js",  # Pattern like x7n4vw...
-            "static/js/[tmzwk]*[0-9a-f]*.js",  # Pattern matching the prefix + hex
-            "static/js/[a-z0-9]*.js",  # Pattern for any alphanumeric filename
+            os.path.join(BASE_DIR, "static/js/lib-*.js"),
+            os.path.join(BASE_DIR, "static/js/*lib*.js"),
+            os.path.join(BASE_DIR, "static/js/[a-z][0-9][a-z][0-9][a-z][0-9]*.js"),  # Pattern like x7n4vw...
+            os.path.join(BASE_DIR, "static/js/[tmzwk]*[0-9a-f]*.js"),  # Pattern matching the prefix + hex
+            os.path.join(BASE_DIR, "static/js/[a-z0-9]*.js"),  # Pattern for any alphanumeric filename
         ]
 
         for pattern in patterns:
@@ -275,7 +290,7 @@ async def adblock_library():
 @app.get("/test-ads.html", response_class=HTMLResponse)
 async def test_ads():
     """Debug page for testing ad functionality"""
-    with open("test-ads.html", "r") as f:
+    with open(os.path.join(BASE_DIR, "test-ads.html"), "r") as f:
         content = f.read()
     return HTMLResponse(content=content)
 
@@ -322,6 +337,26 @@ async def get_categories(
         "total": len(CATEGORIES),
         "has_more": end < len(CATEGORIES),
     }
+
+
+class ContactForm(BaseModel):
+    name: str
+    email: str
+    message: str
+
+    @validator("email")
+    def validate_email(cls, v):
+        if "@" not in v or "." not in v:
+            raise ValueError("Invalid email address")
+        return v
+
+
+@app.post("/api/contact")
+async def contact_form(form: ContactForm):
+    """Handle contact form submissions"""
+    # In a real app, you would send an email or save to DB
+    print(f"Contact form received: {form}")
+    return {"status": "success", "message": "Message received"}
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -11,8 +11,6 @@ from main import app
 
 client = TestClient(app)
 
-pytestmark = pytest.mark.integration
-
 def test_hero_component_rendering():
     """Test that the Hero component renders correctly on the home page"""
     response = client.get("/")
@@ -63,3 +61,14 @@ def test_ad_slideshow_component_integration():
         
         # Check for CSS inclusion
         assert 'ad-slideshow.css' in content, f"Ad CSS missing on {page}"
+
+def test_contact_component_rendering():
+    """Test that the Contact section renders correctly"""
+    response = client.get("/")
+    assert response.status_code == 200
+    content = response.text
+    
+    assert 'id="contact"' in content
+    assert 'Contact Us' in content
+    assert 'id="contactForm"' in content
+    assert 'name="email"' in content
