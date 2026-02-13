@@ -585,6 +585,95 @@
         </div>
     </section>
 
+    <!-- Testimonials Section -->
+    <section id="testimonials" class="testimonials-section">
+        <div class="container">
+            <h2 class="section-title">What Our Users Say</h2>
+            <div class="testimonials-grid">
+                <div class="testimonial-card">
+                    <div class="testimonial-content">
+                        "I used to spend hours applying for jobs. With Hired Always, I can apply to 50 jobs in the time
+                        it used to take for 5. It's a game changer!"
+                    </div>
+                    <div class="testimonial-author">
+                        <strong>Sarah J.</strong>
+                        <span>Software Engineer</span>
+                    </div>
+                </div>
+                <div class="testimonial-card">
+                    <div class="testimonial-content">
+                        "The custom cover letter generator is amazing. It actually reads my resume and the job
+                        description to create something relevant."
+                    </div>
+                    <div class="testimonial-author">
+                        <strong>Michael T.</strong>
+                        <span>Marketing Manager</span>
+                    </div>
+                </div>
+                <div class="testimonial-card">
+                    <div class="testimonial-content">
+                        "I was skeptical about AI autofill, but this works seamlessly on Greenhouse and Lever. And it's
+                        actually free!"
+                    </div>
+                    <div class="testimonial-author">
+                        <strong>Jessica L.</strong>
+                        <span>Product Designer</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section id="faq" class="faq-section">
+        <div class="container">
+            <h2 class="section-title">Frequently Asked Questions</h2>
+            <div class="faq-container">
+                <div class="faq-item">
+                    <button class="faq-question">
+                        Is Hired Always really free?
+                        <span class="icon">+</span>
+                    </button>
+                    <div class="faq-answer">
+                        <p>Yes! Hired Always is completely free forever. Get unlimited job application autofills at no
+                            cost. No credit card required, no hidden fees, no subscriptions.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <button class="faq-question">
+                        How does the AI Autofill work?
+                        <span class="icon">+</span>
+                    </button>
+                    <div class="faq-answer">
+                        <p>Our AI analyzes the job application page to identify form fields and automatically fills them
+                            with information from your profile. It works best on supported platforms like Greenhouse,
+                            Lever, and Workday.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <button class="faq-question">
+                        Is my data secure?
+                        <span class="icon">+</span>
+                    </button>
+                    <div class="faq-answer">
+                        <p>Yes! Your resume and personal information are stored locally on your device or securely
+                            encrypted. We prioritize your privacy and do not sell your data.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <button class="faq-question">
+                        Can I cancel my subscription?
+                        <span class="icon">+</span>
+                    </button>
+                    <div class="faq-answer">
+                        <p>Since Hired Always is free, there is no subscription to cancel! You can uninstall the
+                            extension at any time if you no longer need it.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <section id="contact" class="contact-section">
         <div class="container">
             <h2>Contact Us</h2>
@@ -730,6 +819,26 @@
                 }
             });
         }
+
+        // FAQ Accordion
+        const faqQuestions = document.querySelectorAll('.faq-question');
+
+        faqQuestions.forEach(question => {
+            question.addEventListener('click', () => {
+                const answer = question.nextElementSibling;
+                const icon = question.querySelector('.icon');
+
+                // Toggle active class
+                question.classList.toggle('active');
+
+                // Toggle max-height for animation
+                if (question.classList.contains('active')) {
+                    answer.style.maxHeight = answer.scrollHeight + "px";
+                } else {
+                    answer.style.maxHeight = 0;
+                }
+            });
+        });
     </script>
 
     <!-- Debug template variables -->
