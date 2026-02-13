@@ -170,6 +170,12 @@
         <!-- Ad Slideshow -->
         <div id="ad-slideshow" style="margin-top: 2rem;"></div>
 
+        <!-- Search Bar -->
+        <div class="search-container" style="margin: 2rem 0; text-align: center;">
+            <input type="text" id="category-search" placeholder="Search categories..."
+                style="padding: 1rem; width: 100%; max-width: 500px; border: 2px solid #e2e8f0; border-radius: 0.5rem; font-size: 1rem;">
+        </div>
+
         <div id="categories-container" class="categories-grid">
             <!-- Categories will be inserted here -->
         </div>
@@ -201,16 +207,42 @@
         </div>
     </footer>
 
+    <button id="back-to-top" aria-label="Back to top"
+        style="display: none; position: fixed; bottom: 2rem; right: 2rem; background: #2563eb; color: white; border: none; border-radius: 50%; width: 3rem; height: 3rem; cursor: pointer; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); z-index: 50;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="18 15 12 9 6 15"></polyline>
+        </svg>
+    </button>
+
     <script src="/static/js/ad-slideshow.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const container = document.getElementById('categories-container');
             const sentinel = document.getElementById('loading-sentinel');
+            const searchInput = document.getElementById('category-search');
 
             let page = 1;
             let isLoading = false;
             let hasMore = true;
             const limit = 12; // Number of items per page
+            let currentSearch = '';
+
+            // Search functionality
+            let searchTimeout;
+            if (searchInput) {
+                searchInput.addEventListener('input', (e) => {
+                    clearTimeout(searchTimeout);
+                    searchTimeout = setTimeout(() => {
+                        currentSearch = e.target.value;
+                        page = 1;
+                        hasMore = true;
+                        container.innerHTML = '';
+                        sentinel.innerHTML = '<div class="spinner"></div><p>Loading...</p>';
+                        fetchCategories();
+                    }, 300);
+                });
+            }
 
             // Function to fetch categories
             async function fetchCategories() {
@@ -219,12 +251,13 @@
                 isLoading = true;
 
                 try {
-                    const response = await fetch(`/api/categories?page=${page}&limit=${limit}`);
+                    const url = `/api/categories?page=${page}&limit=${limit}${currentSearch ? `&search=${encodeURIComponent(currentSearch)}` : ''}`;
+                    const response = await fetch(url);
                     const data = await response.json();
 
                     if (data.categories.length === 0) {
                         hasMore = false;
-                        sentinel.innerHTML = '<p>No more categories to load</p>';
+                        sentinel.innerHTML = '<p>No more categories found</p>';
                         return;
                     }
 
@@ -282,12 +315,27 @@
             fetchCategories();
         });
 
+        // Back to Top Button
+        const backToTopButton = document.getElementById('back-to-top');
+        if (backToTopButton) {
+            window.addEventListener('scroll', () => {
+                if (window.scrollY > 300) {
+                    backToTopButton.style.display = 'block';
+                } else {
+                    backToTopButton.style.display = 'none';
+                }
+            });
+            backToTopButton.addEventListener('click', () => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        }
+
         // Mobile menu toggle
         const mobileMenuToggle = document.getElementById('mobileMenuToggle');
         const navLinks = document.getElementById('navLinks');
-        
+
         if (mobileMenuToggle && navLinks) {
-            mobileMenuToggle.addEventListener('click', function() {
+            mobileMenuToggle.addEventListener('click', function () {
                 navLinks.classList.toggle('active');
                 const isOpen = navLinks.classList.contains('active');
                 mobileMenuToggle.setAttribute('aria-expanded', isOpen);
@@ -295,14 +343,14 @@
 
             // Close menu when clicking on a link
             navLinks.querySelectorAll('a').forEach(link => {
-                link.addEventListener('click', function() {
+                link.addEventListener('click', function () {
                     navLinks.classList.remove('active');
                     mobileMenuToggle.setAttribute('aria-expanded', 'false');
                 });
             });
 
             // Close menu when clicking outside
-            document.addEventListener('click', function(event) {
+            document.addEventListener('click', function (event) {
                 if (!navLinks.contains(event.target) && !mobileMenuToggle.contains(event.target)) {
                     navLinks.classList.remove('active');
                     mobileMenuToggle.setAttribute('aria-expanded', 'false');
