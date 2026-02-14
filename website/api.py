@@ -5,7 +5,7 @@ Handles license validation, usage tracking, and AI proxy
 
 from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List, Dict
 import hashlib
 import hmac
 import secrets
@@ -17,19 +17,23 @@ import httpx
 
 router = APIRouter(prefix="/api", tags=["extension"])
 
-# Environment variables - MUST be set in Cloud Run
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 LICENSE_SECRET = os.environ.get("LICENSE_SECRET", secrets.token_hex(32))
 FREE_TRIAL_LIMIT = 999999  # Effectively unlimited for everyone
+JOB_API_BASE_URL = os.environ.get("JOB_API_BASE_URL", "")
+JOB_API_KEY = os.environ.get("JOB_API_KEY", "")
+MAX_FREE_AUTO_APPLY = 5
 
 # Whitelisted emails with unlimited free access (owner/testing)
 WHITELIST_EMAILS = {
     "laynefaler@gmail.com",  # Owner - unlimited free access
 }
 
+
 def is_whitelisted_user(email: str) -> bool:
     """Check if user email is whitelisted for free unlimited access"""
     return email.lower() in {e.lower() for e in WHITELIST_EMAILS}
+
 
 def get_user_email_from_license(license_key: str) -> Optional[str]:
     """Extract user email from license key"""
@@ -37,6 +41,7 @@ def get_user_email_from_license(license_key: str) -> Optional[str]:
     if license_data:
         return license_data.get("user_id")
     return None
+
 
 def check_whitelist_from_device(device_fingerprint: str) -> bool:
     """Check if device is associated with whitelisted user"""
@@ -50,25 +55,63 @@ def check_whitelist_from_device(device_fingerprint: str) -> bool:
         return is_whitelisted_user(usage_data["email"])
     return False
 
+
 # Import database
 from db import db
+
 
 # Models
 class ValidateLicenseRequest(BaseModel):
     license_key: str
     device_fingerprint: str
 
+
 class TrackUsageRequest(BaseModel):
     device_fingerprint: str
     license_key: Optional[str] = None
+
 
 class AIProxyRequest(BaseModel):
     prompt: str
     device_fingerprint: str
     license_key: Optional[str] = None
 
+
 class CheckUsageRequest(BaseModel):
     device_fingerprint: str
+    license_key: Optional[str] = None
+
+
+class JobSearchRequest(BaseModel):
+    query: str
+    location: Optional[str] = None
+    remote: bool = True
+    limit: int = 20
+
+
+class JobListing(BaseModel):
+    id: str
+    title: str
+    company: str
+    location: str
+    url: str
+    source: str
+    remote: bool
+
+
+class JobApplyProfile(BaseModel):
+    full_name: str
+    email: str
+    resume_url: str
+    cover_letter: Optional[str] = None
+    location: Optional[str] = None
+    skills: Optional[str] = None
+
+
+class JobAutoApplyRequest(BaseModel):
+    device_fingerprint: str
+    jobs: List[JobListing]
+    profile: JobApplyProfile
     license_key: Optional[str] = None
 
 
@@ -80,9 +123,7 @@ def generate_license_key(user_id: str) -> str:
     # Create signature: HMAC(secret, user_id + timestamp + random)
     message = f"{user_id}:{timestamp}:{random_part}"
     signature = hmac.new(
-        LICENSE_SECRET.encode(),
-        message.encode(),
-        hashlib.sha256
+        LICENSE_SECRET.encode(), message.encode(), hashlib.sha256
     ).hexdigest()[:16]
 
     # Format: HA-SUB-{timestamp}-{random}-{signature}
@@ -127,7 +168,7 @@ def validate_license_signature(license_key: str) -> dict:
         return {
             "valid": True,
             "user_id": license_data["user_id"],
-            "start_date": license_data["start_date"]
+            "start_date": license_data["start_date"],
         }
 
     except Exception as e:
@@ -137,6 +178,18 @@ def validate_license_signature(license_key: str) -> dict:
 def get_device_usage(device_fingerprint: str) -> dict:
     """Get usage data for a device"""
     return db.get_usage(device_fingerprint)
+
+
+def has_unlimited_auto_apply(license_key: Optional[str]) -> bool:
+    if not license_key:
+        return False
+    license_data = db.get_license(license_key)
+    if not license_data:
+        return False
+    if not license_data.get("active", False):
+        return False
+    plan = license_data.get("plan") or "standard"
+    return plan in {"unlimited", "pro"}
 
 
 @router.post("/validate-license")
@@ -157,7 +210,9 @@ async def validate_license(request: ValidateLicenseRequest):
         "valid": True,
         "user_id": validation["user_id"],
         "start_date": validation["start_date"],
-        "expires_at": (datetime.fromisoformat(validation["start_date"]) + timedelta(days=31)).isoformat()
+        "expires_at": (
+            datetime.fromisoformat(validation["start_date"]) + timedelta(days=31)
+        ).isoformat(),
     }
 
 
@@ -175,7 +230,7 @@ async def check_usage(request: CheckUsageRequest):
         "valid": True,
         "is_paid": False,
         "is_unlimited": True,
-        "message": "Unlimited free access for everyone!"
+        "message": "Unlimited free access for everyone!",
     }
 
 
@@ -187,7 +242,9 @@ async def track_usage(request: TrackUsageRequest):
     """
     # Just log usage for analytics, no limits enforced
     db.increment_usage(request.device_fingerprint)
-    db.update_usage(request.device_fingerprint, {"last_used": datetime.now().isoformat()})
+    db.update_usage(
+        request.device_fingerprint, {"last_used": datetime.now().isoformat()}
+    )
 
     usage_data = get_device_usage(request.device_fingerprint)
 
@@ -196,8 +253,42 @@ async def track_usage(request: TrackUsageRequest):
         "is_paid": False,
         "is_unlimited": True,
         "usage_count": usage_data["count"],
-        "message": "Autofill authorized (unlimited free access)"
+        "message": "Autofill authorized (unlimited free access)",
     }
+
+
+async def fetch_jobs(request: JobSearchRequest) -> List[JobListing]:
+    if not JOB_API_BASE_URL:
+        return []
+    headers: Dict[str, str] = {"Authorization": f"Bearer {JOB_API_KEY}"}
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(
+            JOB_API_BASE_URL,
+            params={
+                "q": request.query,
+                "location": request.location,
+                "remote": str(request.remote).lower(),
+                "limit": request.limit,
+            },
+            headers=headers,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        items = payload.get("results") or payload.get("jobs") or []
+        results: List[JobListing] = []
+        for item in items:
+            results.append(
+                JobListing(
+                    id=str(item.get("id") or item.get("job_id") or item.get("url")),
+                    title=item.get("title") or "",
+                    company=item.get("company") or item.get("company_name") or "",
+                    location=item.get("location") or item.get("city") or "",
+                    url=item.get("url") or item.get("redirect_url") or "",
+                    source=item.get("source") or "external",
+                    remote=bool(item.get("remote", False)),
+                )
+            )
+        return results
 
 
 @router.post("/proxy-ai")
@@ -211,10 +302,7 @@ async def proxy_ai(request: AIProxyRequest):
 
     # Validate API key is configured
     if not GEMINI_API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="AI service not configured"
-        )
+        raise HTTPException(status_code=500, detail="AI service not configured")
 
     # Make request to Gemini API
     try:
@@ -223,23 +311,15 @@ async def proxy_ai(request: AIProxyRequest):
 
             response = await client.post(
                 api_url,
-                json={
-                    "contents": [{
-                        "parts": [{
-                            "text": request.prompt
-                        }]
-                    }]
-                },
-                headers={
-                    "x-goog-api-key": GEMINI_API_KEY
-                },
-                timeout=30.0
+                json={"contents": [{"parts": [{"text": request.prompt}]}]},
+                headers={"x-goog-api-key": GEMINI_API_KEY},
+                timeout=30.0,
             )
 
             if response.status_code != 200:
                 raise HTTPException(
                     status_code=response.status_code,
-                    detail=f"AI service error: {response.text}"
+                    detail=f"AI service error: {response.text}",
                 )
 
             return response.json()
@@ -255,6 +335,7 @@ class WhitelistActivationRequest(BaseModel):
     email: str
     device_fingerprint: str
 
+
 @router.post("/activate-whitelist")
 async def activate_whitelist(request: WhitelistActivationRequest):
     """
@@ -264,21 +345,21 @@ async def activate_whitelist(request: WhitelistActivationRequest):
     if not is_whitelisted_user(request.email):
         raise HTTPException(
             status_code=403,
-            detail="Email not whitelisted. Please purchase a subscription."
+            detail="Email not whitelisted. Please purchase a subscription.",
         )
 
     # Store email with device for future checks
-    db.update_usage(request.device_fingerprint, {
-        "email": request.email,
-        "last_used": datetime.now().isoformat()
-    })
+    db.update_usage(
+        request.device_fingerprint,
+        {"email": request.email, "last_used": datetime.now().isoformat()},
+    )
 
     return {
         "success": True,
         "email": request.email,
         "status": "whitelisted",
         "message": "Unlimited free access activated!",
-        "is_whitelisted": True
+        "is_whitelisted": True,
     }
 
 
@@ -301,7 +382,7 @@ async def create_license(user_id: str, secret_key: str):
     return {
         "license_key": license_key,
         "user_id": user_id,
-        "expires_at": (datetime.now() + timedelta(days=31)).isoformat()
+        "expires_at": (datetime.now() + timedelta(days=31)).isoformat(),
     }
 
 
@@ -327,6 +408,7 @@ class CreateSubscriptionRequest(BaseModel):
     subscription_id: str
     order_id: Optional[str] = None
 
+
 @router.post("/create-subscription")
 async def create_subscription(request: CreateSubscriptionRequest):
     """
@@ -342,14 +424,14 @@ async def create_subscription(request: CreateSubscriptionRequest):
         request.email,
         paypal_subscription_id=request.subscription_id,
         paypal_order_id=request.order_id,
-        payment_method="paypal"
+        payment_method="paypal",
     )
 
     return {
         "license_key": license_key,
         "email": request.email,
         "subscription_id": request.subscription_id,
-        "expires_at": (datetime.now() + timedelta(days=31)).isoformat()
+        "expires_at": (datetime.now() + timedelta(days=31)).isoformat(),
     }
 
 
@@ -374,9 +456,7 @@ async def paypal_webhook(request: Request):
         # Generate and store license key
         license_key = generate_license_key(subscriber_email)
         db.create_license(
-            license_key,
-            subscriber_email,
-            paypal_subscription_id=subscription.get("id")
+            license_key, subscriber_email, paypal_subscription_id=subscription.get("id")
         )
 
         # TODO: Send license key to user via email
@@ -384,3 +464,39 @@ async def paypal_webhook(request: Request):
         return {"message": "Subscription activated", "license_key": license_key}
 
     return {"message": "Event processed"}
+
+
+@router.post("/jobs/search")
+async def search_jobs(request: JobSearchRequest):
+    jobs = await fetch_jobs(request)
+    return {"results": jobs}
+
+
+@router.post("/jobs/auto-apply")
+async def auto_apply_jobs(request: JobAutoApplyRequest):
+    unlimited = has_unlimited_auto_apply(request.license_key)
+    if not unlimited and len(request.jobs) > MAX_FREE_AUTO_APPLY:
+        applied_jobs = request.jobs[:MAX_FREE_AUTO_APPLY]
+        queued_count = len(request.jobs) - MAX_FREE_AUTO_APPLY
+        status = "upgrade_required"
+    else:
+        applied_jobs = request.jobs
+        queued_count = 0
+        status = "ok"
+    job_ids = [job.id for job in applied_jobs]
+    db.increment_usage(request.device_fingerprint)
+    db.update_usage(
+        request.device_fingerprint,
+        {
+            "last_used": datetime.now().isoformat(),
+            "last_auto_apply_count": len(applied_jobs),
+            "last_auto_apply_job_ids": job_ids,
+        },
+    )
+    return {
+        "status": status,
+        "applied_count": len(applied_jobs),
+        "queued_count": queued_count,
+        "jobs": applied_jobs,
+        "unlimited": unlimited,
+    }
