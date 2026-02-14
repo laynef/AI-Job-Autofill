@@ -1,17 +1,14 @@
-
 import pytest
-from fastapi.testclient import TestClient
 import sys
 import os
 
 # Add parent dir to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from main import app
+pytestmark = pytest.mark.integration
 
-client = TestClient(app)
 
-def test_contact_submission_success():
+def test_contact_submission_success(client):
     """Test successful contact form submission"""
     payload = {
         "name": "Test User",
@@ -22,7 +19,7 @@ def test_contact_submission_success():
     assert response.status_code == 200
     assert response.json() == {"status": "success", "message": "Message received"}
 
-def test_contact_submission_invalid_email():
+def test_contact_submission_invalid_email(client):
     """Test contact form with invalid email"""
     payload = {
         "name": "Test User",
@@ -33,7 +30,7 @@ def test_contact_submission_invalid_email():
     # Depending on implementation, this might be 422 (Pydantic validation) or 400
     assert response.status_code in [400, 422]
 
-def test_contact_submission_missing_fields():
+def test_contact_submission_missing_fields(client):
     """Test contact form with missing fields"""
     payload = {
         "name": "Test User"
