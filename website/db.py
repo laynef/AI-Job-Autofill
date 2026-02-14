@@ -25,9 +25,11 @@ class Database:
         try:
             if os.path.exists(DB_FILE):
                 with open(DB_FILE, 'r') as f:
-                    loaded_data = json.load(f)
-                    self.data.update(loaded_data)
-                    print(f"Database loaded from {DB_FILE}")
+                    content = f.read()
+                    if content.strip():
+                        loaded_data = json.loads(content)
+                        self.data.update(loaded_data)
+                        print(f"Database loaded from {DB_FILE}")
         except Exception as e:
             print(f"Warning: Could not load database: {e}")
             # Continue with empty database
@@ -35,8 +37,10 @@ class Database:
     def save(self):
         """Save database to file"""
         try:
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
+            # Ensure directory exists (skip if DB_FILE has no directory, e.g. relative path)
+            dir_path = os.path.dirname(DB_FILE)
+            if dir_path:
+                os.makedirs(dir_path, exist_ok=True)
 
             with self.lock:
                 with open(DB_FILE, 'w') as f:

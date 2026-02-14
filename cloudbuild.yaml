@@ -1,10 +1,11 @@
 steps:
-  # Build the container image
+  # Build the container image (context: website/ so COPY paths in Dockerfile resolve)
   - name: 'gcr.io/cloud-builders/docker'
+    dir: 'website'
     args:
       - 'build'
       - '-f'
-      - 'website/Dockerfile.adblock'
+      - 'Dockerfile.adblock'
       - '-t'
       - 'gcr.io/$PROJECT_ID/hiredalways:$COMMIT_SHA'
       - '-t'
