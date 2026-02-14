@@ -1,17 +1,15 @@
 
 import pytest
-from fastapi.testclient import TestClient
 import sys
 import os
 
 # Add parent dir to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from main import app
+pytestmark = pytest.mark.integration
 
-client = TestClient(app)
 
-def test_hero_component_rendering():
+def test_hero_component_rendering(client):
     """Test that the Hero component renders correctly on the home page"""
     response = client.get("/")
     assert response.status_code == 200
@@ -21,7 +19,7 @@ def test_hero_component_rendering():
     assert 'Stop Wasting Hours on Job Applications' in content
     assert 'Install FREE Now' in content
 
-def test_features_component_rendering():
+def test_features_component_rendering(client):
     """Test that the Features section renders correctly"""
     response = client.get("/")
     assert response.status_code == 200
@@ -31,7 +29,7 @@ def test_features_component_rendering():
     assert 'AI-Powered Autofill' in content
     assert 'Smart Cover Letters' in content
 
-def test_pricing_component_rendering():
+def test_pricing_component_rendering(client):
     """Test that the Pricing card renders correctly on purchase page"""
     response = client.get("/purchase")
     assert response.status_code == 200
@@ -41,7 +39,7 @@ def test_pricing_component_rendering():
     assert '$9.99' in content
     assert 'paypal-button-container' in content
 
-def test_ad_slideshow_component_integration():
+def test_ad_slideshow_component_integration(client):
     """
     Test that the Ad Slideshow component is integrated into all major pages.
     This serves as a component integration test.
@@ -62,7 +60,7 @@ def test_ad_slideshow_component_integration():
         # Check for CSS inclusion
         assert 'ad-slideshow.css' in content, f"Ad CSS missing on {page}"
 
-def test_contact_component_rendering():
+def test_contact_component_rendering(client):
     """Test that the Contact section renders correctly"""
     response = client.get("/")
     assert response.status_code == 200
