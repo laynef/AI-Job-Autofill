@@ -18,7 +18,8 @@ def _make_request():
     return StarletteRequest(scope)
 
 
-def test_security_headers_middleware_removes_server_header():
+@pytest.mark.anyio
+async def test_security_headers_middleware_removes_server_header():
     middleware = main.SecurityHeadersMiddleware(main.app)
 
     async def call_next(_request: Request):
@@ -27,9 +28,8 @@ def test_security_headers_middleware_removes_server_header():
         return response
 
     request = _make_request()
-    import asyncio
 
-    response = asyncio.run(middleware.dispatch(request, call_next))
+    response = await middleware.dispatch(request, call_next)
 
     assert "Server" not in response.headers
     assert response.headers["X-Content-Type-Options"] == "nosniff"
@@ -89,20 +89,20 @@ def test_get_adblock_lib_path_error(monkeypatch):
     assert main.get_adblock_lib_path() is None
 
 
-def test_adblock_library_returns_fallback(monkeypatch, tmp_path):
+@pytest.mark.anyio
+async def test_adblock_library_returns_fallback(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "BASE_DIR", str(tmp_path))
     monkeypatch.chdir(tmp_path)
 
     # Ensure no file found
     monkeypatch.setattr(main.glob, "glob", lambda _pattern: [])
 
-    import asyncio
-
-    response = asyncio.run(main.adblock_library())
+    response = await main.adblock_library()
     assert "Anti-adblock library not found" in response.body.decode()
 
 
-def test_adblock_library_serves_file(monkeypatch, tmp_path):
+@pytest.mark.anyio
+async def test_adblock_library_serves_file(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "BASE_DIR", str(tmp_path))
     lib_dir = tmp_path / "static" / "js"
     lib_dir.mkdir(parents=True)
@@ -114,13 +114,12 @@ def test_adblock_library_serves_file(monkeypatch, tmp_path):
 
     monkeypatch.chdir(tmp_path)
 
-    import asyncio
-
-    response = asyncio.run(main.adblock_library())
+    response = await main.adblock_library()
     assert "console.log('ok')" in response.body.decode()
 
 
-def test_adblock_library_serves_glob_file(monkeypatch, tmp_path):
+@pytest.mark.anyio
+async def test_adblock_library_serves_glob_file(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "BASE_DIR", str(tmp_path))
     lib_dir = tmp_path / "static" / "js"
     lib_dir.mkdir(parents=True)
@@ -132,26 +131,19 @@ def test_adblock_library_serves_glob_file(monkeypatch, tmp_path):
 
     monkeypatch.chdir(tmp_path)
 
-    import asyncio
-
-    response = asyncio.run(main.adblock_library())
+    response = await main.adblock_library()
     assert "console.log('glob')" in response.body.decode()
 
 
-def test_adblock_library_handles_exception(monkeypatch):
-    # This one mocks os.path.exists, so BASE_DIR might matter if os.path.join is called before exists
-    # But adblock_library calls os.path.join(BASE_DIR, ...) first.
-    # If we don't mock BASE_DIR, it uses the real one, which is fine as long as os.path.exists is mocked to raise.
-    # However, to be safe and consistent (and avoid real FS access if possible), we can mock it.
-    # But since tmp_path isn't passed here, I'll leave it or add tmp_path.
-    # The original test didn't use tmp_path.
+@pytest.mark.anyio
+async def test_adblock_library_handles_exception(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "BASE_DIR", str(tmp_path))
 
-    def bad_exists(_path):
-        raise Exception("boom")
+    class FakeGlob:
+        def glob(self, _pattern):
+            raise Exception("boom")
 
-    monkeypatch.setattr(main.os.path, "exists", bad_exists)
+    monkeypatch.setattr(main, "glob", FakeGlob())
 
-    import asyncio
-
-    response = asyncio.run(main.adblock_library())
+    response = await main.adblock_library()
     assert "Error loading anti-adblock library" in response.body.decode()

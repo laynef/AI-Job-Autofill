@@ -1,0 +1,15 @@
+[run]
+branch = True
+source = .
+omit =
+    */__pycache__/*
+    */tests/*
+    */.venv/*
+    */site-packages/*
+    create_social_preview.py
+    website/tests/test_e2e_browser.py
+
+[report]
+show_missing = True
+skip_covered = False
+precision = 2

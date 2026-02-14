@@ -103,6 +103,35 @@ def test_create_subscription(client):
     data = response.json()
     assert data["email"] == "test@example.com"
     assert data["subscription_id"] == "sub_1"
+    assert "license_key" in data
+    assert data["license_key"].startswith("HA-SUB-")
+    assert "expires_at" in data
+
+
+def test_payment_flow_create_then_validate_license(client):
+    """Payment flow: create subscription (purchase) then validate license (user can use product)."""
+    # 1. Simulate purchase: create subscription via API (as PayPal callback would)
+    create_resp = client.post(
+        "/api/create-subscription",
+        json={
+            "email": "buyer@example.com",
+            "subscription_id": "paypal_sub_123",
+            "order_id": "paypal_order_456",
+        },
+    )
+    assert create_resp.status_code == 200
+    create_data = create_resp.json()
+    license_key = create_data["license_key"]
+    assert license_key.startswith("HA-SUB-")
+
+    # 2. User validates license (e.g. from extension)
+    validate_resp = client.post(
+        "/api/validate-license",
+        json={"license_key": license_key, "device_fingerprint": "device-payment-test"},
+    )
+    assert validate_resp.status_code == 200
+    validate_data = validate_resp.json()
+    assert validate_data["valid"] is True
 
 
 def test_paypal_webhook_processed(client):

@@ -45,3 +45,7 @@ def client(mock_db):
     api.db = mock_db
     
     return TestClient(app)
+
+@pytest.fixture
+def anyio_backend():
+    return 'asyncio'
