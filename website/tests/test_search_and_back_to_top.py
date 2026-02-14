@@ -1,16 +1,14 @@
 import pytest
-from fastapi.testclient import TestClient
 import sys
 import os
 
 # Add parent dir to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from main import app
+pytestmark = pytest.mark.integration
 
-client = TestClient(app)
 
-def test_back_to_top_button_present_home():
+def test_back_to_top_button_present_home(client):
     """Test that the Back to Top button is rendered on the homepage"""
     response = client.get("/")
     assert response.status_code == 200
@@ -21,7 +19,7 @@ def test_back_to_top_button_present_home():
     # Check for button accessibility label
     assert 'aria-label="Back to top"' in content
 
-def test_back_to_top_button_present_categories():
+def test_back_to_top_button_present_categories(client):
     """Test that the Back to Top button is rendered on the categories page"""
     response = client.get("/categories")
     assert response.status_code == 200
@@ -30,7 +28,7 @@ def test_back_to_top_button_present_categories():
     # Check for button ID
     assert 'id="back-to-top"' in content
 
-def test_category_search_present():
+def test_category_search_present(client):
     """Test that the Category Search input is rendered on the categories page"""
     response = client.get("/categories")
     assert response.status_code == 200
